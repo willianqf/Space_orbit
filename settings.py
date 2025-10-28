@@ -5,12 +5,11 @@ pygame.font.init() # Inicializa as fontes aqui
 # --- ADICIONE ESTE BLOCO PARA CARREGAR A LOGO ---
 LOGO_JOGO = None
 try:
-    # Carrega a imagem da logo
     LOGO_JOGO = pygame.image.load("Space_Orbit.png")
-    # Converte para o formato interno do pygame para melhor performance
-    LOGO_JOGO = LOGO_JOGO.convert_alpha()
+    print("Logo carregada com sucesso!") # Mensagem de confirmação
 except pygame.error as e:
     print(f"Erro ao carregar a imagem 'Space_Orbit.png': {e}")
+    LOGO_JOGO = None # Garante que é None se falhar
 # --- FIM DO BLOCO DA LOGO ---
 
 
@@ -36,6 +35,17 @@ DESPAWN_DIST = LARGURA_TELA_INICIAL * 2.0
 MAX_DISTANCIA_TIRO = 1000
 TARGET_CLICK_SIZE = 150
 MAX_TARGET_LOCK_DISTANCE = 1000
+MAX_BOSS_CONGELANTE = 1                   # Limite de spawn
+HP_BOSS_CONGELANTE = 400                  # Dobro do Mothership (200 * 2)
+PONTOS_BOSS_CONGELANTE = 300              # Triplo do Mothership (100 * 3)
+COOLDOWN_TIRO_CONGELANTE = 15000          # 15 segundos
+DURACAO_CONGELAMENTO = 3000             # 3 segundos
+COOLDOWN_SPAWN_MINION_CONGELANTE = 10000 # 10 segundos
+MAX_MINIONS_CONGELANTE = 6                # Máximo de minions ativos
+HP_MINION_CONGELANTE = 10
+PONTOS_MINION_CONGELANTE = 5              # Recompensa por minion
+VELOCIDADE_MINION_CONGELANTE = 4.5        # Velocidade do minion (ajuste se necessário)
+COOLDOWN_TIRO_MINION_CONGELANTE = 1500    # Cooldown de tiro do minion
 
 # 3. Constantes da Nave e Upgrades
 MAX_NIVEL_ESCUDO = 5
@@ -84,6 +94,9 @@ AZUL_TIRO_RAPIDO = (0, 100, 200)
 ROXO_ATORDOADOR = (100, 0, 100)
 ROXO_TIRO_LENTO = (200, 0, 255)
 VERMELHO_VIDA_COLETAVEL = (255, 20, 20)
+AZUL_CONGELANTE = (0, 100, 255)         # Cor do Boss
+AZUL_MINION_CONGELANTE = (100, 150, 255) # Cor do Minion
+AZUL_TIRO_CONGELANTE = (150, 200, 255)   # Cor do Projétil
 # Cor de overlay de pausa
 PRETO_TRANSPARENTE_PAUSA = (0, 0, 0, 180)
 

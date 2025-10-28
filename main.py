@@ -10,9 +10,13 @@ from camera import Camera
 # from effects import Explosao # Importado via enemies e ships
 from projectiles import Projetil, ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento
 from entities import Obstaculo, VidaColetavel
+
+from projectiles import Projetil, ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento, ProjetilCongelante # <-- Adicione ProjetilCongelante
+
 # Importa as classes de inimigos
 from enemies import (InimigoPerseguidor, InimigoAtiradorRapido, InimigoBomba, InimigoMinion,
                      InimigoMothership, InimigoRapido, InimigoTiroRapido, InimigoAtordoador,
+                     BossCongelante, MinionCongelante, 
                      set_global_enemy_references)
 # Importa as classes de naves
 from ships import Player, NaveBot, NaveAuxiliar, Nave, set_global_ship_references # Importa Nave base também
@@ -27,6 +31,14 @@ tela = pygame.display.set_mode((LARGURA_TELA, ALTURA_TELA), pygame.RESIZABLE)
 pygame.display.set_caption("Nosso Jogo de Nave Refatorado")
 clock = pygame.time.Clock()
 
+try:
+    s.LOGO_JOGO = pygame.image.load("Space_Orbit.png")
+    s.LOGO_JOGO = s.LOGO_JOGO.convert_alpha()
+    print("Logo carregada com sucesso!") # Mensagem de confirmação
+except pygame.error as e:
+    print(f"Erro ao carregar a imagem 'Space_Orbit.png': {e}")
+    s.LOGO_JOGO = None # Garante que é None se falhar
+# --- FIM DO CÓDIGO DA LOGO ---
 # 3. Variáveis Globais do Jogo
 estado_jogo = "MENU" # Começa no Menu
 variavel_texto_terminal = ""
@@ -44,6 +56,7 @@ grupo_obstaculos = pygame.sprite.Group()
 grupo_vidas_coletaveis = pygame.sprite.Group()
 grupo_inimigos = pygame.sprite.Group() # Grupo geral de inimigos
 grupo_motherships = pygame.sprite.Group() # Específico para contar motherships
+grupo_boss_congelante = pygame.sprite.Group()
 grupo_bots = pygame.sprite.Group()
 grupo_explosoes = pygame.sprite.Group()
 grupo_player = pygame.sprite.GroupSingle()
@@ -67,6 +80,13 @@ for _ in range(s.NUM_ESTRELAS):
     lista_estrelas.append((pos_base, raio, parallax_fator))
 
 # 9. Funções Auxiliares (Spawners, Cheats, Reiniciar)
+
+def spawnar_boss_congelante(pos_referencia):
+    x, y = calcular_posicao_spawn(pos_referencia, dist_min_do_jogador=s.SPAWN_DIST_MAX * 1.2) # Spawna mais longe
+    novo_boss = BossCongelante(x, y)
+    grupo_inimigos.add(novo_boss)
+    grupo_boss_congelante.add(novo_boss)
+    print(f"!!! Boss Congelante spawnou em ({int(x)}, {int(y)}) !!!")
 
 def calcular_posicao_spawn(pos_referencia, dist_min_do_jogador=s.SPAWN_DIST_MIN): # Adiciona parâmetro opcional
     """ Calcula uma posição aleatória no mapa, garantindo uma distância mínima do jogador. """
@@ -225,6 +245,17 @@ while rodando:
                 mouse_pos_tela = pygame.mouse.get_pos()
                 if ui.RECT_BOTAO_VOLTAR_MENU.collidepoint(mouse_pos):
                     # Limpa todos os bots e inimigos para não continuarem no menu
+                    # --- ADICIONE LIMPEZA AQUI ---
+                    grupo_bots.empty()
+                    grupo_inimigos.empty()
+                    grupo_motherships.empty()
+                    grupo_boss_congelante.empty() # Limpa o boss
+                    grupo_projeteis_bots.empty()
+                    grupo_projeteis_inimigos.empty()
+                    grupo_projeteis_player.empty() # Limpa projéteis do player também
+                    grupo_obstaculos.empty() # Limpa obstáculos
+                    grupo_vidas_coletaveis.empty() # Limpa vidas
+                    # --- FIM DA ADIÇÃO ---
                     grupo_bots.empty()
                     grupo_inimigos.empty()
                     grupo_motherships.empty()
@@ -340,7 +371,9 @@ while rodando:
         # Spawna bots apenas se estiver JOGANDO (evita spawn na tela de game over)
         if estado_jogo == "JOGANDO" and len(grupo_bots) < max_bots_atual: spawnar_bot(nave_player.posicao)
 
+        if len(grupo_boss_congelante) < s.MAX_BOSS_CONGELANTE: spawnar_boss_congelante(nave_player.posicao)
         # --- Lógica de Colisões (Geral - exceto colisões diretas com jogador) ---
+        
         # Projéteis Player vs ...
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_obstaculos, True, True)
         for _, obst_list in colisoes.items(): nave_player.ganhar_pontos(len(obst_list)) # Jogador ganha pontos
@@ -374,10 +407,15 @@ while rodando:
         colisoes = pygame.sprite.groupcollide(grupo_bots, grupo_projeteis_inimigos, False, False)
         for bot, proj_list in colisoes.items():
             for proj in proj_list:
-                if isinstance(proj, ProjetilTeleguiadoLento): bot.aplicar_lentidao(6000)
-                else: bot.foi_atingido(1, estado_jogo, proj.posicao)
-                proj.kill()
-
+                # --- MODIFICAÇÃO AQUI ---
+                if isinstance(proj, ProjetilCongelante):
+                    bot.aplicar_congelamento(s.DURACAO_CONGELAMENTO)
+                elif isinstance(proj, ProjetilTeleguiadoLento): # Use elif aqui
+                    bot.aplicar_lentidao(6000)
+                else: 
+                    bot.foi_atingido(1, estado_jogo, proj.posicao)
+                # --- FIM DA MODIFICAÇÃO ---
+                proj.kill() # Mata o projétil após o efeito
         # Coleta de Vida (Bots)
         colisoes = pygame.sprite.groupcollide(grupo_bots, grupo_vidas_coletaveis, False, True)
         for bot, vida_list in colisoes.items():
@@ -435,6 +473,18 @@ while rodando:
 
         # Colisões QUE AFETAM O JOGADOR DIRETAMENTE
         # Projéteis Inimigos vs Jogador
+        colisoes_proj_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_inimigos, False)
+        for proj in colisoes_proj_inimigo_player:
+            # --- MODIFICAÇÃO AQUI ---
+            if isinstance(proj, ProjetilCongelante):
+                nave_player.aplicar_congelamento(s.DURACAO_CONGELAMENTO)
+            elif isinstance(proj, ProjetilTeleguiadoLento): # Use elif aqui
+                nave_player.aplicar_lentidao(6000)
+            else:
+                if nave_player.foi_atingido(1, estado_jogo, proj.posicao):
+                     estado_jogo = "GAME_OVER"
+            # --- FIM DA MODIFICAÇÃO ---
+            proj.kill() # Mata o projétil após o efeito
 
     # 13. Desenho
     if estado_jogo == "MENU":

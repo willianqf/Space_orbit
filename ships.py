@@ -117,6 +117,7 @@ class Nave(pygame.sprite.Sprite):
         super().__init__()
         self.nome = nome; self.posicao = pygame.math.Vector2(x, y); self.largura_base = 30; self.altura = 30; self.cor = cor
         self.velocidade_rotacao = 5; self.angulo = 0.0; self.velocidade_movimento_base = 4
+        self.tempo_fim_congelamento = 0
         tamanho_surface = max(self.largura_base, self.altura) + 10; self.imagem_original = pygame.Surface((tamanho_surface, tamanho_surface), pygame.SRCALPHA)
         centro_x = tamanho_surface / 2; centro_y = tamanho_surface / 2; ponto_topo = (centro_x, centro_y - self.altura / 2); ponto_base_esq = (centro_x - self.largura_base / 2, centro_y + self.altura / 2); ponto_base_dir = (centro_x + self.largura_base / 2, centro_y + self.altura / 2)
         pygame.draw.polygon(self.imagem_original, self.cor, [ponto_topo, ponto_base_esq, ponto_base_dir])
@@ -134,6 +135,10 @@ class Nave(pygame.sprite.Sprite):
     def rotacionar(self):
         # ... (rotacionar code remains the same) ...
         angulo_alvo = None
+        agora = pygame.time.get_ticks()
+        if agora < self.tempo_fim_congelamento:
+            return # Sai do método se congelado
+        
         if self.alvo_selecionado:
             if not self.alvo_selecionado.groups(): self.alvo_selecionado = None
             elif self.posicao.distance_to(self.alvo_selecionado.posicao) > MAX_TARGET_LOCK_DISTANCE: self.alvo_selecionado = None
@@ -182,12 +187,22 @@ class Nave(pygame.sprite.Sprite):
         radianos = math.radians(self.angulo); offset_ponta = self.altura / 2 + 10
         pos_x = self.posicao.x + (-math.sin(radianos) * offset_ponta); pos_y = self.posicao.y + (-math.cos(radianos) * offset_ponta)
         return Projetil(pos_x, pos_y, radianos, self.nivel_dano)
+    
     def lidar_com_tiros(self, grupo_destino):
-        # ... (lidar_com_tiros code remains the same) ...
+        # --- CORREÇÃO: Mover 'agora' para o início ---
+        agora = pygame.time.get_ticks() # Pega o tempo atual aqui
+
+        # Verifica se está congelado
+        if agora < self.tempo_fim_congelamento:
+            return # Sai do método se congelado
+        # --- FIM DA CORREÇÃO ---
+
+        # Verifica se quer atirar ou tem alvo
         if self.quer_atirar or self.alvo_selecionado:
-            agora = pygame.time.get_ticks()
+            # Não precisa pegar 'agora' de novo aqui
             if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
-                self.ultimo_tiro_tempo = agora; grupo_destino.add(self.criar_projetil())
+                self.ultimo_tiro_tempo = agora # Atualiza o tempo do último tiro
+                grupo_destino.add(self.criar_projetil())
     def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
         # ... (foi_atingido code remains the same) ...
         if self.vida_atual <= 0 and estado_jogo_atual == "GAME_OVER": return False
@@ -212,6 +227,10 @@ class Nave(pygame.sprite.Sprite):
         # ... (aplicar_lentidao code remains the same) ...
         agora = pygame.time.get_ticks(); self.tempo_fim_lentidao = max(self.tempo_fim_lentidao, agora + duracao_ms)
         print(f"[{self.nome}] LENTIDÃO aplicada/estendida por {duracao_ms}ms!")
+    def aplicar_congelamento(self, duracao_ms):
+        agora = pygame.time.get_ticks()
+        self.tempo_fim_congelamento = max(self.tempo_fim_congelamento, agora + duracao_ms)
+        print(f"[{self.nome}] CONGELADO por {duracao_ms}ms!")
     def ganhar_pontos(self, quantidade): self.pontos += quantidade
     def comprar_auxiliar(self):
         num_ativos = len(self.grupo_auxiliares_ativos)
@@ -362,6 +381,13 @@ class NaveBot(Nave):
     def mover(self):
         # ... (mover code with wrap-around remains the same) ...
         agora = pygame.time.get_ticks(); velocidade_atual = self.velocidade_movimento_base
+        
+        if agora < self.tempo_fim_congelamento:
+            # Se congelado, não calcula nem aplica movimento
+            # Também remove o rastro para não ficar parado
+            self.rastro_particulas = [] 
+            return # Sai do método
+        
         if agora < self.tempo_fim_lentidao: velocidade_atual *= 0.4
         nova_pos = pygame.math.Vector2(self.posicao.x, self.posicao.y); movendo_frente = False
         radianos = math.radians(self.angulo)

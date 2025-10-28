@@ -2,7 +2,8 @@
 import pygame
 import math
 from settings import (MAP_RECT, MAX_DISTANCIA_TIRO, VERMELHO_TIRO, VERDE_TIRO_MAX,
-                      MAX_NIVEL_DANO, LARANJA_TIRO_INIMIGO, ROXO_TIRO_LENTO)
+                      MAX_NIVEL_DANO, LARANJA_TIRO_INIMIGO, ROXO_TIRO_LENTO,
+                      AZUL_TIRO_CONGELANTE) # <-- Importar nova cor
 
 # Projétil do Jogador/Bots Aliados
 class Projetil(pygame.sprite.Sprite):
@@ -155,3 +156,16 @@ class ProjetilInimigoRapidoCurto(ProjetilInimigo):
             return
         if not MAP_RECT.colliderect(self.rect):
             self.kill()
+
+
+class ProjetilCongelante(ProjetilInimigo):
+    def __init__(self, x, y, pos_alvo):
+        super().__init__(x, y, pos_alvo)
+        # Muda a cor e talvez o raio
+        self.raio = 6 # Um pouco maior para diferenciar
+        self.image = pygame.Surface((self.raio * 2, self.raio * 2), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, AZUL_TIRO_CONGELANTE, (self.raio, self.raio), self.raio)
+        # A velocidade é herdada de ProjetilInimigo (valor = 7)
+        # Pode ajustar se quiser:
+        # self.velocidade_valor = 8.0
+        # self.velocidade_vetor = self.direcao * self.velocidade_valor
