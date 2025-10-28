@@ -161,12 +161,26 @@ class Nave(pygame.sprite.Sprite):
         print(f"[{self.nome}] LENTIDÃO aplicada/estendida por {duracao_ms}ms!")
     def ganhar_pontos(self, quantidade): self.pontos += quantidade
     def comprar_auxiliar(self):
-        # ... (comprar_auxiliar code remains the same) ...
         num_ativos = len(self.grupo_auxiliares_ativos)
         if num_ativos < len(self.lista_todas_auxiliares):
-            aux_para_adicionar = self.lista_todas_auxiliares[num_ativos]; self.grupo_auxiliares_ativos.add(aux_para_adicionar)
-            print(f"[{self.nome}] Ativando auxiliar {num_ativos + 1}"); return True
-        else: print(f"[{self.nome}] Máximo de auxiliares atingido!"); return False
+            aux_para_adicionar = self.lista_todas_auxiliares[num_ativos]
+
+            # --- INÍCIO DA CORREÇÃO ---
+            # Calcula a posição ideal atual da auxiliar ANTES de adicioná-la
+            offset_rotacionado = aux_para_adicionar.offset_pos.rotate(-self.angulo)
+            posicao_correta_atual = self.posicao + offset_rotacionado
+            # Define a posição da auxiliar IMEDIATAMENTE
+            aux_para_adicionar.posicao = posicao_correta_atual
+            aux_para_adicionar.rect.center = posicao_correta_atual # Atualiza o rect também
+            aux_para_adicionar.angulo = self.angulo # Alinha o ângulo inicial
+            # --- FIM DA CORREÇÃO ---
+
+            self.grupo_auxiliares_ativos.add(aux_para_adicionar)
+            print(f"[{self.nome}] Ativando auxiliar {num_ativos + 1}")
+            return True # Compra bem-sucedida
+        else:
+            # print(f"[{self.nome}] Máximo de auxiliares atingido!") # Comentado para reduzir spam no console
+            return False
     def comprar_upgrade(self, tipo):
         # ... (comprar_upgrade code remains the same) ...
         comprou = False
