@@ -32,6 +32,7 @@ RECT_BOTAO_JOGAR_OFF = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
 RECT_BOTAO_MULTIPLAYER = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
 RECT_BOTAO_SAIR = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
 MINIMAP_RECT = pygame.Rect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT) # Posição será definida
+RECT_LOGO_MENU = pygame.Rect(0, 0, 0, 0)
 # Novos Rects Pausa
 RECT_PAUSE_FUNDO = pygame.Rect(0, 0, PAUSE_PANEL_W, PAUSE_PANEL_H)
 RECT_TEXTO_BOTS = pygame.Rect(0, 0, 200, 40)
@@ -79,13 +80,32 @@ def recalculate_ui_positions(w, h):
     RECT_BOTAO_UPGRADE_HUD.topleft = (10, 35 + hud_y_spacing)
 
     # Botões do Menu Principal (Centralizados)
+# 1. Posição da Logo
+    logo_y_pos = h // 3 # Posição Y do centro da logo (igual em desenhar_menu)
+    logo_height = 0
+    # Declara que vamos modificar o RECT_LOGO_MENU global
+    global RECT_LOGO_MENU 
+    
+    if LOGO_JOGO:
+        # Pega a altura da logo para calcular a posição dos botões
+        logo_height = LOGO_JOGO.get_height()
+        RECT_LOGO_MENU = LOGO_JOGO.get_rect(center=(w // 2, logo_y_pos))
+    else:
+        # Fallback se a logo não carregou (usa a fonte)
+        fallback_text = FONT_TITULO.render("Nosso Jogo de Nave", True, BRANCO)
+        logo_height = fallback_text.get_height()
+        RECT_LOGO_MENU = fallback_text.get_rect(center=(w // 2, logo_y_pos))
+
+    # 2. Posição dos Botões (baseado na logo)
+    # Posição Y inicial = centro_logo_y + metade_altura_logo + espaçamento
+    menu_btn_y_start = logo_y_pos + (logo_height // 2) + 50 # 50px de espaço
+    
     menu_btn_x = w // 2 - BTN_MENU_W // 2
-    menu_btn_y_start = h // 2 - 50
     menu_btn_spacing = 70
+    
     RECT_BOTAO_JOGAR_OFF.topleft = (menu_btn_x, menu_btn_y_start)
     RECT_BOTAO_MULTIPLAYER.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing)
     RECT_BOTAO_SAIR.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing * 2)
-
     # --- Posições do Menu de Pausa (Centralizado) ---
     RECT_PAUSE_FUNDO.center = (w // 2, h // 2)
     base_y_pause = RECT_PAUSE_FUNDO.top + 60
@@ -102,10 +122,20 @@ def desenhar_menu(surface, largura_tela, altura_tela):
     """ Desenha a tela do menu principal. """
     surface.fill(PRETO) # Fundo preto simples
 
-    # Desenha o Título do Jogo
-    texto_titulo = FONT_TITULO.render("Nosso Jogo de Nave", True, BRANCO)
-    titulo_rect = texto_titulo.get_rect(center=(largura_tela // 2, altura_tela // 3))
-    surface.blit(texto_titulo, titulo_rect)
+    # --- INÍCIO DA MODIFICAÇÃO: DESENHAR LOGO ---
+    # Verifica se a logo foi carregada com sucesso
+    if LOGO_JOGO:
+        # Calcula a posição da logo (centralizada, 1/3 abaixo do topo)
+        logo_rect = LOGO_JOGO.get_rect(center=(largura_tela // 2, altura_tela // 3))
+        # Desenha a logo na tela
+        surface.blit(LOGO_JOGO, logo_rect)
+    else:
+        # Se a logo falhou (ex: arquivo não encontrado), desenha o texto antigo
+        texto_titulo = FONT_TITULO.render("Nosso Jogo de Nave", True, BRANCO)
+        titulo_rect = texto_titulo.get_rect(center=(largura_tela // 2, altura_tela // 3))
+        surface.blit(texto_titulo, titulo_rect)
+    # --- FIM DA MODIFICAÇÃO ---
+
 
     # Função auxiliar para desenhar botões
     def draw_menu_button(rect, text, text_color=PRETO, button_color=BRANCO):
@@ -118,7 +148,6 @@ def desenhar_menu(surface, largura_tela, altura_tela):
     draw_menu_button(RECT_BOTAO_JOGAR_OFF, "Jogar Offline")
     draw_menu_button(RECT_BOTAO_MULTIPLAYER, "Multijogador", CINZA_BOTAO_DESLIGADO, CINZA_OBSTACULO) # Desabilitado
     draw_menu_button(RECT_BOTAO_SAIR, "Sair")
-
 # --- Função Desenhar Pausa ---
 def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos):
     """ Desenha o menu de pausa sobre a tela do jogo. """

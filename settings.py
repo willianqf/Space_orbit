@@ -2,6 +2,20 @@
 import pygame
 pygame.font.init() # Inicializa as fontes aqui
 
+# --- ADICIONE ESTE BLOCO PARA CARREGAR A LOGO ---
+LOGO_JOGO = None
+try:
+    # Carrega a imagem da logo
+    LOGO_JOGO = pygame.image.load("Space_Orbit.png")
+    # Converte para o formato interno do pygame para melhor performance
+    LOGO_JOGO = LOGO_JOGO.convert_alpha()
+except pygame.error as e:
+    print(f"Erro ao carregar a imagem 'Space_Orbit.png': {e}")
+# --- FIM DO BLOCO DA LOGO ---
+
+
+# 1. Configurações da Tela e Mapa
+LARGURA_TELA_INICIAL = 800
 # 1. Configurações da Tela e Mapa
 LARGURA_TELA_INICIAL = 800
 ALTURA_TELA_INICIAL = 600
