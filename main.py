@@ -46,10 +46,12 @@ grupo_inimigos = pygame.sprite.Group() # Grupo geral de inimigos
 grupo_motherships = pygame.sprite.Group() # Específico para contar motherships
 grupo_bots = pygame.sprite.Group()
 grupo_explosoes = pygame.sprite.Group()
+grupo_player = pygame.sprite.GroupSingle()
 # grupo_todos_sprites = pygame.sprite.Group() # Opcional
 
 # 6. Criação do Jogador
 nave_player = Player(s.MAP_WIDTH // 2, s.MAP_HEIGHT // 2)
+grupo_player.add(nave_player)
 # grupo_todos_sprites.add(nave_player)
 
 # 7. Define Referências Globais para Módulos
@@ -394,6 +396,13 @@ while rodando:
                 if nave_player.foi_atingido(1, estado_jogo, proj.posicao):
                      estado_jogo = "GAME_OVER" # Muda estado se jogador morreu
             proj.kill()
+            
+        colisoes_proj_bot_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_bots, True) # True: Projéteis são destruídos
+        for proj in colisoes_proj_bot_player:
+            # A classe Projetil não armazena o dano (apenas a cor)
+            # Vamos assumir dano 1, assim como os projéteis inimigos.
+            if nave_player.foi_atingido(1, estado_jogo, proj.posicao):
+                 estado_jogo = "GAME_OVER" # Muda estado se jogador morreu
 
         # Coleta de Vida (Jogador)
         colisoes_vida_player = pygame.sprite.spritecollide(nave_player, grupo_vidas_coletaveis, True)

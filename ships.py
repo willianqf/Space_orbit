@@ -13,7 +13,7 @@ from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, MAP_WI
 from projectiles import Projetil
 from effects import Explosao
 # REMOVED: from enemies import InimigoBase, ...
-from entities import Obstaculo # Obstaculo is needed for bot's finding target logic
+from entities import Obstaculo, VidaColetavel # Obstaculo is needed for bot's finding target logic
 
 # Referência global para o grupo de explosões
 grupo_explosoes_ref = None
@@ -34,24 +34,77 @@ class NaveAuxiliar(pygame.sprite.Sprite):
     def update(self, lista_alvos, grupo_projeteis_destino, estado_jogo_atual, nave_player_ref):
         parar_ataque = (self.owner == nave_player_ref and estado_jogo_atual == "GAME_OVER")
         offset_rotacionado = self.offset_pos.rotate(-self.owner.angulo); posicao_alvo_seguir = self.owner.posicao + offset_rotacionado
-        self.posicao = self.posicao.lerp(posicao_alvo_seguir, 0.1); self.alvo_atual = None
+        self.posicao = self.posicao.lerp(posicao_alvo_seguir, 0.1) # Movimento de seguir o dono
+        
+        self.alvo_atual = None # Reseta o alvo a cada frame
+
         if not parar_ataque:
-            dist_min = self.distancia_tiro
+            
+            # --- INÍCIO DA CORREÇÃO (Revisada) ---
+            alvo_nave_mais_proxima = None
+            dist_min_nave = self.distancia_tiro # Distância máxima de tiro da auxiliar
+            
+            alvo_inimigo_mais_proximo = None
+            dist_min_inimigo = self.distancia_tiro
+
             for alvo in lista_alvos:
-                if alvo == self.owner or alvo is None or not alvo.groups(): continue
+                # 1. Pula alvos inválidos (próprio dono, morto, etc.)
+                if alvo == self.owner or alvo is None or not alvo.groups(): 
+                    continue
+                    
+                # 2. Pula Obstáculos e Vidas (não são alvos de tiro)
+                if isinstance(alvo, (Obstaculo, VidaColetavel)):
+                    continue
+
+                # 3. Calcula a distância
                 dist = self.posicao.distance_to(alvo.posicao)
-                if dist < dist_min: dist_min = dist; self.alvo_atual = alvo
+                
+                # 4. Verifica se é uma Nave (Player ou Bot) USANDO O NOME DA CLASSE
+                #    (Necessário porque Nave/Player/NaveBot são definidos DEPOIS de NaveAuxiliar)
+                is_nave_alvo = type(alvo).__name__ in ('Player', 'NaveBot')
+                
+                if is_nave_alvo:
+                    if dist < dist_min_nave:
+                        dist_min_nave = dist
+                        alvo_nave_mais_proxima = alvo
+                
+                # 5. Se não for Nave, deve ser um Inimigo
+                else:
+                    if dist < dist_min_inimigo:
+                        dist_min_inimigo = dist
+                        alvo_inimigo_mais_proximo = alvo
+
+            # 6. Define o alvo final baseado na prioridade
+            if alvo_nave_mais_proxima:
+                self.alvo_atual = alvo_nave_mais_proxima
+            elif alvo_inimigo_mais_proximo:
+                self.alvo_atual = alvo_inimigo_mais_proximo
+            # --- FIM DA CORREÇÃO ---
+
+            # Lógica de Mirar e Atirar (Original)
             if self.alvo_atual:
-                try: direcao = (self.alvo_atual.posicao - self.posicao).normalize(); self.angulo = direcao.angle_to(pygame.math.Vector2(0, -1))
-                except ValueError: self.angulo = self.owner.angulo
+                try: 
+                    direcao = (self.alvo_atual.posicao - self.posicao).normalize()
+                    self.angulo = direcao.angle_to(pygame.math.Vector2(0, -1))
+                except ValueError: 
+                    self.angulo = self.owner.angulo # Se der erro, alinha com o dono
+                
+                # Atira se o cooldown permitir
                 agora = pygame.time.get_ticks()
                 if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
-                    self.ultimo_tiro_tempo = agora; radianos = math.radians(self.angulo)
-                    proj = Projetil(self.posicao.x, self.posicao.y, radianos, self.owner.nivel_dano); grupo_projeteis_destino.add(proj)
-            else: self.angulo = self.owner.angulo
-        else: self.angulo = self.owner.angulo
+                    self.ultimo_tiro_tempo = agora
+                    radianos = math.radians(self.angulo)
+                    proj = Projetil(self.posicao.x, self.posicao.y, radianos, self.owner.nivel_dano)
+                    grupo_projeteis_destino.add(proj)
+            else:
+                # Se não tem alvo, alinha com o dono
+                self.angulo = self.owner.angulo
+        
+        else: # Se o jogo acabou (para o player)
+            self.angulo = self.owner.angulo
+        
+        # Atualiza o rect da auxiliar
         self.rect.center = self.posicao
-
     def desenhar(self, surface, camera):
         imagem_rotacionada = pygame.transform.rotate(self.imagem_original, self.angulo); rect_desenho = imagem_rotacionada.get_rect(center = self.posicao)
         surface.blit(imagem_rotacionada, camera.apply(rect_desenho))
@@ -328,30 +381,64 @@ class NaveBot(Nave):
 
     def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref):
         if self.estado_ia != "EVITANDO_BORDA" and (self.alvo_atual is None or not self.alvo_atual.groups()):
-            self.encontrar_alvo(grupo_inimigos_ref, grupo_obstaculos_ref)
+            # --- INÍCIO CORREÇÃO 1.1 ---
+            # Cria a lista de alvos naves (Player + outros Bots)
+            lista_alvos_naves = [player_ref] + list(grupo_bots_ref.sprites())
+            self.encontrar_alvo(grupo_inimigos_ref, grupo_obstaculos_ref, lista_alvos_naves)
+            # --- FIM CORREÇÃO 1.1 ---
         self.processar_input_ia(); self.rotacionar(); self.mover(); self.lidar_com_tiros(grupo_projeteis_bots); self.processar_upgrades_ia()
 
-    def encontrar_alvo(self, grupo_inimigos, grupo_obstaculos):
-        self.alvo_atual = None; dist_min = float('inf')
-        # Procura inimigos primeiro
-        for inimigo in grupo_inimigos:
-            if not inimigo.groups(): continue
-            # --- MODIFICAÇÃO: Checa nome da classe base ou nome específico ---
-            # Verifica se não é Minion ou Mothership (se essa lógica for desejada)
-            if type(inimigo).__name__ in ['InimigoMinion', 'InimigoMothership']: continue
-            # --- FIM MODIFICAÇÃO ---
-            dist = self.posicao.distance_to(inimigo.posicao)
-            if dist < self.distancia_scan_inimigo and dist < dist_min:
-                dist_min = dist; self.alvo_atual = inimigo
-        if self.alvo_atual: self.estado_ia = "ATACANDO"; return
-        # Se não achou inimigo, procura obstáculos
+    def encontrar_alvo(self, grupo_inimigos, grupo_obstaculos, lista_alvos_naves):
+        self.alvo_atual = None
         dist_min = float('inf')
+        
+        # --- CORREÇÃO 1: Procura NAVES (Player e outros Bots) ---
+        for nave_alvo in lista_alvos_naves:
+            if nave_alvo == self or not nave_alvo.groups(): # Pula a si mesmo ou naves mortas
+                continue
+            dist = self.posicao.distance_to(nave_alvo.posicao)
+            if dist < self.distancia_scan_inimigo and dist < dist_min: # Usa a distancia de inimigo
+                dist_min = dist
+                self.alvo_atual = nave_alvo
+        
+        if self.alvo_atual: 
+            self.estado_ia = "ATACANDO"
+            return
+        # --- FIM CORREÇÃO 1 ---
+
+        # --- CORREÇÃO 2: Procura INIMIGOS (Minions, Motherships, etc.) ---
+        # (Resetamos dist_min para procurar o inimigo mais próximo,
+        # caso nenhuma nave tenha sido encontrada)
+        dist_min = float('inf') 
+        for inimigo in grupo_inimigos:
+            if not inimigo.groups(): 
+                continue
+            
+            dist = self.posicao.distance_to(inimigo.posicao) # <-- Usa 'inimigo'
+            if dist < self.distancia_scan_inimigo and dist < dist_min: # <-- Usa 'distancia_scan_inimigo'
+                 dist_min = dist
+                 self.alvo_atual = inimigo # <-- Usa 'inimigo'
+
+        if self.alvo_atual: 
+            self.estado_ia = "ATACANDO" # <-- Estado é ATACANDO
+            return
+        # --- FIM CORREÇÃO 2 ---
+
+        # --- CORREÇÃO 3: Procura OBSTÁCULOS (Lógica que estava faltando) ---
+        dist_min = float('inf') 
         for obst in grupo_obstaculos:
-            if not obst.groups(): continue
+            if not obst.groups(): 
+                continue
             dist = self.posicao.distance_to(obst.posicao)
             if dist < self.distancia_scan_obstaculo and dist < dist_min:
-                 dist_min = dist; self.alvo_atual = obst
-        if self.alvo_atual: self.estado_ia = "COLETANDO"; return
+                 dist_min = dist
+                 self.alvo_atual = obst
+        
+        if self.alvo_atual: 
+            self.estado_ia = "COLETANDO" # <-- Estado para obstáculo é COLETANDO
+            return
+        # --- FIM CORREÇÃO 3 ---
+
         # Se não achou nada, vaga
         self.estado_ia = "VAGANDO"
 
