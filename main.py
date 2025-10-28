@@ -173,6 +173,8 @@ def reiniciar_jogo():
     # Spawn inicial
     for _ in range(20): spawnar_obstaculo(nave_player.posicao) # Mais obstáculos iniciais
     for _ in range(5): spawnar_vida(nave_player.posicao)     # Mais vidas iniciais
+    # Limpa bots antes de spawnar novos (caso reiniciar_jogo seja chamado de outro estado)
+    grupo_bots.empty()
     for _ in range(max_bots_atual): spawnar_bot(nave_player.posicao) # Spawna a quantidade configurada
 
     estado_jogo = "JOGANDO"
@@ -240,14 +242,17 @@ while rodando:
                         max_bots_atual -= 1
                         print(f"Máximo de Bots reduzido para: {max_bots_atual}")
                         if len(grupo_bots) > max_bots_atual:
-                             bot_para_remover = grupo_bots.sprites()[-1]
-                             bot_para_remover.kill()
-                             print(f"Bot {bot_para_remover.nome} removido.")
+                             # Tenta remover um bot aleatório ou o último
+                             try:
+                                 bot_para_remover = random.choice(grupo_bots.sprites())
+                                 bot_para_remover.kill()
+                                 print(f"Bot {bot_para_remover.nome} removido.")
+                             except IndexError: # Caso o grupo esteja vazio inesperadamente
+                                 pass
                 elif ui.RECT_BOTAO_BOT_MAIS.collidepoint(mouse_pos):
                     if max_bots_atual < s.MAX_BOTS_LIMITE_SUPERIOR:
                         max_bots_atual += 1
                         print(f"Máximo de Bots aumentado para: {max_bots_atual}")
-                        # Novos bots serão spawnados automaticamente na lógica de update se necessário
 
         elif estado_jogo == "LOJA":
             if event.type == pygame.KEYDOWN and event.key == pygame.K_v: estado_jogo = "JOGANDO"; print("Fechando loja...")
@@ -275,19 +280,18 @@ while rodando:
                 if ui.RECT_BOTAO_REINICIAR.collidepoint(mouse_pos):
                     reiniciar_jogo()
 
-    # 12. Lógica de Atualização (Só executa se estiver JOGANDO)
-    if estado_jogo == "JOGANDO":
+    # 12. Lógica de Atualização
+    # --- Atualizações que rodam exceto no Menu e Pausa ---
+    if estado_jogo not in ["MENU", "PAUSE"]:
         # Atualiza Câmera
         camera.update(nave_player)
 
-        # Atualiza Jogador
-        nave_player.update(grupo_projeteis_player, camera)
-
         # Define listas de alvos
-        lista_alvos_naves = [nave_player] + list(grupo_bots)
+        if estado_jogo == "GAME_OVER": lista_alvos_naves = list(grupo_bots)
+        else: lista_alvos_naves = [nave_player] + list(grupo_bots)
         lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + lista_alvos_naves
 
-        # Atualiza Bots e seus Auxiliares
+        # Atualiza Bots e Auxiliares
         grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos)
         for bot in grupo_bots:
             bot.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_bots, estado_jogo, nave_player)
@@ -312,48 +316,40 @@ while rodando:
         contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership)))
         if contagem_inimigos_normais < s.MAX_INIMIGOS: spawnar_inimigo_aleatorio(nave_player.posicao)
         if len(grupo_motherships) < s.MAX_MOTHERSHIPS: spawnar_mothership(nave_player.posicao)
-        if len(grupo_bots) < max_bots_atual: spawnar_bot(nave_player.posicao) # Usa max_bots_atual
+        # Spawna bots apenas se estiver JOGANDO (evita spawn na tela de game over)
+        if estado_jogo == "JOGANDO" and len(grupo_bots) < max_bots_atual: spawnar_bot(nave_player.posicao)
 
-        # --- Lógica de Colisões ---
+        # --- Lógica de Colisões (Geral - exceto colisões diretas com jogador) ---
         # Projéteis Player vs ...
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_obstaculos, True, True)
-        for _, obst_list in colisoes.items(): nave_player.ganhar_pontos(len(obst_list))
+        for _, obst_list in colisoes.items(): nave_player.ganhar_pontos(len(obst_list)) # Jogador ganha pontos
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_inimigos, True, False)
         for _, inim_list in colisoes.items():
             for inimigo in inim_list:
                 if inimigo.foi_atingido(nave_player.nivel_dano):
-                    nave_player.ganhar_pontos(inimigo.pontos_por_morte)
+                    nave_player.ganhar_pontos(inimigo.pontos_por_morte);
                     if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_bots, True, False)
         for _, bot_list in colisoes.items():
-            for bot in bot_list: bot.foi_atingido(nave_player.nivel_dano, estado_jogo)
+            for bot in bot_list: bot.foi_atingido(nave_player.nivel_dano, estado_jogo) # Tiro amigo!
 
         # Projéteis Bots vs ...
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_obstaculos, True, True)
         for proj, obst_list in colisoes.items():
             for bot in grupo_bots:
-                if bot.posicao.distance_to(proj.posicao) < bot.distancia_scan:
-                    bot.ganhar_pontos(len(obst_list))
-                    break
+                if bot.posicao.distance_to(proj.posicao) < bot.distancia_scan: bot.ganhar_pontos(len(obst_list)); break
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_inimigos, True, False)
         for proj, inim_list in colisoes.items():
             bot_que_acertou = None; dano_bot = 1
             for bot_ in grupo_bots:
-                if bot_.posicao.distance_to(proj.posicao) < bot_.distancia_scan:
-                    bot_que_acertou = bot_; dano_bot = bot_.nivel_dano; break
+                if bot_.posicao.distance_to(proj.posicao) < bot_.distancia_scan: bot_que_acertou = bot_; dano_bot = bot_.nivel_dano; break
             if bot_que_acertou:
                 for inimigo in inim_list:
                     if inimigo.foi_atingido(dano_bot):
-                        bot_que_acertou.ganhar_pontos(inimigo.pontos_por_morte)
+                        bot_que_acertou.ganhar_pontos(inimigo.pontos_por_morte);
                         if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
 
-        # Projéteis Inimigos vs ...
-        colisoes = pygame.sprite.spritecollide(nave_player, grupo_projeteis_inimigos, False)
-        for proj in colisoes:
-            if isinstance(proj, ProjetilTeleguiadoLento): nave_player.aplicar_lentidao(6000)
-            else:
-                if nave_player.foi_atingido(1, estado_jogo, proj.posicao): estado_jogo = "GAME_OVER"
-            proj.kill()
+        # Projéteis Inimigos vs Bots
         colisoes = pygame.sprite.groupcollide(grupo_bots, grupo_projeteis_inimigos, False, False)
         for bot, proj_list in colisoes.items():
             for proj in proj_list:
@@ -361,33 +357,56 @@ while rodando:
                 else: bot.foi_atingido(1, estado_jogo, proj.posicao)
                 proj.kill()
 
-        # Coleta de Vida
-        colisoes = pygame.sprite.spritecollide(nave_player, grupo_vidas_coletaveis, True)
-        for _ in colisoes: nave_player.coletar_vida(s.VIDA_COLETADA_CURA)
+        # Coleta de Vida (Bots)
         colisoes = pygame.sprite.groupcollide(grupo_bots, grupo_vidas_coletaveis, False, True)
         for bot, vida_list in colisoes.items():
             if vida_list: bot.coletar_vida(s.VIDA_COLETADA_CURA)
 
-        # Colisões de Corpo (RAM)
-        colisoes = pygame.sprite.spritecollide(nave_player, grupo_inimigos, False)
-        for inimigo in colisoes:
-            dano = 1 if not isinstance(inimigo, InimigoBomba) else inimigo.DANO_EXPLOSAO
-            if nave_player.foi_atingido(dano, estado_jogo, inimigo.posicao): estado_jogo = "GAME_OVER"
-            if inimigo.foi_atingido(1): # Inimigo toma 1 de dano RAM
-                nave_player.ganhar_pontos(inimigo.pontos_por_morte)
-                if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
-        colisoes = pygame.sprite.spritecollide(nave_player, grupo_bots, False)
-        for bot in colisoes:
-            if nave_player.foi_atingido(1, estado_jogo, bot.posicao): estado_jogo = "GAME_OVER"
-            bot.foi_atingido(1, estado_jogo, nave_player.posicao)
+        # Colisões de Corpo (RAM) - Bot vs Inimigo
         for bot in grupo_bots:
             inimigos_colididos = pygame.sprite.spritecollide(bot, grupo_inimigos, False)
             for inimigo in inimigos_colididos:
                 dano = 1 if not isinstance(inimigo, InimigoBomba) else inimigo.DANO_EXPLOSAO
                 bot.foi_atingido(dano, estado_jogo, inimigo.posicao)
-                if inimigo.foi_atingido(1):
+                if inimigo.foi_atingido(1): # Inimigo também toma dano RAM
                     bot.ganhar_pontos(inimigo.pontos_por_morte)
                     if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+
+    # --- Atualizações e Colisões Específicas do Jogador (Só quando JOGANDO) ---
+    if estado_jogo == "JOGANDO":
+        # Atualiza Input, Movimento, Tiro do Jogador
+        nave_player.update(grupo_projeteis_player, camera)
+
+        # Colisões QUE AFETAM O JOGADOR DIRETAMENTE
+        # Projéteis Inimigos vs Jogador
+        colisoes_proj_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_inimigos, False)
+        for proj in colisoes_proj_inimigo_player:
+            if isinstance(proj, ProjetilTeleguiadoLento): nave_player.aplicar_lentidao(6000)
+            else:
+                # Passa estado_jogo para foi_atingido saber se já está em game over
+                if nave_player.foi_atingido(1, estado_jogo, proj.posicao):
+                     estado_jogo = "GAME_OVER" # Muda estado se jogador morreu
+            proj.kill()
+
+        # Coleta de Vida (Jogador)
+        colisoes_vida_player = pygame.sprite.spritecollide(nave_player, grupo_vidas_coletaveis, True)
+        for _ in colisoes_vida_player: nave_player.coletar_vida(s.VIDA_COLETADA_CURA)
+
+        # Colisões de Corpo (RAM) vs Jogador
+        colisoes_ram_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_inimigos, False)
+        for inimigo in colisoes_ram_inimigo_player:
+            dano = 1 if not isinstance(inimigo, InimigoBomba) else inimigo.DANO_EXPLOSAO
+            if nave_player.foi_atingido(dano, estado_jogo, inimigo.posicao):
+                estado_jogo = "GAME_OVER"
+            # Inimigo também toma dano na colisão e jogador ganha pontos se matar
+            if inimigo.foi_atingido(1):
+                nave_player.ganhar_pontos(inimigo.pontos_por_morte)
+                if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+        colisoes_ram_bot_player = pygame.sprite.spritecollide(nave_player, grupo_bots, False)
+        for bot in colisoes_ram_bot_player:
+            if nave_player.foi_atingido(1, estado_jogo, bot.posicao): # Jogador toma dano
+                estado_jogo = "GAME_OVER"
+            bot.foi_atingido(1, estado_jogo, nave_player.posicao) # Bot também toma dano
 
     # 13. Desenho
     if estado_jogo == "MENU":
@@ -404,19 +423,15 @@ while rodando:
         # Sprites do Jogo
         for obst in grupo_obstaculos: tela.blit(obst.image, camera.apply(obst.rect))
         for vida in grupo_vidas_coletaveis: tela.blit(vida.image, camera.apply(vida.rect))
-        for inimigo in grupo_inimigos:
-            tela.blit(inimigo.image, camera.apply(inimigo.rect))
-            inimigo.desenhar_vida(tela, camera)
+        for inimigo in grupo_inimigos: inimigo.desenhar_vida(tela, camera); tela.blit(inimigo.image, camera.apply(inimigo.rect)) # Desenha vida primeiro
         for bot in grupo_bots:
-            bot.desenhar(tela, camera)
-            bot.desenhar_vida(tela, camera)
+            bot.desenhar(tela, camera); bot.desenhar_vida(tela, camera)
             for aux in bot.grupo_auxiliares_ativos: aux.desenhar(tela, camera)
         for proj in grupo_projeteis_player: tela.blit(proj.image, camera.apply(proj.rect))
         for proj in grupo_projeteis_bots: tela.blit(proj.image, camera.apply(proj.rect))
         for proj in grupo_projeteis_inimigos: tela.blit(proj.image, camera.apply(proj.rect))
-        if estado_jogo != "GAME_OVER":
-            nave_player.desenhar(tela, camera)
-            nave_player.desenhar_vida(tela, camera)
+        if estado_jogo != "GAME_OVER": # Só desenha jogador se não morreu
+            nave_player.desenhar(tela, camera); nave_player.desenhar_vida(tela, camera)
             for aux in nave_player.grupo_auxiliares_ativos: aux.desenhar(tela, camera)
         for explosao in grupo_explosoes: explosao.draw(tela, camera)
 
@@ -424,11 +439,10 @@ while rodando:
         ui.desenhar_hud(tela, nave_player, estado_jogo)
         ui.desenhar_minimapa(tela, nave_player, grupo_bots, estado_jogo, s.MAP_WIDTH, s.MAP_HEIGHT)
         todos_os_jogadores = [nave_player] + list(grupo_bots.sprites())
-        lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.pontos, reverse=True)
-        top_5 = lista_ordenada[:5]
+        lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
         ui.desenhar_ranking(tela, top_5, nave_player)
 
-        # Overlays
+        # Overlays (Pausa desenha antes dos outros para ficar por baixo)
         if estado_jogo == "PAUSE":
             ui.desenhar_pause(tela, max_bots_atual, s.MAX_BOTS_LIMITE_SUPERIOR, len(grupo_bots))
         elif estado_jogo == "LOJA":
