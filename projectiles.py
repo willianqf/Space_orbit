@@ -114,3 +114,27 @@ class ProjetilTeleguiadoLento(ProjetilInimigo):
             return
         if not MAP_RECT.colliderect(self.rect):
             self.kill()
+
+class ProjetilInimigoRapidoCurto(ProjetilInimigo):
+    def __init__(self, x, y, pos_alvo):
+        super().__init__(x, y, pos_alvo) # Chama o init base (cor laranja padrão)
+        
+        # Atributos específicos
+        self.velocidade_valor = 12 # Mais rápido que o padrão (7) e que o azul (15)? Ajuste conforme necessário.
+        self.max_distancia = 400 # Alcance menor que o padrão (MAX_DISTANCIA_TIRO = 1000)
+        
+        # Recalcula o vetor de velocidade com a nova velocidade_valor
+        self.velocidade_vetor = self.direcao * self.velocidade_valor
+
+    def update(self, *args, **kwargs):
+        # Move na direção calculada
+        self.posicao += self.velocidade_vetor
+        self.rect.center = self.posicao
+
+        # Remove se sair do mapa ou atingir a distância MÁXIMA ESPECÍFICA desta classe
+        distancia_percorrida = self.posicao.distance_to(self.posicao_inicial)
+        if distancia_percorrida > self.max_distancia: # Usa o max_distancia da classe
+            self.kill()
+            return
+        if not MAP_RECT.colliderect(self.rect):
+            self.kill()

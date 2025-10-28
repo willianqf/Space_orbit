@@ -66,14 +66,21 @@ for _ in range(s.NUM_ESTRELAS):
 
 # 9. Funções Auxiliares (Spawners, Cheats, Reiniciar)
 
-def calcular_posicao_spawn(pos_referencia):
-    angulo = random.uniform(0, 2 * math.pi)
-    dist = random.uniform(s.SPAWN_DIST_MIN, s.SPAWN_DIST_MAX)
-    x = pos_referencia.x + math.cos(angulo) * dist
-    y = pos_referencia.y + math.sin(angulo) * dist
-    x = max(0, min(x, s.MAP_WIDTH))
-    y = max(0, min(y, s.MAP_HEIGHT))
-    return (x, y)
+def calcular_posicao_spawn(pos_referencia, dist_min_do_jogador=s.SPAWN_DIST_MIN): # Adiciona parâmetro opcional
+    """ Calcula uma posição aleatória no mapa, garantindo uma distância mínima do jogador. """
+    while True:
+        # Escolhe x e y aleatórios dentro de todo o mapa
+        x = random.uniform(0, s.MAP_WIDTH)
+        y = random.uniform(0, s.MAP_HEIGHT)
+        
+        # Cria um Vector2 com a posição gerada
+        pos_spawn = pygame.math.Vector2(x, y)
+        
+        # Verifica se a posição gerada está longe o suficiente da referência (jogador)
+        # Usa a distância mínima de spawn definida em settings como segurança
+        if pos_referencia.distance_to(pos_spawn) > dist_min_do_jogador:
+            return (x, y) # Retorna a posição válida
+        # Se estiver muito perto, o loop continua e gera outra posição
 
 def spawnar_inimigo_aleatorio(pos_referencia):
     x, y = calcular_posicao_spawn(pos_referencia)

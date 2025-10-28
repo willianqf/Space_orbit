@@ -6,7 +6,7 @@ from settings import (VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAP_WIDTH, MAP_HEIGHT,
                       VERMELHO_PERSEGUIDOR, ROXO_ATIRADOR_RAPIDO, AMARELO_BOMBA, CIANO_MINION, CIANO_MOTHERSHIP,
                       LARANJA_RAPIDO, AZUL_TIRO_RAPIDO, ROXO_ATORDOADOR, BRANCO)
 # Importa as classes de projéteis necessárias
-from projectiles import ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento
+from projectiles import ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento, ProjetilInimigoRapidoCurto
 # Importa a classe Explosao
 from effects import Explosao
 # REMOVED: from ships import Player, NaveBot
@@ -120,26 +120,29 @@ class InimigoBomba(InimigoBase):
 # Inimigo Rápido (Laranja)
 class InimigoRapido(InimigoPerseguidor):
     def __init__(self, x, y):
-        super().__init__(x, y); self.image.fill(LARANJA_RAPIDO); self.max_vida = 3; self.vida_atual = 3
-        self.velocidade = 4.5; self.pontos_por_morte = 7
+        super().__init__(x, y) # Chama o init do InimigoPerseguidor
+        self.image.fill(LARANJA_RAPIDO) # Muda a cor
+        
+        # Ajustes de atributos
+        self.max_vida = 5 # Mais vida que o padrão (3)
+        self.vida_atual = 5
+        self.velocidade = 4.0 # Rápido
+        self.cooldown_tiro = 800 # Atira mais rápido que o padrão (2000ms) e que o anterior (1000ms)
+        self.pontos_por_morte = 9 # Um pouco mais de pontos
 
-    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
-        alvo_mais_proximo = None; dist_min = float('inf')
-        for alvo in lista_alvos_naves:
-            # --- MODIFICAÇÃO: Checa tipo por nome ---
-            is_player = type(alvo).__name__ == 'Player'
-            is_active_bot = type(alvo).__name__ == 'NaveBot' and alvo.groups()
-            if not is_player and not is_active_bot: continue
-            # --- FIM MODIFICAÇÃO ---
-            try: dist = self.posicao.distance_to(alvo.posicao)
-            except ValueError: continue
-            if dist < dist_min: dist_min = dist; alvo_mais_proximo = alvo
-        if not alvo_mais_proximo: return
-        pos_alvo = alvo_mais_proximo.posicao
-        if not self.update_base(pos_alvo, dist_despawn): return
-        try: direcao = (pos_alvo - self.posicao).normalize(); self.posicao += direcao * self.velocidade; self.rect.center = self.posicao
-        except ValueError: pass
-        # No self.atirar()
+        # Atributos de comportamento (herdado do InimigoPerseguidor, pode ajustar se quiser)
+        # self.distancia_parar = 200
+        # self.distancia_tiro = 500 # Distância para COMEÇAR a atirar
+
+    # Sobrescreve o método atirar para usar o novo projétil
+    def atirar(self, pos_alvo, grupo_projeteis_inimigos):
+        agora = pygame.time.get_ticks()
+        if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
+            self.ultimo_tiro_tempo = agora
+            # Usa a nova classe de projétil
+            proj = ProjetilInimigoRapidoCurto(self.posicao.x, self.posicao.y, pos_alvo)
+            grupo_projeteis_inimigos.add(proj)
+    
 
 # Inimigo Tiro Rápido (Azul)
 class InimigoTiroRapido(InimigoPerseguidor): # Update herdado já está corrigido
