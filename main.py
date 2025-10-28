@@ -223,6 +223,15 @@ while rodando:
                 elif event.key == pygame.K_ESCAPE: estado_jogo = "PAUSE"; print("Jogo Pausado.")
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos_tela = pygame.mouse.get_pos()
+                if ui.RECT_BOTAO_VOLTAR_MENU.collidepoint(mouse_pos):
+                    # Limpa todos os bots e inimigos para não continuarem no menu
+                    grupo_bots.empty()
+                    grupo_inimigos.empty()
+                    grupo_motherships.empty()
+                    grupo_projeteis_bots.empty()
+                    grupo_projeteis_inimigos.empty()
+                    estado_jogo = "MENU"
+                    print("Voltando ao Menu Principal.")
                 if event.button == 1: # Esquerdo
                     if ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela):
                          estado_jogo = "LOJA"; print("Abrindo loja via clique no botão HUD...")
@@ -246,6 +255,9 @@ while rodando:
                 if event.key == pygame.K_ESCAPE: estado_jogo = "JOGANDO"; print("Jogo Retomado.")
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
+                if ui.RECT_BOTAO_VOLTAR_MENU.collidepoint(mouse_pos):
+                    estado_jogo = "MENU"
+                    print("Voltando ao Menu Principal...")
                 if ui.RECT_BOTAO_BOT_MENOS.collidepoint(mouse_pos):
                     if max_bots_atual > 0:
                         max_bots_atual -= 1

@@ -38,7 +38,9 @@ RECT_PAUSE_FUNDO = pygame.Rect(0, 0, PAUSE_PANEL_W, PAUSE_PANEL_H)
 RECT_TEXTO_BOTS = pygame.Rect(0, 0, 200, 40)
 RECT_BOTAO_BOT_MENOS = pygame.Rect(0, 0, BTN_PAUSE_CTRL_W, BTN_PAUSE_CTRL_H)
 RECT_BOTAO_BOT_MAIS = pygame.Rect(0, 0, BTN_PAUSE_CTRL_W, BTN_PAUSE_CTRL_H)
+RECT_BOTAO_VOLTAR_MENU = pygame.Rect(0, 0, 200, 40)
 RECT_TEXTO_VOLTAR = pygame.Rect(0, 0, 200, 30)
+RECT_BOTAO_VOLTAR_MENU = pygame.Rect(0, 0, BTN_REINICIAR_W, BTN_REINICIAR_H)
 
 
 # Variáveis para guardar posições calculadas
@@ -51,8 +53,8 @@ def recalculate_ui_positions(w, h):
     global RECT_BOTAO_REINICIAR, RECT_BOTAO_UPGRADE_HUD
     global RECT_BOTAO_JOGAR_OFF, RECT_BOTAO_MULTIPLAYER, RECT_BOTAO_SAIR
     # Adiciona os novos Rects de Pausa
-    global RECT_PAUSE_FUNDO, RECT_TEXTO_BOTS, RECT_BOTAO_BOT_MENOS, RECT_BOTAO_BOT_MAIS, RECT_TEXTO_VOLTAR
-
+    global RECT_PAUSE_FUNDO, RECT_TEXTO_BOTS, RECT_BOTAO_BOT_MENOS, RECT_BOTAO_BOT_MAIS, RECT_TEXTO_VOLTAR, RECT_BOTAO_VOLTAR_MENU
+    global RECT_BOTAO_VOLTAR_MENU, RECT_TEXTO_VOLTAR # <-- MODIFIQUE ESTA LINHA
     # Minimapa
     MINIMAP_POS_X = w - MINIMAP_WIDTH - 10
     MINIMAP_POS_Y = 10
@@ -71,6 +73,8 @@ def recalculate_ui_positions(w, h):
     RECT_BOTAO_AUX.topleft = (btn_x_loja, btn_y_start_loja + btn_y_spacing_loja * 2)
     RECT_BOTAO_MAX_HP.topleft = (btn_x_loja, btn_y_start_loja + btn_y_spacing_loja * 3)
     RECT_BOTAO_ESCUDO.topleft = (btn_x_loja, btn_y_start_loja + btn_y_spacing_loja * 4)
+    RECT_BOTAO_VOLTAR_MENU.midbottom = (RECT_PAUSE_FUNDO.centerx, RECT_TEXTO_VOLTAR.top - 10)
+   
 
     # Botão Reiniciar (Game Over - Centralizado)
     RECT_BOTAO_REINICIAR.center = (w // 2, h // 2 + 50)
@@ -78,6 +82,10 @@ def recalculate_ui_positions(w, h):
     # Botão Upgrade no HUD (Canto superior esquerdo)
     hud_y_spacing = FONT_HUD.get_height() + 10
     RECT_BOTAO_UPGRADE_HUD.topleft = (10, 35 + hud_y_spacing)
+    
+    # Posiciona o novo botão no meio, abaixo dos controles de bot
+  
+    # --
 
     # Botões do Menu Principal (Centralizados)
 # 1. Posição da Logo
@@ -102,18 +110,34 @@ def recalculate_ui_positions(w, h):
     
     menu_btn_x = w // 2 - BTN_MENU_W // 2
     menu_btn_spacing = 70
-    
     RECT_BOTAO_JOGAR_OFF.topleft = (menu_btn_x, menu_btn_y_start)
     RECT_BOTAO_MULTIPLAYER.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing)
     RECT_BOTAO_SAIR.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing * 2)
     # --- Posições do Menu de Pausa (Centralizado) ---
+# --- INÍCIO DA MODIFICAÇÃO (Correção de Layout) ---
     RECT_PAUSE_FUNDO.center = (w // 2, h // 2)
+    
+    # Y inicial para o primeiro item
     base_y_pause = RECT_PAUSE_FUNDO.top + 60
-    spacing_pause = 15
-    RECT_TEXTO_BOTS.midtop = (RECT_PAUSE_FUNDO.centerx, base_y_pause)
-    RECT_BOTAO_BOT_MENOS.midright = (RECT_TEXTO_BOTS.left - spacing_pause, RECT_TEXTO_BOTS.centery)
-    RECT_BOTAO_BOT_MAIS.midleft = (RECT_TEXTO_BOTS.right + spacing_pause, RECT_TEXTO_BOTS.centery)
+    
+    # Espaçamentos
+    spacing_pause_items = 25 # Espaço vertical entre o botão e os controles
+    spacing_pause_buttons = 15 # Espaço horizontal para +/-
+    
+    # 1. Botão Voltar ao Menu (Primeiro item)
+    RECT_BOTAO_VOLTAR_MENU.midtop = (RECT_PAUSE_FUNDO.centerx, base_y_pause)
+    
+    # 2. Controles de Bots (Segundo item, abaixo do botão "Voltar ao Menu")
+    # Posição Y = Ponto inferior (bottom) do botão + espaçamento
+    y_pos_bots = RECT_BOTAO_VOLTAR_MENU.bottom + spacing_pause_items
+    
+    RECT_TEXTO_BOTS.midtop = (RECT_PAUSE_FUNDO.centerx, y_pos_bots)
+    RECT_BOTAO_BOT_MENOS.midright = (RECT_TEXTO_BOTS.left - spacing_pause_buttons, RECT_TEXTO_BOTS.centery)
+    RECT_BOTAO_BOT_MAIS.midleft = (RECT_TEXTO_BOTS.right + spacing_pause_buttons, RECT_TEXTO_BOTS.centery)
+    
+    # 3. Texto "ESC para Voltar" (Último item)
     RECT_TEXTO_VOLTAR.midbottom = (RECT_PAUSE_FUNDO.centerx, RECT_PAUSE_FUNDO.bottom - 20)
+    # --- FIM DA MODIFICAÇÃO ---
 
 
 # --- Funções de Desenho ---
@@ -185,6 +209,10 @@ def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos):
     mais_rect = texto_mais.get_rect(center=RECT_BOTAO_BOT_MAIS.center)
     surface.blit(texto_mais, mais_rect)
     # --- Fim Controles de Bots ---
+    pygame.draw.rect(surface, BRANCO, RECT_BOTAO_VOLTAR_MENU, border_radius=5)
+    texto_voltar_menu_surf = FONT_PADRAO.render("Voltar ao Menu", True, PRETO)
+    texto_voltar_menu_rect = texto_voltar_menu_surf.get_rect(center=RECT_BOTAO_VOLTAR_MENU.center)
+    surface.blit(texto_voltar_menu_surf, texto_voltar_menu_rect)
 
     # Texto "ESC para voltar"
     texto_voltar = FONT_PADRAO.render("ESC para Voltar", True, BRANCO)
