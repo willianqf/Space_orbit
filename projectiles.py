@@ -1,0 +1,116 @@
+# projectiles.py
+import pygame
+import math
+from settings import (MAP_RECT, MAX_DISTANCIA_TIRO, VERMELHO_TIRO, VERDE_TIRO_MAX,
+                      MAX_NIVEL_DANO, LARANJA_TIRO_INIMIGO, ROXO_TIRO_LENTO)
+
+# Projétil do Jogador/Bots Aliados
+class Projetil(pygame.sprite.Sprite):
+    def __init__(self, x, y, angulo_radianos, nivel_dano_owner=1):
+        super().__init__()
+        self.raio = 5
+        # Define a cor baseada no nível de dano
+        if nivel_dano_owner >= MAX_NIVEL_DANO:
+            cor_tiro_atual = VERDE_TIRO_MAX
+        else:
+            cor_tiro_atual = VERMELHO_TIRO
+
+        self.image = pygame.Surface((self.raio * 2, self.raio * 2), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, cor_tiro_atual, (self.raio, self.raio), self.raio)
+        self.posicao_inicial = pygame.math.Vector2(x, y)
+        self.posicao = pygame.math.Vector2(x, y) # Posição como Vector2
+        self.rect = self.image.get_rect(center = self.posicao)
+        self.velocidade = 10
+        self.angulo_radianos = angulo_radianos
+
+    def update(self, *args, **kwargs):
+        # Movimento baseado no ângulo
+        self.posicao.x += -math.sin(self.angulo_radianos) * self.velocidade
+        self.posicao.y += -math.cos(self.angulo_radianos) * self.velocidade
+        self.rect.center = self.posicao # Atualiza o rect
+
+        # Remove se sair do mapa ou atingir distância máxima
+        distancia_percorrida = self.posicao.distance_to(self.posicao_inicial)
+        if distancia_percorrida > MAX_DISTANCIA_TIRO:
+            self.kill()
+            return
+        if not MAP_RECT.colliderect(self.rect):
+            self.kill()
+
+# Projétil Inimigo Base
+class ProjetilInimigo(pygame.sprite.Sprite):
+    def __init__(self, x, y, pos_alvo):
+        super().__init__()
+        self.raio = 4
+        self.image = pygame.Surface((self.raio * 2, self.raio * 2), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, LARANJA_TIRO_INIMIGO, (self.raio, self.raio), self.raio)
+        self.posicao_inicial = pygame.math.Vector2(x, y)
+        self.posicao = pygame.math.Vector2(x, y)
+        self.rect = self.image.get_rect(center = self.posicao)
+        self.velocidade_valor = 7
+        # Calcula a direção inicial
+        try:
+            self.direcao = (pos_alvo - self.posicao).normalize()
+        except ValueError: # Alvo está na mesma posição
+            self.direcao = pygame.math.Vector2(0, -1) # Padrão para cima
+        self.velocidade_vetor = self.direcao * self.velocidade_valor
+
+    def update(self, *args, **kwargs):
+        # Move na direção calculada
+        self.posicao += self.velocidade_vetor
+        self.rect.center = self.posicao
+
+        # Remove se sair do mapa ou atingir distância máxima
+        distancia_percorrida = self.posicao.distance_to(self.posicao_inicial)
+        if distancia_percorrida > MAX_DISTANCIA_TIRO:
+            self.kill()
+            return
+        if not MAP_RECT.colliderect(self.rect):
+            self.kill()
+
+# Projétil Inimigo Rápido (Azul)
+class ProjetilInimigoRapido(ProjetilInimigo):
+    def __init__(self, x, y, pos_alvo):
+        super().__init__(x, y, pos_alvo)
+        # A única mudança é a velocidade
+        self.velocidade_valor = 15 # O padrão é 7
+        self.velocidade_vetor = self.direcao * self.velocidade_valor
+
+# Projétil Teleguiado Lento (Roxo)
+class ProjetilTeleguiadoLento(ProjetilInimigo):
+    def __init__(self, x, y, alvo_sprite):
+        # Chama o init da classe base, passando a posição ATUAL do alvo
+        super().__init__(x, y, alvo_sprite.posicao)
+
+        self.alvo_sprite = alvo_sprite # Armazena a REFERÊNCIA do alvo
+        self.velocidade_valor = 3.5 # Projétil é mais lento
+        self.raio = 5 # Um pouco maior
+
+        # Redesenha a imagem com a nova cor
+        self.image = pygame.Surface((self.raio * 2, self.raio * 2), pygame.SRCALPHA)
+        pygame.draw.circle(self.image, ROXO_TIRO_LENTO, (self.raio, self.raio), self.raio)
+
+    def update(self, *args, **kwargs):
+        # Lógica de "Homing" (Teleguiado)
+        # Verifica se o alvo ainda existe (está em algum grupo)
+        if self.alvo_sprite and self.alvo_sprite.groups():
+            # Se o alvo ainda existe, recalcula a direção
+            try:
+                self.direcao = (self.alvo_sprite.posicao - self.posicao).normalize()
+                self.velocidade_vetor = self.direcao * self.velocidade_valor
+            except ValueError:
+                # Alvo pode estar exatamente na mesma posição, mantém direção antiga
+                pass
+        # Se o alvo não existe mais, continua na última direção calculada
+
+        # Move o projétil
+        self.posicao += self.velocidade_vetor
+        self.rect.center = self.posicao
+
+        # Verifica distância (copiado da classe base)
+        distancia_percorrida = self.posicao.distance_to(self.posicao_inicial)
+        if distancia_percorrida > MAX_DISTANCIA_TIRO:
+            self.kill()
+            return
+        if not MAP_RECT.colliderect(self.rect):
+            self.kill()
