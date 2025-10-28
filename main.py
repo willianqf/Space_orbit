@@ -392,14 +392,6 @@ while rodando:
                 if inimigo.foi_atingido(1): # Inimigo também toma dano RAM
                     bot.ganhar_pontos(inimigo.pontos_por_morte)
                     if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
-
-    # --- Atualizações e Colisões Específicas do Jogador (Só quando JOGANDO) ---
-    if estado_jogo == "JOGANDO":
-        # Atualiza Input, Movimento, Tiro do Jogador
-        nave_player.update(grupo_projeteis_player, camera)
-
-        # Colisões QUE AFETAM O JOGADOR DIRETAMENTE
-        # Projéteis Inimigos vs Jogador
         colisoes_proj_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_inimigos, False)
         for proj in colisoes_proj_inimigo_player:
             if isinstance(proj, ProjetilTeleguiadoLento): nave_player.aplicar_lentidao(6000)
@@ -435,6 +427,14 @@ while rodando:
             if nave_player.foi_atingido(1, estado_jogo, bot.posicao): # Jogador toma dano
                 estado_jogo = "GAME_OVER"
             bot.foi_atingido(1, estado_jogo, nave_player.posicao) # Bot também toma dano
+
+    # --- Atualizações e Colisões Específicas do Jogador (Só quando JOGANDO) ---
+    if estado_jogo == "JOGANDO":
+        # Atualiza Input, Movimento, Tiro do Jogador
+        nave_player.update(grupo_projeteis_player, camera)
+
+        # Colisões QUE AFETAM O JOGADOR DIRETAMENTE
+        # Projéteis Inimigos vs Jogador
 
     # 13. Desenho
     if estado_jogo == "MENU":

@@ -83,7 +83,16 @@ class ProjetilTeleguiadoLento(ProjetilInimigo):
         super().__init__(x, y, alvo_sprite.posicao)
 
         self.alvo_sprite = alvo_sprite # Armazena a REFERÊNCIA do alvo
-        self.velocidade_valor = 3.5 # Projétil é mais lento
+
+        # --- INÍCIO DAS MODIFICAÇÕES ---
+        # Problema 2: Aumenta a velocidade
+        self.velocidade_valor = 9.0 # Aumentado de 3.5 para 9.0 (mais rápido que o tiro normal)
+        
+        # Problema 1: Adiciona limite de tempo
+        self.tempo_criacao = pygame.time.get_ticks()
+        self.duracao_vida = 5000 # 5000ms = 5 segundos de perseguição
+        # --- FIM DAS MODIFICAÇÕES ---
+
         self.raio = 5 # Um pouco maior
 
         # Redesenha a imagem com a nova cor
@@ -91,6 +100,14 @@ class ProjetilTeleguiadoLento(ProjetilInimigo):
         pygame.draw.circle(self.image, ROXO_TIRO_LENTO, (self.raio, self.raio), self.raio)
 
     def update(self, *args, **kwargs):
+        
+        # --- INÍCIO DAS MODIFICAÇÕES (Problema 1: Verifica o tempo de vida) ---
+        agora = pygame.time.get_ticks()
+        if agora - self.tempo_criacao > self.duracao_vida:
+            self.kill() # Projétil "morre" após 5 segundos
+            return
+        # --- FIM DAS MODIFICAÇÕES ---
+
         # Lógica de "Homing" (Teleguiado)
         # Verifica se o alvo ainda existe (está em algum grupo)
         if self.alvo_sprite and self.alvo_sprite.groups():
@@ -114,7 +131,7 @@ class ProjetilTeleguiadoLento(ProjetilInimigo):
             return
         if not MAP_RECT.colliderect(self.rect):
             self.kill()
-
+            
 class ProjetilInimigoRapidoCurto(ProjetilInimigo):
     def __init__(self, x, y, pos_alvo):
         super().__init__(x, y, pos_alvo) # Chama o init base (cor laranja padrão)

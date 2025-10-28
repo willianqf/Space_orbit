@@ -368,11 +368,43 @@ class NaveBot(Nave):
         if self.quer_mover_frente: nova_pos.x += -math.sin(radianos) * velocidade_atual; nova_pos.y += -math.cos(radianos) * velocidade_atual; movendo_frente = True
         if self.quer_mover_tras: nova_pos.x -= -math.sin(radianos) * velocidade_atual; nova_pos.y -= -math.cos(radianos) * velocidade_atual
         meia_largura = self.largura_base / 2; meia_altura = self.altura / 2
-        if nova_pos.x > MAP_WIDTH + meia_largura: nova_pos.x = -meia_largura
-        elif nova_pos.x < -meia_largura: nova_pos.x = MAP_WIDTH + meia_largura
-        if nova_pos.y > MAP_HEIGHT + meia_altura: nova_pos.y = -meia_altura
-        elif nova_pos.y < -meia_altura: nova_pos.y = MAP_HEIGHT + meia_altura
-        self.posicao = nova_pos; self.rect.center = self.posicao
+        ####### CORREÇÃO ###########
+        
+        teleport_ocorreu = False
+        # Copiamos a nova_pos para um vetor que será modificado
+        nova_pos_teleportada = pygame.math.Vector2(nova_pos.x, nova_pos.y)
+
+        # Verificamos se o teleporte VAI acontecer
+        if nova_pos.x > MAP_WIDTH + meia_largura: 
+            nova_pos_teleportada.x = -meia_largura
+            teleport_ocorreu = True
+        elif nova_pos.x < -meia_largura: 
+            nova_pos_teleportada.x = MAP_WIDTH + meia_largura
+            teleport_ocorreu = True
+        
+        if nova_pos.y > MAP_HEIGHT + meia_altura: 
+            nova_pos_teleportada.y = -meia_altura
+            teleport_ocorreu = True
+        elif nova_pos.y < -meia_altura: 
+            nova_pos_teleportada.y = MAP_HEIGHT + meia_altura
+            teleport_ocorreu = True
+
+        # 1. Atualiza a posição do Bot para a posição (potencialmente) teleportada
+        self.posicao = nova_pos_teleportada
+        self.rect.center = self.posicao
+
+        # 2. Se o teleporte realmente aconteceu...
+        if teleport_ocorreu:
+            # ...teleporta IMEDIATAMENTE todas as auxiliares ativas
+            for aux in self.grupo_auxiliares_ativos:
+                # Calcula a posição relativa correta (onde ela deveria estar)
+                offset_rotacionado = aux.offset_pos.rotate(-self.angulo)
+                # Define a nova posição da auxiliar baseada na NOVA posição do Bot
+                aux.posicao = self.posicao + offset_rotacionado 
+                aux.rect.center = aux.posicao # Atualiza o rect também
+        
+        # --- FIM DA CORREÇÃO ---
+        ############################
         if self.nivel_motor == MAX_NIVEL_MOTOR and movendo_frente:
             agora = pygame.time.get_ticks(); radianos_oposto = math.radians(self.angulo + 180); offset_rastro = self.altura * 0.6
             pos_rastro_x = self.posicao.x + (-math.sin(radianos_oposto) * offset_rastro); pos_rastro_y = self.posicao.y + (-math.cos(radianos_oposto) * offset_rastro)
