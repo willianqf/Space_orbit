@@ -326,7 +326,14 @@ class Nave(pygame.sprite.Sprite):
 class Player(Nave):
     def __init__(self, x, y):
         super().__init__(x, y, cor=AZUL_NAVE, nome="Jogador")
+        self.invencivel = False
 
+    def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
+        # --- VERIFICAÇÃO DE INVENCIBILIDADE ---
+        if self.invencivel:
+            # print(f"[{self.nome}] Dano ignorado (Invencível)") # Debug opcional
+            return False # Retorna False (não morreu) sem aplicar dano
+        # --- FIM DA VERIFICAÇÃO ---
     def update(self, grupo_projeteis_jogador, camera):
         self.processar_input_humano(camera); self.rotacionar(); self.mover(); self.lidar_com_tiros(grupo_projeteis_jogador)
 
@@ -365,6 +372,7 @@ class NaveBot(Nave):
             print(f"  -> Spawn com {num_auxiliares} Auxiliares.")
             for _ in range(num_auxiliares): self.comprar_auxiliar()
 
+    
     def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
         # ... (foi_atingido code remains the same) ...
         vida_antes = self.vida_atual; morreu = super().foi_atingido(dano, estado_jogo_atual, proj_pos)

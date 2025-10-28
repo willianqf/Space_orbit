@@ -38,14 +38,15 @@ MAX_TARGET_LOCK_DISTANCE = 1000
 MAX_BOSS_CONGELANTE = 1                   # Limite de spawn
 HP_BOSS_CONGELANTE = 400                  # Dobro do Mothership (200 * 2)
 PONTOS_BOSS_CONGELANTE = 300              # Triplo do Mothership (100 * 3)
-COOLDOWN_TIRO_CONGELANTE = 15000          # 15 segundos
+COOLDOWN_TIRO_CONGELANTE = 10000          # 10 segundos
 DURACAO_CONGELAMENTO = 3000             # 3 segundos
 COOLDOWN_SPAWN_MINION_CONGELANTE = 10000 # 10 segundos
 MAX_MINIONS_CONGELANTE = 6                # Máximo de minions ativos
 HP_MINION_CONGELANTE = 10
 PONTOS_MINION_CONGELANTE = 5              # Recompensa por minion
-VELOCIDADE_MINION_CONGELANTE = 4.5        # Velocidade do minion (ajuste se necessário)
-COOLDOWN_TIRO_MINION_CONGELANTE = 1500    # Cooldown de tiro do minion
+VELOCIDADE_MINION_CONGELANTE = 50        # Velocidade do minion (ajuste se necessário)
+COOLDOWN_TIRO_MINION_CONGELANTE = 600    # Cooldown de tiro do minion
+MINION_CONGELANTE_LEASH_RANGE = 600 # Distância máxima do BOSS que o minion persegue o alvo
 
 # 3. Constantes da Nave e Upgrades
 MAX_NIVEL_ESCUDO = 5

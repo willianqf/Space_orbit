@@ -7,7 +7,7 @@ from settings import (VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAP_WIDTH, MAP_HEIGHT,
                       LARANJA_RAPIDO, AZUL_TIRO_RAPIDO, ROXO_ATORDOADOR, BRANCO, AZUL_MINION_CONGELANTE, HP_MINION_CONGELANTE, PONTOS_MINION_CONGELANTE,
                         VELOCIDADE_MINION_CONGELANTE, COOLDOWN_TIRO_MINION_CONGELANTE, AZUL_CONGELANTE, HP_BOSS_CONGELANTE, PONTOS_BOSS_CONGELANTE,
     COOLDOWN_TIRO_CONGELANTE, COOLDOWN_SPAWN_MINION_CONGELANTE,
-    MAX_MINIONS_CONGELANTE)
+    MAX_MINIONS_CONGELANTE, MINION_CONGELANTE_LEASH_RANGE)
 # Importa as classes de projéteis necessárias
 from projectiles import ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento, ProjetilInimigoRapidoCurto, ProjetilCongelante # Importa ProjetilCongelante
 # Importa a classe Explosao
@@ -87,62 +87,111 @@ class MinionCongelante(InimigoBase):
         self.ultimo_tiro_tempo = 0
 
     def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
-        # --- Lógica de Alvo ---
-        alvo_mais_proximo = None
-        dist_min = float('inf')
+        # --- Verificações Iniciais ---
+        if not self.owner or not self.owner.groups():
+            self.kill(); return
+        pos_dono = self.owner.posicao # Define pos_dono aqui para usar em despawn
+        if not self.update_base(pos_dono, dist_despawn): return
 
+        # --- Lógica de Alvo para Tiro ---
+        alvo_tiro = None
+        dist_min_tiro = float('inf')
+
+        # Prioriza atacante do boss DENTRO da coleira
         atacante_do_boss = None
-        # Tenta focar no último atacante do boss, se existir e estiver vivo
-        if self.owner and self.owner.groups() and hasattr(self.owner, 'ultimo_atacante') and self.owner.ultimo_atacante and self.owner.ultimo_atacante.groups():
-             atacante_do_boss = self.owner.ultimo_atacante
-             try:
-                 dist = self.posicao.distance_to(atacante_do_boss.posicao)
-                 if dist < self.distancia_tiro * 1.5:
-                     alvo_mais_proximo = atacante_do_boss
-                     dist_min = dist
-             except ValueError:
-                 pass
+        if hasattr(self.owner, 'ultimo_atacante') and self.owner.ultimo_atacante and self.owner.ultimo_atacante.groups():
+            atacante_do_boss = self.owner.ultimo_atacante
+            try:
+                dist_minion_atacante = self.posicao.distance_to(atacante_do_boss.posicao)
+                dist_dono_atacante = pos_dono.distance_to(atacante_do_boss.posicao)
+                if dist_minion_atacante < self.distancia_tiro * 1.5 and dist_dono_atacante < MINION_CONGELANTE_LEASH_RANGE:
+                    alvo_tiro = atacante_do_boss
+                    dist_min_tiro = dist_minion_atacante
+            except ValueError: pass
 
-        # Se não tem alvo do boss, procura o mais próximo geral
-        if not alvo_mais_proximo:
+        # Se não, procura mais próximo DENTRO da coleira
+        if not alvo_tiro:
             for alvo in lista_alvos_naves:
                 is_player = type(alvo).__name__ == 'Player'
                 is_active_bot = type(alvo).__name__ == 'NaveBot' and alvo.groups()
                 if not is_player and not is_active_bot: continue
                 try:
-                    dist = self.posicao.distance_to(alvo.posicao)
-                    if dist < dist_min:
-                        dist_min = dist
-                        alvo_mais_proximo = alvo
-                except ValueError:
-                    continue
+                    dist_minion_alvo = self.posicao.distance_to(alvo.posicao)
+                    dist_dono_alvo = pos_dono.distance_to(alvo.posicao)
+                    if dist_minion_alvo < self.distancia_tiro and dist_dono_alvo < MINION_CONGELANTE_LEASH_RANGE:
+                        if dist_minion_alvo < dist_min_tiro:
+                             dist_min_tiro = dist_minion_alvo
+                             alvo_tiro = alvo
+                except ValueError: continue
 
-        # Se o dono morreu, ou não achou alvo, verifica despawn e para
-        if not self.owner or not self.owner.groups() or not alvo_mais_proximo:
-            ref_pos = self.posicao if not alvo_mais_proximo else alvo_mais_proximo.posicao
-            if not self.update_base(ref_pos, dist_despawn * 0.8): return # Despawn mais rápido
-            # Poderia vagar aqui
-            return
+        # --- Lógica de Movimento com Coleira ---
+        objetivo_movimento = None
+        is_orbitando_alvo = False # Flag para saber qual lógica de órbita usar
 
-        pos_alvo = alvo_mais_proximo.posicao
+        if alvo_tiro:
+            objetivo_movimento = alvo_tiro.posicao
+            raio_orbita_desejado = 180 # Raio em torno do ALVO
+            is_orbitando_alvo = True
+        else:
+            objetivo_movimento = pos_dono
+            raio_orbita_desejado = self.owner.tamanho * 0.8 + 40 # Raio em torno do DONO
+            is_orbitando_alvo = False
 
-        # --- Despawn básico ---
-        if not self.update_base(pos_alvo, dist_despawn * 0.8):
-             return
+        # --- Cálculo do Movimento ---
+        try:
+            # --- CORREÇÃO: Definir vetor_para_objetivo e vetor_para_dono ANTES do IF ---
+            vetor_para_objetivo = objetivo_movimento - self.posicao
+            distancia_objetivo = vetor_para_objetivo.length()
+            vetor_para_dono = pos_dono - self.posicao # Definido aqui!
+            distancia_dono = vetor_para_dono.length()
+            # --- FIM CORREÇÃO ---
 
-        # --- Movimento e Tiro ---
-        distancia_alvo = dist_min
-        if distancia_alvo > self.distancia_parar:
-            try:
-                direcao = (pos_alvo - self.posicao).normalize()
-                self.posicao += direcao * self.velocidade
-                self.rect.center = self.posicao
-            except ValueError:
-                pass
+            direcao_movimento = pygame.math.Vector2(0, 0) # Inicializa
 
-        if distancia_alvo < self.distancia_tiro:
-            self.atirar(pos_alvo, grupo_projeteis_inimigos)
+            if is_orbitando_alvo and distancia_objetivo > 10:
+                vetor_tangencial = vetor_para_objetivo.rotate(90).normalize()
+                vetor_radial = pygame.math.Vector2(0, 0)
+                if distancia_objetivo > raio_orbita_desejado + 20:
+                    vetor_radial = vetor_para_objetivo.normalize()
+                elif distancia_objetivo < raio_orbita_desejado - 20:
+                    vetor_radial = -vetor_para_objetivo.normalize()
+                direcao_movimento = (vetor_tangencial * 0.6 + vetor_radial * 0.4) # Não normaliza ainda para manter proporção
 
+            else: # Voltando para o dono ou já sobre o alvo
+                 if abs(distancia_dono - raio_orbita_desejado) > 15:
+                      vetor_para_dono_norm = vetor_para_dono.normalize()
+                      posicao_orbita_ideal = pos_dono - vetor_para_dono_norm * raio_orbita_desejado
+                      # Move direto para a posição na órbita
+                      direcao_movimento = (posicao_orbita_ideal - self.posicao)
+                 elif distancia_dono > 10 : # Já na órbita, apenas circula (usa vetor_para_dono)
+                      vetor_tangencial_dono = vetor_para_dono.rotate(90).normalize()
+                      direcao_movimento = vetor_tangencial_dono
+                 # Se estiver muito perto do dono (dist < 10), direcao_movimento continua (0,0) -> parado
+
+            # Normaliza a direção final (se não for zero) e aplica movimento
+            if direcao_movimento.length() > 0:
+                 direcao_movimento.normalize_ip() # Normaliza in-place
+                 posicao_alvo_seguir = self.posicao + direcao_movimento * self.velocidade
+                 self.posicao = self.posicao.lerp(posicao_alvo_seguir, 0.15)
+                 self.rect.center = self.posicao
+
+        except ValueError:
+             pass # Fica parado se alguma distância for zero
+
+        # --- Lógica de Tiro ---
+        if alvo_tiro:
+            distancia_alvo_tiro = self.posicao.distance_to(alvo_tiro.posicao)
+            if distancia_alvo_tiro < self.distancia_tiro:
+                self.atirar(alvo_tiro.posicao, grupo_projeteis_inimigos)
+
+    # O método atirar permanece o mesmo
+    def atirar(self, pos_alvo, grupo_projeteis_inimigos):
+        agora = pygame.time.get_ticks()
+        if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
+            self.ultimo_tiro_tempo = agora
+            proj = ProjetilInimigo(self.posicao.x, self.posicao.y, pos_alvo)
+            grupo_projeteis_inimigos.add(proj)
+                
     def atirar(self, pos_alvo, grupo_projeteis_inimigos):
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:

@@ -151,6 +151,14 @@ def processar_cheat(comando, nave):
     if comando_limpo == "maxpoint":
         nave.ganhar_pontos(9999)
         print("[CHEAT] +9999 pontos adicionados!")
+    elif comando_limpo == "invencivel":
+        # Verifica se a nave é o Player (para evitar erro se passar um Bot)
+        if isinstance(nave, Player):
+            nave.invencivel = not nave.invencivel # Inverte o estado (liga/desliga)
+            estado_str = "ATIVADA" if nave.invencivel else "DESATIVADA"
+            print(f"[CHEAT] Invencibilidade {estado_str}!")
+        else:
+             print("[CHEAT] Comando 'invencivel' só funciona para o Jogador.")
     else:
         print(f"[CHEAT] Comando desconhecido: '{comando_limpo}'")
     variavel_texto_terminal = ""
