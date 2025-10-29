@@ -220,17 +220,23 @@ def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos):
     surface.blit(texto_voltar, voltar_rect)
 # --- FIM Função Desenhar Pausa ---
 
+# ui.py
+
 def desenhar_loja(surface, nave, largura_tela, altura_tela):
     # Fundo semi-transparente
     fundo_loja = pygame.Surface((largura_tela, altura_tela), pygame.SRCALPHA)
     fundo_loja.fill(CINZA_LOJA_FUNDO)
     surface.blit(fundo_loja, (0, 0))
 
-    # Título e Pontos
+    # Título e Pontos de Upgrade
     texto_titulo = FONT_TITULO.render("LOJA DE UPGRADES", True, BRANCO)
     surface.blit(texto_titulo, (largura_tela // 2 - texto_titulo.get_width() // 2, 50))
-    texto_pontos = FONT_PADRAO.render(f"Seus Pontos: {nave.pontos}", True, BRANCO)
+    # --- ALTERAÇÃO AQUI ---
+    texto_pontos = FONT_PADRAO.render(f"Pontos de Upgrade: {nave.pontos_upgrade_disponiveis}", True, BRANCO)
     surface.blit(texto_pontos, (largura_tela // 2 - texto_pontos.get_width() // 2, 100))
+    texto_limite = FONT_PADRAO.render(f"Upgrades Feitos: {nave.total_upgrades_feitos} / {MAX_TOTAL_UPGRADES}", True, CINZA_BOTAO_DESLIGADO)
+    surface.blit(texto_limite, (largura_tela // 2 - texto_limite.get_width() // 2, 130))
+    # --- FIM ALTERAÇÃO ---
 
     # Função auxiliar para texto no botão
     def draw_text_on_button(rect, text, font, text_color):
@@ -238,98 +244,98 @@ def desenhar_loja(surface, nave, largura_tela, altura_tela):
         text_rect = text_surf.get_rect(center=rect.center)
         surface.blit(text_surf, text_rect)
 
-    # Desenha Botões da Loja
+    # --- ALTERAÇÕES NOS BOTÕES ---
+    pode_comprar_geral = nave.pontos_upgrade_disponiveis > 0 and nave.total_upgrades_feitos < MAX_TOTAL_UPGRADES
+
     # Botão Motor
-    pode_motor = nave.pontos >= CUSTO_BASE_MOTOR * nave.nivel_motor and nave.nivel_motor < MAX_NIVEL_MOTOR
+    pode_motor = pode_comprar_geral and nave.nivel_motor < MAX_NIVEL_MOTOR
     cor_motor = BRANCO if pode_motor else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_motor, RECT_BOTAO_MOTOR, border_radius=5)
     if nave.nivel_motor < MAX_NIVEL_MOTOR:
-        custo_motor = CUSTO_BASE_MOTOR * nave.nivel_motor
-        txt_motor = f"Motor Nv. {nave.nivel_motor + 1}/{MAX_NIVEL_MOTOR} (Custo: {custo_motor})"
+        txt_motor = f"Motor Nv. {nave.nivel_motor + 1}/{MAX_NIVEL_MOTOR} (Custo: 1 Pt)" # Custo fixo
     else: txt_motor = f"Motor Nv. {nave.nivel_motor} (MAX)"
     draw_text_on_button(RECT_BOTAO_MOTOR, txt_motor, FONT_PADRAO, PRETO)
 
     # Botão Dano
-    pode_dano = nave.pontos >= CUSTO_BASE_DANO * nave.nivel_dano and nave.nivel_dano < MAX_NIVEL_DANO
+    pode_dano = pode_comprar_geral and nave.nivel_dano < MAX_NIVEL_DANO
     cor_dano = BRANCO if pode_dano else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_dano, RECT_BOTAO_DANO, border_radius=5)
     if nave.nivel_dano < MAX_NIVEL_DANO:
-        custo_dano = CUSTO_BASE_DANO * nave.nivel_dano
-        txt_dano = f"Dano Nv. {nave.nivel_dano + 1}/{MAX_NIVEL_DANO} (Custo: {custo_dano})"
+        txt_dano = f"Dano Nv. {nave.nivel_dano + 1}/{MAX_NIVEL_DANO} (Custo: 1 Pt)" # Custo fixo
     else: txt_dano = f"Dano Nv. {nave.nivel_dano} (MAX)"
     draw_text_on_button(RECT_BOTAO_DANO, txt_dano, FONT_PADRAO, PRETO)
 
     # Botão Auxiliar
     num_ativos = len(nave.grupo_auxiliares_ativos)
     max_aux = len(nave.lista_todas_auxiliares)
-    pode_aux = num_ativos < max_aux and nave.pontos >= CUSTO_BASE_AUXILIAR * (num_ativos + 1)
+    pode_aux = pode_comprar_geral and num_ativos < max_aux
     cor_aux = BRANCO if pode_aux else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_aux, RECT_BOTAO_AUX, border_radius=5)
     if num_ativos < max_aux:
-        custo_aux = CUSTO_BASE_AUXILIAR * (num_ativos + 1)
-        txt_aux = f"Comprar Auxiliar {num_ativos + 1}/{max_aux} (Custo: {custo_aux})"
+        txt_aux = f"Comprar Auxiliar {num_ativos + 1}/{max_aux} (Custo: 1 Pt)" # Custo fixo
     else: txt_aux = "Máx. Auxiliares"
     draw_text_on_button(RECT_BOTAO_AUX, txt_aux, FONT_PADRAO, PRETO)
 
     # Botão Max HP
-    custo_max_hp = CUSTO_BASE_MAX_VIDA * nave.nivel_max_vida
-    pode_maxhp = nave.pontos >= custo_max_hp
+    pode_maxhp = pode_comprar_geral # Sem limite específico de nível
     cor_maxhp = BRANCO if pode_maxhp else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_maxhp, RECT_BOTAO_MAX_HP, border_radius=5)
-    draw_text_on_button(RECT_BOTAO_MAX_HP, f"Vida Max Nv. {nave.nivel_max_vida + 1} (Custo: {custo_max_hp})", FONT_PADRAO, PRETO)
+    draw_text_on_button(RECT_BOTAO_MAX_HP, f"Vida Max Nv. {nave.nivel_max_vida + 1} (Custo: 1 Pt)", FONT_PADRAO, PRETO) # Custo fixo
 
     # Botão Escudo
-    pode_escudo = nave.pontos >= CUSTO_BASE_ESCUDO * (nave.nivel_escudo + 1) and nave.nivel_escudo < MAX_NIVEL_ESCUDO
+    pode_escudo = pode_comprar_geral and nave.nivel_escudo < MAX_NIVEL_ESCUDO
     cor_escudo = BRANCO if pode_escudo else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_escudo, RECT_BOTAO_ESCUDO, border_radius=5)
     if nave.nivel_escudo < MAX_NIVEL_ESCUDO:
-        custo_escudo = CUSTO_BASE_ESCUDO * (nave.nivel_escudo + 1)
-        txt_escudo = f"Escudo Nv. {nave.nivel_escudo + 1}/{MAX_NIVEL_ESCUDO} (Custo: {custo_escudo})"
+        txt_escudo = f"Escudo Nv. {nave.nivel_escudo + 1}/{MAX_NIVEL_ESCUDO} (Custo: 1 Pt)" # Custo fixo
     else: txt_escudo = f"Escudo Nv. {nave.nivel_escudo} (MAX)"
     draw_text_on_button(RECT_BOTAO_ESCUDO, txt_escudo, FONT_PADRAO, PRETO)
+    # --- FIM ALTERAÇÕES BOTÕES ---
 
     # Instrução para fechar
     texto_fechar = FONT_PADRAO.render("Aperte 'V' para fechar a loja", True, BRANCO)
     surface.blit(texto_fechar, (largura_tela // 2 - texto_fechar.get_width() // 2, altura_tela - 60))
 
+# ui.py
 
 def desenhar_hud(surface, nave, estado_jogo):
     # Posição Y inicial para os detalhes (abaixo do botão Upgrade)
     pos_x_detalhes = 10
-    pos_y_atual_detalhes = RECT_BOTAO_UPGRADE_HUD.bottom + 10
+    # --- ALTERAÇÃO: Espaço para Pontos de Upgrade ---
+    pos_y_atual_detalhes = 10 # Começa abaixo dos pontos normais
+    hud_line_height = FONT_HUD.get_height() + 5
 
-    # Desenha Pontos e Vida
+    # Desenha Pontos (Ranking) e Vida
     texto_pontos = FONT_HUD.render(f"Pontos: {nave.pontos}", True, BRANCO)
-    surface.blit(texto_pontos, (10, 10))
-    texto_vida = FONT_HUD.render(f"Vida: {max(0, nave.vida_atual)} / {nave.max_vida}", True, VERDE_VIDA)
-    surface.blit(texto_vida, (10, 35))
+    surface.blit(texto_pontos, (pos_x_detalhes, pos_y_atual_detalhes))
+    pos_y_atual_detalhes += hud_line_height
 
-    # Desenha Botão Upgrade e Status (apenas se não estiver no Game Over)
+    texto_vida = FONT_HUD.render(f"Vida: {max(0, nave.vida_atual)} / {nave.max_vida}", True, VERDE_VIDA)
+    surface.blit(texto_vida, (pos_x_detalhes, pos_y_atual_detalhes))
+    pos_y_atual_detalhes += hud_line_height
+
+    # Desenha Pontos de Upgrade e Botão (apenas se não estiver no Game Over)
     if estado_jogo != "GAME_OVER":
-        # Botão Upgrade
+        # Pontos de Upgrade
+        cor_pts_upgrade = AMARELO_BOMBA if nave.pontos_upgrade_disponiveis > 0 else BRANCO
+        texto_pts_up = FONT_HUD.render(f"Pts Upgrade: {nave.pontos_upgrade_disponiveis}", True, cor_pts_upgrade)
+        surface.blit(texto_pts_up, (pos_x_detalhes, pos_y_atual_detalhes))
+        pos_y_atual_detalhes += hud_line_height
+
+        # Botão Upgrade (posição ajustada)
+        RECT_BOTAO_UPGRADE_HUD.topleft = (pos_x_detalhes, pos_y_atual_detalhes) # Botão abaixo dos pontos
         pygame.draw.rect(surface, BRANCO, RECT_BOTAO_UPGRADE_HUD, border_radius=5)
         texto_botao_surf = FONT_RANKING.render("UPGRADE (V)", True, PRETO)
         texto_botao_rect = texto_botao_surf.get_rect(center=RECT_BOTAO_UPGRADE_HUD.center)
         surface.blit(texto_botao_surf, texto_botao_rect)
+        pos_y_atual_detalhes = RECT_BOTAO_UPGRADE_HUD.bottom + 10 # Próximo item abaixo do botão
+        # --- FIM ALTERAÇÃO ---
 
-        # Status da Nave
-        # Motor
+        # Status da Nave (posição ajustada)
         texto_motor = FONT_HUD_DETALHES.render(f"Motor: Nv {nave.nivel_motor}/{MAX_NIVEL_MOTOR}", True, BRANCO)
         surface.blit(texto_motor, (pos_x_detalhes, pos_y_atual_detalhes))
         pos_y_atual_detalhes += FONT_HUD_DETALHES.get_height() + 2
-        # Dano
-        texto_dano = FONT_HUD_DETALHES.render(f"Dano: Nv {nave.nivel_dano}/{MAX_NIVEL_DANO}", True, BRANCO)
-        surface.blit(texto_dano, (pos_x_detalhes, pos_y_atual_detalhes))
-        pos_y_atual_detalhes += FONT_HUD_DETALHES.get_height() + 2
-        # Escudo
-        texto_escudo = FONT_HUD_DETALHES.render(f"Escudo: Nv {nave.nivel_escudo}/{MAX_NIVEL_ESCUDO}", True, BRANCO)
-        surface.blit(texto_escudo, (pos_x_detalhes, pos_y_atual_detalhes))
-        pos_y_atual_detalhes += FONT_HUD_DETALHES.get_height() + 2
-        # Auxiliares
-        num_aux = len(nave.grupo_auxiliares_ativos)
-        max_aux = len(nave.lista_todas_auxiliares)
-        texto_aux = FONT_HUD_DETALHES.render(f"Auxiliares: {num_aux}/{max_aux}", True, BRANCO)
-        surface.blit(texto_aux, (pos_x_detalhes, pos_y_atual_detalhes))
+        # ... (resto do HUD como estava) ...
 
 
 def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height):

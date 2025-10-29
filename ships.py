@@ -3,12 +3,13 @@ import pygame
 import math
 import random
 from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, MAP_WIDTH, MAP_HEIGHT,
-                      MAX_TARGET_LOCK_DISTANCE, CUSTO_BASE_MOTOR, MAX_NIVEL_MOTOR,
-                      CUSTO_BASE_DANO, MAX_NIVEL_DANO, CUSTO_BASE_AUXILIAR,
-                      CUSTO_BASE_MAX_VIDA, CUSTO_BASE_ESCUDO, MAX_NIVEL_ESCUDO,
+                      MAX_TARGET_LOCK_DISTANCE, MAX_NIVEL_MOTOR, # <-- CUSTO_BASE_MOTOR removido
+                      MAX_NIVEL_DANO, # <-- CUSTO_BASE_DANO removido
+                      MAX_NIVEL_ESCUDO, # <-- CUSTO_BASE_AUXILIAR, MAX_VIDA, ESCUDO removidos
                       REDUCAO_DANO_POR_NIVEL, DURACAO_FX_ESCUDO, COR_ESCUDO_FX,
                       RASTRO_MAX_PARTICULAS, RASTRO_DURACAO, RASTRO_TAMANHO_INICIAL, COR_RASTRO_MOTOR,
-                      VERMELHO_VIDA_FUNDO, VERDE_VIDA)
+                      VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAX_TOTAL_UPGRADES) # MAX_TOTAL_UPGRADES mantido
+# ... (resto das importações e código) ...
 # Importa classes necessárias
 from projectiles import Projetil
 from effects import Explosao
@@ -122,6 +123,15 @@ class Nave(pygame.sprite.Sprite):
         centro_x = tamanho_surface / 2; centro_y = tamanho_surface / 2; ponto_topo = (centro_x, centro_y - self.altura / 2); ponto_base_esq = (centro_x - self.largura_base / 2, centro_y + self.altura / 2); ponto_base_dir = (centro_x + self.largura_base / 2, centro_y + self.altura / 2)
         pygame.draw.polygon(self.imagem_original, self.cor, [ponto_topo, ponto_base_esq, ponto_base_dir])
         ponta_largura = 4; ponta_altura = 8; pygame.draw.rect(self.imagem_original, PONTA_NAVE, (ponto_topo[0] - ponta_largura / 2, ponto_topo[1] - ponta_altura, ponta_largura, ponta_altura))
+        # --- NOVOS ATRIBUTOS DE UPGRADE ---
+        self.pontos_upgrade_disponiveis = 0
+        self.total_upgrades_feitos = 0
+        self._pontos_acumulados_para_upgrade = 0 # Contador interno
+        self._limiar_pontos_atual = 50 # Primeiro limiar
+        self._indice_limiar = 0 # 0: 50, 1: 100, 2: 150
+        self._limiares = [50, 100, 150]
+        self._pontos_no_limiar = [200, 600] # Pontuações onde o limiar muda
+        # --- FIM NOVOS ATRIBUTOS ---
         self.image = self.imagem_original; self.rect = pygame.Rect(x, y, self.largura_base * 0.8, self.altura * 0.8); self.rect.center = self.posicao
         self.cooldown_tiro = 250; self.ultimo_tiro_tempo = 0; self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0
         self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida; self.velocidade_movimento_base = 4 + self.nivel_motor
@@ -231,7 +241,54 @@ class Nave(pygame.sprite.Sprite):
         agora = pygame.time.get_ticks()
         self.tempo_fim_congelamento = max(self.tempo_fim_congelamento, agora + duracao_ms)
         print(f"[{self.nome}] CONGELADO por {duracao_ms}ms!")
-    def ganhar_pontos(self, quantidade): self.pontos += quantidade
+    def ganhar_pontos(self, quantidade):
+        if quantidade <= 0:
+            return
+
+        self.pontos += quantidade # Continua acumulando pontos para o ranking
+        self._pontos_acumulados_para_upgrade += quantidade
+        
+        # Verifica se ganhou pontos de upgrade
+        ganhou_ponto = False
+        while self._pontos_acumulados_para_upgrade >= self._limiar_pontos_atual:
+            self.pontos_upgrade_disponiveis += 1
+            self._pontos_acumulados_para_upgrade -= self._limiar_pontos_atual # Subtrai o limiar alcançado
+            ganhou_ponto = True
+            print(f"[{self.nome}] Ganhou 1 Ponto de Upgrade! (Total: {self.pontos_upgrade_disponiveis})")
+
+            # Verifica se precisa mudar o limiar para o próximo ponto
+            pontos_totais_aproximados = self.pontos # Usa self.pontos como referência geral
+            if self._indice_limiar == 0 and pontos_totais_aproximados >= self._pontos_no_limiar[0]:
+                self._indice_limiar = 1
+                self._limiar_pontos_atual = self._limiares[self._indice_limiar]
+                print(f"[{self.nome}] Próximo Ponto de Upgrade a cada {self._limiar_pontos_atual} pontos.")
+            elif self._indice_limiar == 1 and pontos_totais_aproximados >= self._pontos_no_limiar[1]:
+                self._indice_limiar = 2
+                self._limiar_pontos_atual = self._limiares[self._indice_limiar]
+                print(f"[{self.nome}] Próximo Ponto de Upgrade a cada {self._limiar_pontos_atual} pontos.")
+
+        self.pontos += quantidade # Continua acumulando pontos para o ranking
+        self._pontos_acumulados_para_upgrade += quantidade
+        
+        # Verifica se ganhou pontos de upgrade
+        ganhou_ponto = False
+        while self._pontos_acumulados_para_upgrade >= self._limiar_pontos_atual:
+            self.pontos_upgrade_disponiveis += 1
+            self._pontos_acumulados_para_upgrade -= self._limiar_pontos_atual # Subtrai o limiar alcançado
+            ganhou_ponto = True
+            print(f"[{self.nome}] Ganhou 1 Ponto de Upgrade! (Total: {self.pontos_upgrade_disponiveis})")
+
+            # Verifica se precisa mudar o limiar para o próximo ponto
+            pontos_totais_aproximados = self.pontos # Usa self.pontos como referência geral
+            if self._indice_limiar == 0 and pontos_totais_aproximados >= self._pontos_no_limiar[0]:
+                self._indice_limiar = 1
+                self._limiar_pontos_atual = self._limiares[self._indice_limiar]
+                print(f"[{self.nome}] Próximo Ponto de Upgrade a cada {self._limiar_pontos_atual} pontos.")
+            elif self._indice_limiar == 1 and pontos_totais_aproximados >= self._pontos_no_limiar[1]:
+                self._indice_limiar = 2
+                self._limiar_pontos_atual = self._limiares[self._indice_limiar]
+                print(f"[{self.nome}] Próximo Ponto de Upgrade a cada {self._limiar_pontos_atual} pontos.")
+        
     def comprar_auxiliar(self):
         num_ativos = len(self.grupo_auxiliares_ativos)
         if num_ativos < len(self.lista_todas_auxiliares):
@@ -253,35 +310,66 @@ class Nave(pygame.sprite.Sprite):
         else:
             # print(f"[{self.nome}] Máximo de auxiliares atingido!") # Comentado para reduzir spam no console
             return False
+    
     def comprar_upgrade(self, tipo):
-        # ... (comprar_upgrade code remains the same) ...
+        # Verifica se há pontos disponíveis e se o limite total não foi atingido
+        if self.pontos_upgrade_disponiveis <= 0:
+            print(f"[{self.nome}] Sem Pontos de Upgrade disponíveis!")
+            return False
+        if self.total_upgrades_feitos >= MAX_TOTAL_UPGRADES:
+            print(f"[{self.nome}] Limite máximo de {MAX_TOTAL_UPGRADES} upgrades atingido!")
+            return False
+
         comprou = False
+        
+        # Lógica para cada tipo de upgrade (custo agora é 1 ponto)
         if tipo == "motor":
             if self.nivel_motor < MAX_NIVEL_MOTOR:
-                custo = CUSTO_BASE_MOTOR * self.nivel_motor
-                if self.pontos >= custo: self.pontos -= custo; self.nivel_motor += 1; self.velocidade_movimento_base = 4 + self.nivel_motor; print(f"[{self.nome}] Motor comprado! Nível {self.nivel_motor}."); comprou = True
+                self.pontos_upgrade_disponiveis -= 1
+                self.total_upgrades_feitos += 1
+                self.nivel_motor += 1
+                self.velocidade_movimento_base = 4 + self.nivel_motor
+                print(f"[{self.nome}] Motor comprado! Nível {self.nivel_motor}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
+                comprou = True
             else: print(f"[{self.nome}] Nível máximo de motor atingido!")
         elif tipo == "dano":
             if self.nivel_dano < MAX_NIVEL_DANO:
-                custo = CUSTO_BASE_DANO * self.nivel_dano
-                if self.pontos >= custo: self.pontos -= custo; self.nivel_dano += 1; print(f"[{self.nome}] Dano comprado! Nível {self.nivel_dano}."); comprou = True
+                self.pontos_upgrade_disponiveis -= 1
+                self.total_upgrades_feitos += 1
+                self.nivel_dano += 1
+                print(f"[{self.nome}] Dano comprado! Nível {self.nivel_dano}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
+                comprou = True
             else: print(f"[{self.nome}] Nível máximo de dano atingido!")
         elif tipo == "auxiliar":
             num_ativos = len(self.grupo_auxiliares_ativos)
             if num_ativos < len(self.lista_todas_auxiliares):
-                custo = CUSTO_BASE_AUXILIAR * (num_ativos + 1)
-                if self.pontos >= custo:
-                    if self.comprar_auxiliar(): self.pontos -= custo; comprou = True
+                if self.comprar_auxiliar(): # comprar_auxiliar() já adiciona ao grupo
+                    self.pontos_upgrade_disponiveis -= 1
+                    self.total_upgrades_feitos += 1
+                    print(f"[{self.nome}] Auxiliar comprado! ({self.pontos_upgrade_disponiveis} Pts Restantes)")
+                    comprou = True
             else: print(f"[{self.nome}] Nível máximo de auxiliares atingido!")
         elif tipo == "max_health":
-            custo = CUSTO_BASE_MAX_VIDA * self.nivel_max_vida
-            if self.pontos >= custo: self.pontos -= custo; self.nivel_max_vida += 1; self.max_vida = 4 + self.nivel_max_vida; self.vida_atual += 1; self.ultimo_hit_tempo = pygame.time.get_ticks(); print(f"[{self.nome}] Vida Máx. aumentada! Nível {self.nivel_max_vida}."); comprou = True
+            # Sem limite explícito para vida máxima, mas limitado pelo total de upgrades
+            self.pontos_upgrade_disponiveis -= 1
+            self.total_upgrades_feitos += 1
+            self.nivel_max_vida += 1
+            self.max_vida = 4 + self.nivel_max_vida
+            self.vida_atual += 1 # Ganha 1 de vida ao comprar
+            self.ultimo_hit_tempo = pygame.time.get_ticks() # Atualiza barra de vida
+            print(f"[{self.nome}] Vida Máx. aumentada! Nível {self.nivel_max_vida}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
+            comprou = True
         elif tipo == "escudo":
             if self.nivel_escudo < MAX_NIVEL_ESCUDO:
-                custo = CUSTO_BASE_ESCUDO * (self.nivel_escudo + 1)
-                if self.pontos >= custo: self.pontos -= custo; self.nivel_escudo += 1; print(f"[{self.nome}] Escudo comprado! Nível {self.nivel_escudo}."); comprou = True
+                self.pontos_upgrade_disponiveis -= 1
+                self.total_upgrades_feitos += 1
+                self.nivel_escudo += 1
+                print(f"[{self.nome}] Escudo comprado! Nível {self.nivel_escudo}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
+                comprou = True
             else: print(f"[{self.nome}] Nível máximo de escudo atingido!")
+            
         return comprou
+
     def coletar_vida(self, quantidade):
         # ... (coletar_vida code remains the same) ...
         if self.vida_atual < self.max_vida:
@@ -334,6 +422,7 @@ class Player(Nave):
             # print(f"[{self.nome}] Dano ignorado (Invencível)") # Debug opcional
             return False # Retorna False (não morreu) sem aplicar dano
         # --- FIM DA VERIFICAÇÃO ---
+        return super().foi_atingido(dano, estado_jogo_atual, proj_pos)
     def update(self, grupo_projeteis_jogador, camera):
         self.processar_input_humano(camera); self.rotacionar(); self.mover(); self.lidar_com_tiros(grupo_projeteis_jogador)
 
@@ -579,8 +668,15 @@ class NaveBot(Nave):
                     self.virando_aleatoriamente_timer = random.randint(30, 90); self.direcao_virada_aleatoria = random.choice(["esquerda", "direita"])
 
     def processar_upgrades_ia(self):
-        # ... (processar_upgrades_ia code remains the same) ...
-        if self.pontos >= CUSTO_BASE_MOTOR * self.nivel_motor and self.nivel_motor < MAX_NIVEL_MOTOR: self.comprar_upgrade("motor")
-        elif self.pontos >= CUSTO_BASE_MAX_VIDA * self.nivel_max_vida: self.comprar_upgrade("max_health")
-        elif self.pontos >= CUSTO_BASE_DANO * self.nivel_dano and self.nivel_dano < MAX_NIVEL_DANO: self.comprar_upgrade("dano")
-        elif self.pontos >= CUSTO_BASE_ESCUDO * (self.nivel_escudo + 1) and self.nivel_escudo < MAX_NIVEL_ESCUDO : self.comprar_upgrade("escudo")
+        # Prioriza motor, vida, dano, escudo (auxiliares são comprados no spawn por enquanto)
+        if self.pontos_upgrade_disponiveis > 0 and self.total_upgrades_feitos < MAX_TOTAL_UPGRADES:
+            if self.nivel_motor < MAX_NIVEL_MOTOR:
+                 self.comprar_upgrade("motor")
+            elif self.nivel_escudo < MAX_NIVEL_ESCUDO: # Prioriza escudo antes de vida max
+                 self.comprar_upgrade("escudo")
+            # Sem elif aqui, para poder comprar vida mesmo com escudo max
+            elif self.nivel_dano < MAX_NIVEL_DANO:
+                 self.comprar_upgrade("dano")
+            else: # Se não puder comprar os outros, tenta vida
+                 self.comprar_upgrade("max_health")
+        # Bots não compram auxiliares com pontos de upgrade por enquanto

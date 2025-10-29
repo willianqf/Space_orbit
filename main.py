@@ -3,7 +3,7 @@ import pygame
 import sys
 import random
 import math
-
+from settings import MAX_TOTAL_UPGRADES
 # 1. Importações dos Módulos
 import settings as s # Importa tudo de settings com alias 's'
 from camera import Camera
@@ -81,6 +81,99 @@ for _ in range(s.NUM_ESTRELAS):
 
 # 9. Funções Auxiliares (Spawners, Cheats, Reiniciar)
 
+def resetar_jogador():
+    """Reseta completamente o estado do jogador para o inicial."""
+    global estado_jogo, nave_player
+
+    print("Resetando Jogador...")
+
+    # Define posição inicial (pode ser aleatória ou fixa)
+    margem_spawn = 100
+    spawn_x = random.randint(margem_spawn, s.MAP_WIDTH - margem_spawn)
+    spawn_y = random.randint(margem_spawn, s.MAP_HEIGHT - margem_spawn)
+    nave_player.posicao = pygame.math.Vector2(spawn_x, spawn_y)
+    nave_player.rect.center = nave_player.posicao
+
+    # Limpa auxiliares existentes e recria a lista
+    nave_player.grupo_auxiliares_ativos.empty()
+    nave_player.lista_todas_auxiliares = []
+    for pos in Nave.POSICOES_AUXILIARES: # Usa Nave base importada
+        nova_aux = NaveAuxiliar(nave_player, pos)
+        nave_player.lista_todas_auxiliares.append(nova_aux)
+
+    # Reseta todos os atributos para o valor inicial
+    nave_player.pontos = 0
+    nave_player.nivel_motor = 1
+    nave_player.nivel_dano = 1
+    nave_player.nivel_max_vida = 1
+    nave_player.nivel_escudo = 0
+    nave_player.velocidade_movimento_base = 4 + nave_player.nivel_motor
+    nave_player.max_vida = 4 + nave_player.nivel_max_vida
+    nave_player.vida_atual = nave_player.max_vida # Vida cheia
+
+    # Reseta atributos do sistema de pontos de upgrade
+    nave_player.pontos_upgrade_disponiveis = 0
+    nave_player.total_upgrades_feitos = 0
+    nave_player._pontos_acumulados_para_upgrade = 0
+    nave_player._indice_limiar = 0
+    nave_player._limiar_pontos_atual = nave_player._limiares[0] # Usa o atributo _limiares definido no __init__ da Nave
+
+    # Reseta estados temporários
+    nave_player.alvo_selecionado = None
+    nave_player.posicao_alvo_mouse = None
+    nave_player.ultimo_hit_tempo = 0
+    nave_player.tempo_fim_lentidao = 0
+    nave_player.tempo_fim_congelamento = 0
+    nave_player.rastro_particulas = []
+    # nave_player.invencivel = False # Descomente se quiser resetar a invencibilidade também
+
+    # Adiciona o jogador de volta ao grupo se necessário (não deve ser preciso com GroupSingle)
+    if not grupo_player.has(nave_player):
+         grupo_player.add(nave_player)
+
+    # Muda o estado de volta para JOGANDO
+    estado_jogo = "JOGANDO"
+
+# A função respawn_jogador não é mais necessária, pode ser removida ou comentada
+# def respawn_jogador():
+
+def respawn_jogador():
+    global estado_jogo, nave_player
+
+    print("Jogador fazendo Respawn...")
+
+    # Reseta apenas o jogador
+    # Encontra uma posição segura (longe de inimigos/bots, se possível)
+    # Vamos usar a lógica de spawn padrão por enquanto, mas referenciando o centro
+    centro_mapa = pygame.math.Vector2(s.MAP_WIDTH / 2, s.MAP_HEIGHT / 2)
+    spawn_x, spawn_y = calcular_posicao_spawn(centro_mapa, dist_min_do_jogador=200) # Spawna perto do centro
+
+    nave_player.posicao = pygame.math.Vector2(spawn_x, spawn_y)
+    nave_player.rect.center = nave_player.posicao
+
+    # Recupera a vida
+    nave_player.vida_atual = nave_player.max_vida
+
+    # Penalidades (Opcional - pode remover ou ajustar)
+    # nave_player.pontos = max(0, nave_player.pontos // 2) # Perde metade dos pontos?
+    # nave_player.pontos_upgrade_disponiveis = max(0, nave_player.pontos_upgrade_disponiveis - 1) # Perde 1 ponto de upgrade?
+
+    # Reseta estados temporários
+    nave_player.alvo_selecionado = None
+    nave_player.posicao_alvo_mouse = None
+    nave_player.ultimo_hit_tempo = 0
+    nave_player.tempo_fim_lentidao = 0
+    nave_player.tempo_fim_congelamento = 0 # Garante que não respawne congelado
+    nave_player.rastro_particulas = []
+    # Upgrades (motor, dano, etc.) e auxiliares SÃO MANTIDOS
+
+    # Adiciona o jogador de volta ao grupo single (se ele foi removido - não é o caso aqui, mas boa prática)
+    if not grupo_player.has(nave_player):
+         grupo_player.add(nave_player)
+
+    # Muda o estado de volta para JOGANDO
+    estado_jogo = "JOGANDO"
+    
 def spawnar_boss_congelante(pos_referencia):
     x, y = calcular_posicao_spawn(pos_referencia, dist_min_do_jogador=s.SPAWN_DIST_MAX * 1.2) # Spawna mais longe
     novo_boss = BossCongelante(x, y)
@@ -159,6 +252,14 @@ def processar_cheat(comando, nave):
             print(f"[CHEAT] Invencibilidade {estado_str}!")
         else:
              print("[CHEAT] Comando 'invencivel' só funciona para o Jogador.")
+    elif comando_limpo == "maxupgrade":
+        if isinstance(nave, Player):
+             # Define pontos para atingir o limite (ou um valor alto)
+             nave.pontos_upgrade_disponiveis = MAX_TOTAL_UPGRADES - nave.total_upgrades_feitos
+             print(f"[CHEAT] +{nave.pontos_upgrade_disponiveis} Pontos de Upgrade adicionados!")
+        else:
+             print("[CHEAT] Comando 'maxupgrade' só funciona para o Jogador.")
+    # --- FIM DO BLOCO ---
     else:
         print(f"[CHEAT] Comando desconhecido: '{comando_limpo}'")
     variavel_texto_terminal = ""
@@ -198,6 +299,13 @@ def reiniciar_jogo():
     nave_player.velocidade_movimento_base = 4 + nave_player.nivel_motor
     nave_player.max_vida = 4 + nave_player.nivel_max_vida
     nave_player.vida_atual = nave_player.max_vida
+    # --- ADICIONE ESTAS LINHAS ---
+    nave_player.pontos_upgrade_disponiveis = 0
+    nave_player.total_upgrades_feitos = 0
+    nave_player._pontos_acumulados_para_upgrade = 0
+    nave_player._indice_limiar = 0
+    nave_player._limiar_pontos_atual = nave_player._limiares[0]
+    # --- FIM ADIÇÃO ---
     nave_player.alvo_selecionado = None
     nave_player.posicao_alvo_mouse = None
     nave_player.ultimo_hit_tempo = 0
@@ -338,7 +446,7 @@ while rodando:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
                 if ui.RECT_BOTAO_REINICIAR.collidepoint(mouse_pos):
-                    reiniciar_jogo()
+                    resetar_jogador() # Chama a função que reseta APENAS o jogador
 
     # 12. Lógica de Atualização
     # --- Atualizações que rodam exceto no Menu e Pausa ---
@@ -524,7 +632,11 @@ while rodando:
         # UI Estática
         ui.desenhar_hud(tela, nave_player, estado_jogo)
         ui.desenhar_minimapa(tela, nave_player, grupo_bots, estado_jogo, s.MAP_WIDTH, s.MAP_HEIGHT)
-        todos_os_jogadores = [nave_player] + list(grupo_bots.sprites())
+        if estado_jogo != "GAME_OVER":
+            todos_os_jogadores = [nave_player] + list(grupo_bots.sprites())
+        else:
+            todos_os_jogadores = list(grupo_bots.sprites()) # Apenas bots no ranking
+        # --- FIM ALTERAÇÃO ---
         lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
         ui.desenhar_ranking(tela, top_5, nave_player)
 

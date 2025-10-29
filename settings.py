@@ -60,11 +60,7 @@ RASTRO_TAMANHO_INICIAL = 4
 VIDA_COLETADA_CURA = 1
 
 # 4. Constantes da Loja
-CUSTO_BASE_MOTOR = 20
-CUSTO_BASE_DANO = 75
-CUSTO_BASE_AUXILIAR = 50
-CUSTO_BASE_MAX_VIDA = 50
-CUSTO_BASE_ESCUDO = 60
+MAX_TOTAL_UPGRADES = 12 # Limite total de upgrades que podem ser comprados
 
 # 5. Cores
 PRETO = (0, 0, 0)
