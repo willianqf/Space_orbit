@@ -3,7 +3,7 @@ import pygame
 import sys
 import random
 import math
-from settings import MAX_TOTAL_UPGRADES
+from settings import MAX_TOTAL_UPGRADES, VOLUME_BASE_EXPLOSAO_BOSS, VOLUME_BASE_EXPLOSAO_NPC # <--- MODIFICADO
 # 1. Importações dos Módulos
 import settings as s # Importa tudo de settings com alias 's'
 from camera import Camera
@@ -19,12 +19,56 @@ from enemies import (InimigoPerseguidor, InimigoAtiradorRapido, InimigoBomba, In
                      BossCongelante, MinionCongelante, 
                      set_global_enemy_references)
 # Importa as classes de naves
-from ships import Player, NaveBot, NaveAuxiliar, Nave, set_global_ship_references # Importa Nave base também
+from ships import (Player, NaveBot, NaveAuxiliar, Nave, set_global_ship_references, 
+                   tocar_som_posicional) 
 # Importa as funções e Rects da UI
 import ui
 
 # 2. Inicialização do Pygame e Tela
+pygame.mixer.pre_init(44100, -16, 2, 512)
 pygame.init()
+pygame.mixer.init() 
+pygame.mixer.set_num_channels(32)
+
+# --- INÍCIO: GERAÇÃO DE SONS ---
+try:
+    # Define o caminho relativo para o arquivo de som
+    caminho_som_tiro = "sons/tiro.wav" 
+    # Carrega o som e atribui à variável em settings
+    s.SOM_TIRO_PLAYER = pygame.mixer.Sound(caminho_som_tiro)
+    print(f"Som '{caminho_som_tiro}' carregado com sucesso!")
+
+    caminho_som_tiro_npc = "sons/tiro_npc.wav" 
+    s.SOM_TIRO_INIMIGO_SIMPLES = pygame.mixer.Sound(caminho_som_tiro_npc)
+    print(f"Som '{caminho_som_tiro_npc}' carregado com sucesso!")
+
+    caminho_som_explosao_boss = "sons/explosao_boss_inimigo.wav"
+    s.SOM_EXPLOSAO_BOSS = pygame.mixer.Sound(caminho_som_explosao_boss)
+    print(f"Som '{caminho_som_explosao_boss}' carregado com sucesso!")
+    
+    # --- ADICIONE ESTE BLOCO ---
+    caminho_som_explosao_npc = "sons/explosão_npcs.wav" # <-- Verifique se este nome está correto
+    s.SOM_EXPLOSAO_NPC = pygame.mixer.Sound(caminho_som_explosao_npc)
+    print(f"Som '{caminho_som_explosao_npc}' carregado com sucesso!")
+    # --- FIM DO BLOCO ---
+
+except pygame.error as e:
+    print(f"[ERRO] Erro ao carregar um som: {e}")
+    print("[AVISO] Verifique se os arquivos estão na pasta 'sons' e se o formato é .wav ou .ogg.")
+    if not s.SOM_TIRO_PLAYER: s.SOM_TIRO_PLAYER = None
+    if not s.SOM_TIRO_INIMIGO_SIMPLES: s.SOM_TIRO_INIMIGO_SIMPLES = None
+    if not s.SOM_EXPLOSAO_BOSS: s.SOM_EXPLOSAO_BOSS = None 
+    if not s.SOM_EXPLOSAO_NPC: s.SOM_EXPLOSAO_NPC = None # <--- ADICIONADO
+    
+except Exception as e:
+    print(f"[ERRO] Erro inesperado ao carregar sons: {e}")
+    s.SOM_TIRO_PLAYER = None
+    s.SOM_TIRO_INIMIGO_SIMPLES = None
+    s.SOM_EXPLOSAO_BOSS = None 
+    s.SOM_EXPLOSAO_NPC = None # <--- ADICIONADO
+    
+# --- FIM: GERAÇÃO DE SONS ---
+
 LARGURA_TELA = s.LARGURA_TELA_INICIAL
 ALTURA_TELA = s.ALTURA_TELA_INICIAL
 tela = pygame.display.set_mode((LARGURA_TELA, ALTURA_TELA), pygame.RESIZABLE)
@@ -496,12 +540,19 @@ while rodando:
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_inimigos, True, False)
         for _, inim_list in colisoes.items():
             for inimigo in inim_list:
-                if inimigo.foi_atingido(nave_player.nivel_dano):
+                morreu = inimigo.foi_atingido(nave_player.nivel_dano)
+                if morreu:
                     nave_player.ganhar_pontos(inimigo.pontos_por_morte);
-                    if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
-        colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_bots, True, False)
-        for _, bot_list in colisoes.items():
-            for bot in bot_list: bot.foi_atingido(nave_player.nivel_dano, estado_jogo) # Tiro amigo!
+                    # --- MODIFICAÇÃO DE SOM DE MORTE ---
+                    if isinstance(inimigo, (InimigoMothership, BossCongelante)):
+                        if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty() 
+                        if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
+                            tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
+                    else:
+                        # É um NPC normal
+                        if tocar_som_posicional and s.SOM_EXPLOSAO_NPC:
+                            tocar_som_posicional(s.SOM_EXPLOSAO_NPC, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+                    # --- FIM DA MODIFICAÇÃO ---
 
         # Projéteis Bots vs ...
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_obstaculos, True, True)
@@ -515,9 +566,19 @@ while rodando:
                 if bot_.posicao.distance_to(proj.posicao) < bot_.distancia_scan: bot_que_acertou = bot_; dano_bot = bot_.nivel_dano; break
             if bot_que_acertou:
                 for inimigo in inim_list:
-                    if inimigo.foi_atingido(dano_bot):
+                    morreu = inimigo.foi_atingido(dano_bot)
+                    if morreu:
                         bot_que_acertou.ganhar_pontos(inimigo.pontos_por_morte);
-                        if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+                        # --- MODIFICAÇÃO DE SOM DE MORTE ---
+                        if isinstance(inimigo, (InimigoMothership, BossCongelante)):
+                            if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty() 
+                            if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
+                                tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
+                        else:
+                            # É um NPC normal
+                            if tocar_som_posicional and s.SOM_EXPLOSAO_NPC:
+                                tocar_som_posicional(s.SOM_EXPLOSAO_NPC, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+                        # --- FIM DA MODIFICAÇÃO ---
 
         # Projéteis Inimigos vs Bots
         colisoes = pygame.sprite.groupcollide(grupo_bots, grupo_projeteis_inimigos, False, False)
@@ -543,9 +604,20 @@ while rodando:
             for inimigo in inimigos_colididos:
                 dano = 1 if not isinstance(inimigo, InimigoBomba) else inimigo.DANO_EXPLOSAO
                 bot.foi_atingido(dano, estado_jogo, inimigo.posicao)
-                if inimigo.foi_atingido(1): # Inimigo também toma dano RAM
+                morreu = inimigo.foi_atingido(1)
+                if morreu: 
                     bot.ganhar_pontos(inimigo.pontos_por_morte)
-                    if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+                    # --- MODIFICAÇÃO DE SOM DE MORTE ---
+                    if isinstance(inimigo, (InimigoMothership, BossCongelante)):
+                        if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+                        if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
+                            tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
+                    else:
+                        # É um NPC normal
+                        if tocar_som_posicional and s.SOM_EXPLOSAO_NPC:
+                            tocar_som_posicional(s.SOM_EXPLOSAO_NPC, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+                    # --- FIM DA MODIFICAÇÃO ---
+                    
         colisoes_proj_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_inimigos, False)
         for proj in colisoes_proj_inimigo_player:
             if isinstance(proj, ProjetilTeleguiadoLento): nave_player.aplicar_lentidao(6000)
@@ -573,9 +645,20 @@ while rodando:
             if nave_player.foi_atingido(dano, estado_jogo, inimigo.posicao):
                 estado_jogo = "GAME_OVER"
             # Inimigo também toma dano na colisão e jogador ganha pontos se matar
-            if inimigo.foi_atingido(1):
+            morreu = inimigo.foi_atingido(1)
+            if morreu:
                 nave_player.ganhar_pontos(inimigo.pontos_por_morte)
-                if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+                # --- MODIFICAÇÃO DE SOM DE MORTE ---
+                if isinstance(inimigo, (InimigoMothership, BossCongelante)):
+                    if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+                    if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
+                        tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
+                else:
+                    # É um NPC normal
+                    if tocar_som_posicional and s.SOM_EXPLOSAO_NPC:
+                        tocar_som_posicional(s.SOM_EXPLOSAO_NPC, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+                # --- FIM DA MODIFICAÇÃO ---
+                
         colisoes_ram_bot_player = pygame.sprite.spritecollide(nave_player, grupo_bots, False)
         for bot in colisoes_ram_bot_player:
             if nave_player.foi_atingido(1, estado_jogo, bot.posicao): # Jogador toma dano

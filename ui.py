@@ -296,12 +296,12 @@ def desenhar_loja(surface, nave, largura_tela, altura_tela):
     texto_fechar = FONT_PADRAO.render("Aperte 'V' para fechar a loja", True, BRANCO)
     surface.blit(texto_fechar, (largura_tela // 2 - texto_fechar.get_width() // 2, altura_tela - 60))
 
-# ui.py
-
+# ---
+# --- MODIFICAÇÃO PRINCIPAL AQUI ---
+# ---
 def desenhar_hud(surface, nave, estado_jogo):
     # Posição Y inicial para os detalhes (abaixo do botão Upgrade)
     pos_x_detalhes = 10
-    # --- ALTERAÇÃO: Espaço para Pontos de Upgrade ---
     pos_y_atual_detalhes = 10 # Começa abaixo dos pontos normais
     hud_line_height = FONT_HUD.get_height() + 5
 
@@ -329,14 +329,35 @@ def desenhar_hud(surface, nave, estado_jogo):
         texto_botao_rect = texto_botao_surf.get_rect(center=RECT_BOTAO_UPGRADE_HUD.center)
         surface.blit(texto_botao_surf, texto_botao_rect)
         pos_y_atual_detalhes = RECT_BOTAO_UPGRADE_HUD.bottom + 10 # Próximo item abaixo do botão
-        # --- FIM ALTERAÇÃO ---
 
-        # Status da Nave (posição ajustada)
+        # --- INÍCIO DA MODIFICAÇÃO: Status da Nave ---
+        line_spacing_detalhes = FONT_HUD_DETALHES.get_height() + 2
+        
+        # Motor
         texto_motor = FONT_HUD_DETALHES.render(f"Motor: Nv {nave.nivel_motor}/{MAX_NIVEL_MOTOR}", True, BRANCO)
         surface.blit(texto_motor, (pos_x_detalhes, pos_y_atual_detalhes))
-        pos_y_atual_detalhes += FONT_HUD_DETALHES.get_height() + 2
-        # ... (resto do HUD como estava) ...
+        pos_y_atual_detalhes += line_spacing_detalhes
 
+        # Dano
+        texto_dano = FONT_HUD_DETALHES.render(f"Dano: Nv {nave.nivel_dano}/{MAX_NIVEL_DANO}", True, BRANCO)
+        surface.blit(texto_dano, (pos_x_detalhes, pos_y_atual_detalhes))
+        pos_y_atual_detalhes += line_spacing_detalhes
+        
+        # Escudo
+        texto_escudo = FONT_HUD_DETALHES.render(f"Escudo: Nv {nave.nivel_escudo}/{MAX_NIVEL_ESCUDO}", True, BRANCO)
+        surface.blit(texto_escudo, (pos_x_detalhes, pos_y_atual_detalhes))
+        pos_y_atual_detalhes += line_spacing_detalhes
+        
+        # Auxiliares
+        num_aux = len(nave.grupo_auxiliares_ativos)
+        max_aux = len(nave.lista_todas_auxiliares)
+        texto_aux = FONT_HUD_DETALHES.render(f"Auxiliares: {num_aux}/{max_aux}", True, BRANCO)
+        surface.blit(texto_aux, (pos_x_detalhes, pos_y_atual_detalhes))
+        pos_y_atual_detalhes += line_spacing_detalhes
+        # --- FIM DA MODIFICAÇÃO ---
+# ---
+# --- FIM DA MODIFICAÇÃO PRINCIPAL ---
+# ---
 
 def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height):
     # Fundo semi-transparente

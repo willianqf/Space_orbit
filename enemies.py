@@ -2,16 +2,23 @@
 import pygame
 import math
 import random
+import settings as s # <--- ADICIONE (Já estava no seu)
 from settings import (VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAP_WIDTH, MAP_HEIGHT,
                       VERMELHO_PERSEGUIDOR, ROXO_ATIRADOR_RAPIDO, AMARELO_BOMBA, CIANO_MINION, CIANO_MOTHERSHIP,
                       LARANJA_RAPIDO, AZUL_TIRO_RAPIDO, ROXO_ATORDOADOR, BRANCO, AZUL_MINION_CONGELANTE, HP_MINION_CONGELANTE, PONTOS_MINION_CONGELANTE,
                         VELOCIDADE_MINION_CONGELANTE, COOLDOWN_TIRO_MINION_CONGELANTE, AZUL_CONGELANTE, HP_BOSS_CONGELANTE, PONTOS_BOSS_CONGELANTE,
     COOLDOWN_TIRO_CONGELANTE, COOLDOWN_SPAWN_MINION_CONGELANTE,
-    MAX_MINIONS_CONGELANTE, MINION_CONGELANTE_LEASH_RANGE)
+    MAX_MINIONS_CONGELANTE, MINION_CONGELANTE_LEASH_RANGE, VOLUME_BASE_TIRO_INIMIGO) # <--- (Já estava no seu)
 # Importa as classes de projéteis necessárias
 from projectiles import ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento, ProjetilInimigoRapidoCurto, ProjetilCongelante # Importa ProjetilCongelante
 # Importa a classe Explosao
 from effects import Explosao
+
+try:
+    from ships import tocar_som_posicional # <--- (Já estava no seu)
+except ImportError:
+    print("[AVISO] Nao foi possivel importar 'tocar_som_posicional'. Sons de inimigos podem falhar.")
+    tocar_som_posicional = None
 
 # Referências globais que serão definidas no main.py
 grupo_explosoes = None
@@ -96,6 +103,14 @@ class MinionCongelante(InimigoBase):
         # --- Lógica de Alvo para Tiro ---
         alvo_tiro = None
         dist_min_tiro = float('inf')
+        
+        # --- MODIFICAÇÃO: Encontra o ouvinte (player) ---
+        pos_ouvinte = None
+        for alvo in lista_alvos_naves:
+            if type(alvo).__name__ == 'Player':
+                pos_ouvinte = alvo.posicao
+                break # Encontrou o player, pode parar
+        # --- FIM MODIFICAÇÃO ---
 
         # Prioriza atacante do boss DENTRO da coleira
         atacante_do_boss = None
@@ -182,22 +197,21 @@ class MinionCongelante(InimigoBase):
         if alvo_tiro:
             distancia_alvo_tiro = self.posicao.distance_to(alvo_tiro.posicao)
             if distancia_alvo_tiro < self.distancia_tiro:
-                self.atirar(alvo_tiro.posicao, grupo_projeteis_inimigos)
+                # --- MODIFICAÇÃO: Passa pos_ouvinte ---
+                self.atirar(alvo_tiro.posicao, grupo_projeteis_inimigos, pos_ouvinte)
 
-    # O método atirar permanece o mesmo
-    def atirar(self, pos_alvo, grupo_projeteis_inimigos):
-        agora = pygame.time.get_ticks()
-        if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
-            self.ultimo_tiro_tempo = agora
-            proj = ProjetilInimigo(self.posicao.x, self.posicao.y, pos_alvo)
-            grupo_projeteis_inimigos.add(proj)
-                
-    def atirar(self, pos_alvo, grupo_projeteis_inimigos):
+    # --- MODIFICAÇÃO: Remove o 'atirar' duplicado e corrige o restante ---
+    # (O arquivo original tinha duas definições de 'atirar' aqui)
+    def atirar(self, pos_alvo, grupo_projeteis_inimigos, pos_ouvinte=None):
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
             self.ultimo_tiro_tempo = agora
             proj = ProjetilInimigo(self.posicao.x, self.posicao.y, pos_alvo) # Tiro normal
             grupo_projeteis_inimigos.add(proj)
+            
+            # --- MODIFICAÇÃO: Toca o som ---
+            if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_INIMIGO_SIMPLES:
+                tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_INIMIGO)
 
 # --- FIM Minion Congelante ---
 
@@ -244,7 +258,17 @@ class BossCongelante(InimigoBase):
         pos_referencia = self.posicao
         alvo_mais_proximo_geral = None
         dist_min_geral = float('inf')
+        
+        # --- MODIFICAÇÃO: Encontra o ouvinte (player) ---
+        pos_ouvinte = None
+        # --- FIM MODIFICAÇÃO ---
+        
         for alvo in lista_alvos_naves:
+             # --- MODIFICAÇÃO: Pega a posição do player ---
+             if type(alvo).__name__ == 'Player':
+                pos_ouvinte = alvo.posicao
+             # --- FIM MODIFICAÇÃO ---
+
              is_player = type(alvo).__name__ == 'Player'
              is_active_bot = type(alvo).__name__ == 'NaveBot' and alvo.groups()
              if is_player or is_active_bot:
@@ -270,7 +294,8 @@ class BossCongelante(InimigoBase):
         if self.alvo_ataque:
             if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
                 print(f"[{self.nome}] Atirando!") # DEBUG
-                self.atirar(self.alvo_ataque.posicao, grupo_projeteis_inimigos)
+                # --- MODIFICAÇÃO: Passa pos_ouvinte ---
+                self.atirar(self.alvo_ataque.posicao, grupo_projeteis_inimigos, pos_ouvinte)
                 self.ultimo_tiro_tempo = agora
             # else: print(f"[{self.nome}] Tiro em cooldown...") # DEBUG
 
@@ -293,10 +318,16 @@ class BossCongelante(InimigoBase):
         except ValueError:
              pass
 
-    def atirar(self, pos_alvo, grupo_projeteis_inimigos):
+    # --- MODIFICAÇÃO: Aceita pos_ouvinte e toca som ---
+    def atirar(self, pos_alvo, grupo_projeteis_inimigos, pos_ouvinte=None):
         # Este método agora pertence ao BossCongelante
         proj = ProjetilCongelante(self.posicao.x, self.posicao.y, pos_alvo)
         grupo_projeteis_inimigos.add(proj)
+        
+        # Toca o som
+        if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_INIMIGO_SIMPLES:
+            # O Boss pode ter um som diferente, mas por enquanto usa o simples
+            tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_INIMIGO)
 
     def spawnar_minion(self):
         # Este método agora pertence ao BossCongelante
@@ -327,7 +358,16 @@ class InimigoPerseguidor(InimigoBase):
 
     def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
         alvo_mais_proximo = None; dist_min = float('inf')
+        
+        # --- MODIFICAÇÃO: Encontra o ouvinte (player) ---
+        pos_ouvinte = None
+        # --- FIM MODIFICAÇÃO ---
+
         for alvo in lista_alvos_naves:
+             # --- MODIFICAÇÃO: Pega a posição do player ---
+            if type(alvo).__name__ == 'Player':
+                pos_ouvinte = alvo.posicao
+             # --- FIM MODIFICAÇÃO ---
             is_player = type(alvo).__name__ == 'Player'
             is_active_bot = type(alvo).__name__ == 'NaveBot' and alvo.groups()
             if not is_player and not is_active_bot: continue
@@ -346,12 +386,21 @@ class InimigoPerseguidor(InimigoBase):
         if distancia_alvo > self.distancia_parar:
             try: direcao = (pos_alvo - self.posicao).normalize(); self.posicao += direcao * self.velocidade; self.rect.center = self.posicao
             except ValueError: pass
-        if distancia_alvo < self.distancia_tiro: self.atirar(pos_alvo, grupo_projeteis_inimigos)
+        if distancia_alvo < self.distancia_tiro: 
+            # --- MODIFICAÇÃO: Passa pos_ouvinte ---
+            self.atirar(pos_alvo, grupo_projeteis_inimigos, pos_ouvinte)
 
-    def atirar(self, pos_alvo, grupo_projeteis_inimigos):
+    # --- MODIFICAÇÃO: Aceita pos_ouvinte e toca som ---
+    def atirar(self, pos_alvo, grupo_projeteis_inimigos, pos_ouvinte=None):
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
-            self.ultimo_tiro_tempo = agora; proj = ProjetilInimigo(self.posicao.x, self.posicao.y, pos_alvo); grupo_projeteis_inimigos.add(proj)
+            self.ultimo_tiro_tempo = agora
+            proj = ProjetilInimigo(self.posicao.x, self.posicao.y, pos_alvo)
+            grupo_projeteis_inimigos.add(proj)
+            
+            # Toca o som
+            if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_INIMIGO_SIMPLES:
+                tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_INIMIGO)
 
 # Inimigo Atirador Rápido (Roxo - antigo, mantido por referência)
 class InimigoAtiradorRapido(InimigoPerseguidor):
@@ -361,7 +410,7 @@ class InimigoAtiradorRapido(InimigoPerseguidor):
         self.image.fill(self.cor)
         self.max_vida = 1; self.vida_atual = 1
         self.cooldown_tiro = 500; self.distancia_parar = 300; self.pontos_por_morte = 10
-    # O método 'atirar' é herdado e usa ProjetilInimigo normal
+    # O método 'atirar' é herdado (já modificado na classe InimigoPerseguidor)
 
 # Inimigo Bomba (Amarelo)
 class InimigoBomba(InimigoBase):
@@ -401,12 +450,17 @@ class InimigoRapido(InimigoPerseguidor):
         self.cooldown_tiro = 800
         self.pontos_por_morte = 9
 
-    def atirar(self, pos_alvo, grupo_projeteis_inimigos):
+    # --- MODIFICAÇÃO: Aceita pos_ouvinte e toca som ---
+    def atirar(self, pos_alvo, grupo_projeteis_inimigos, pos_ouvinte=None):
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
             self.ultimo_tiro_tempo = agora
             proj = ProjetilInimigoRapidoCurto(self.posicao.x, self.posicao.y, pos_alvo)
             grupo_projeteis_inimigos.add(proj)
+            
+            # Toca o som
+            if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_INIMIGO_SIMPLES:
+                tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_INIMIGO)
 
 # Inimigo Tiro Rápido (Azul)
 class InimigoTiroRapido(InimigoPerseguidor):
@@ -417,10 +471,17 @@ class InimigoTiroRapido(InimigoPerseguidor):
         self.max_vida = 10; self.vida_atual = 10
         self.velocidade = 1.5; self.cooldown_tiro = 1500; self.pontos_por_morte = 20
 
-    def atirar(self, pos_alvo, grupo_projeteis_inimigos):
+    # --- MODIFICAÇÃO: Aceita pos_ouvinte e toca som ---
+    def atirar(self, pos_alvo, grupo_projeteis_inimigos, pos_ouvinte=None):
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
-            self.ultimo_tiro_tempo = agora; proj = ProjetilInimigoRapido(self.posicao.x, self.posicao.y, pos_alvo); grupo_projeteis_inimigos.add(proj)
+            self.ultimo_tiro_tempo = agora
+            proj = ProjetilInimigoRapido(self.posicao.x, self.posicao.y, pos_alvo)
+            grupo_projeteis_inimigos.add(proj)
+            
+            # Toca o som
+            if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_INIMIGO_SIMPLES:
+                tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_INIMIGO)
 
 # Inimigo Atordoador (Roxo)
 class InimigoAtordoador(InimigoPerseguidor):
@@ -434,7 +495,17 @@ class InimigoAtordoador(InimigoPerseguidor):
     # Update precisa passar o sprite do alvo para 'atirar'
     def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
         alvo_mais_proximo = None; dist_min = float('inf')
+        
+        # --- MODIFICAÇÃO: Encontra o ouvinte (player) ---
+        pos_ouvinte = None
+        # --- FIM MODIFICAÇÃO ---
+
         for alvo in lista_alvos_naves:
+             # --- MODIFICAÇÃO: Pega a posição do player ---
+            if type(alvo).__name__ == 'Player':
+                pos_ouvinte = alvo.posicao
+             # --- FIM MODIFICAÇÃO ---
+        
             is_player = type(alvo).__name__ == 'Player'
             is_active_bot = type(alvo).__name__ == 'NaveBot' and alvo.groups()
             if not is_player and not is_active_bot: continue
@@ -454,12 +525,20 @@ class InimigoAtordoador(InimigoPerseguidor):
             try: direcao = (pos_alvo_para_mov - self.posicao).normalize(); self.posicao += direcao * self.velocidade; self.rect.center = self.posicao
             except ValueError: pass
         if distancia_alvo < self.distancia_tiro:
-            self.atirar(alvo_mais_proximo, grupo_projeteis_inimigos) # Passa o sprite
+            # --- MODIFICAÇÃO: Passa pos_ouvinte ---
+            self.atirar(alvo_mais_proximo, grupo_projeteis_inimigos, pos_ouvinte) # Passa o sprite
 
-    def atirar(self, alvo_sprite, grupo_projeteis_inimigos): # Recebe o sprite
+    # --- MODIFICAÇÃO: Aceita pos_ouvinte e toca som ---
+    def atirar(self, alvo_sprite, grupo_projeteis_inimigos, pos_ouvinte=None): # Recebe o sprite
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
-            self.ultimo_tiro_tempo = agora; proj = ProjetilTeleguiadoLento(self.posicao.x, self.posicao.y, alvo_sprite); grupo_projeteis_inimigos.add(proj)
+            self.ultimo_tiro_tempo = agora
+            proj = ProjetilTeleguiadoLento(self.posicao.x, self.posicao.y, alvo_sprite)
+            grupo_projeteis_inimigos.add(proj)
+            
+            # Toca o som
+            if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_INIMIGO_SIMPLES:
+                tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_INIMIGO)
 
 # --- MINION E MOTHERSHIP ---
 
@@ -481,14 +560,33 @@ class InimigoMinion(InimigoBase):
         self.image = self.imagem_original
         self.rect = self.image.get_rect(center=self.posicao) # Atualiza rect após criar imagem
 
-    def atirar(self, pos_alvo, grupo_projeteis_inimigos):
+    # --- MODIFICAÇÃO: Aceita pos_ouvinte e toca som ---
+    def atirar(self, pos_alvo, grupo_projeteis_inimigos, pos_ouvinte=None):
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
-            self.ultimo_tiro_tempo = agora; proj = ProjetilInimigo(self.posicao.x, self.posicao.y, pos_alvo); grupo_projeteis_inimigos.add(proj)
+            self.ultimo_tiro_tempo = agora
+            proj = ProjetilInimigo(self.posicao.x, self.posicao.y, pos_alvo)
+            grupo_projeteis_inimigos.add(proj)
+            
+            # Toca o som
+            if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_INIMIGO_SIMPLES:
+                tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_INIMIGO)
 
     def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
         # Verifica se dono ou alvo ainda existem e se estão perto
         deve_morrer = False
+        
+        # --- MODIFICAÇÃO: Encontra o ouvinte (player) ---
+        pos_ouvinte = None
+        if self.target and type(self.target).__name__ == 'Player':
+            pos_ouvinte = self.target.posicao
+        else: # Procura o player na lista
+             for alvo in lista_alvos_naves:
+                if type(alvo).__name__ == 'Player':
+                    pos_ouvinte = alvo.posicao
+                    break
+        # --- FIM MODIFICAÇÃO ---
+
         if self.owner is None or not self.owner.groups(): deve_morrer = True
         elif self.target is None or not self.target.groups(): deve_morrer = True # Verifica se alvo existe
         elif not (type(self.target).__name__ == 'Player' or (type(self.target).__name__ == 'NaveBot' and self.target.groups())): deve_morrer = True # Verifica tipo do alvo
@@ -512,7 +610,8 @@ class InimigoMinion(InimigoBase):
                  # Calcula ângulo para mirar
                  self.angulo_mira = pygame.math.Vector2(0, -1).angle_to(direcao_vetor)
                  if dist_para_alvo < self.distancia_tiro:
-                     self.atirar(self.target.posicao, grupo_projeteis_inimigos)
+                     # --- MODIFICAÇÃO: Passa pos_ouvinte ---
+                     self.atirar(self.target.posicao, grupo_projeteis_inimigos, pos_ouvinte)
             else: # Se estiver exatamente sobre o alvo, mira para cima
                 self.angulo_mira = 0
         except ValueError:
@@ -532,7 +631,7 @@ class InimigoMothership(InimigoPerseguidor):
         self.max_vida = 200; self.vida_atual = 200; self.velocidade = 1; self.pontos_por_morte = 100
         self.nome = f"Mothership {random.randint(1, 99)}"; self.estado_ia = "VAGANDO"; self.alvo_retaliacao = None
         self.distancia_despawn_minion = 1000; self.max_minions = 8; self.grupo_minions = pygame.sprite.Group()
-        # Não atira diretamente
+        # Não atira diretamente (Mothership não tem método 'atirar', o que está correto)
 
     def encontrar_atacante_mais_proximo(self, lista_alvos_naves):
         dist_min = float('inf'); alvo_prox = None

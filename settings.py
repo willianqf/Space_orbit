@@ -106,5 +106,22 @@ FONT_BOTAO_LOJA = pygame.font.SysFont('Arial', 18, bold=True)
 FONT_RANKING = pygame.font.SysFont('Arial', 16)
 FONT_HUD_DETALHES = pygame.font.SysFont('Arial', 16)
 
+# 6.5. Constantes de Áudio 
+MAX_DISTANCIA_SOM_AUDIVEL = 1200 # Distância máxima (em pixels) que um som pode ser ouvido
+PANNING_RANGE_SOM = 800      # A "largura" da sua audição (para calcular esq/dir)
+VOLUME_BASE_TIRO_PLAYER = 0.4  # Volume base (será 0.4 no máximo, caindo para 0)
+VOLUME_BASE_TIRO_INIMIGO = 0.3 
+VOLUME_BASE_EXPLOSAO_BOSS = 0.7 
+VOLUME_BASE_EXPLOSAO_NPC = 0.5 # <--- ADICIONE ESTA LINHA
+
+# --- INÍCIO: GERAÇÃO DE SONS ---
+# Esses sons são gerados e definidos em main.py após a inicialização do mixer
+SOM_TIRO_PLAYER = None
+SOM_TIRO_INIMIGO_SIMPLES = None
+SOM_EXPLOSAO_BOSS = None 
+SOM_EXPLOSAO_NPC = None # <--- ADICIONE ESTA LINHA
+# --- FIM: GERAÇÃO DE SONS ---
+
+
 # 7. Outros
 NUM_ESTRELAS = 150

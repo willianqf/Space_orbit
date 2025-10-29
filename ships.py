@@ -2,19 +2,65 @@
 import pygame
 import math
 import random
+import settings as s # <--- ADICIONE AQUI
 from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, MAP_WIDTH, MAP_HEIGHT,
                       MAX_TARGET_LOCK_DISTANCE, MAX_NIVEL_MOTOR, # <-- CUSTO_BASE_MOTOR removido
                       MAX_NIVEL_DANO, # <-- CUSTO_BASE_DANO removido
                       MAX_NIVEL_ESCUDO, # <-- CUSTO_BASE_AUXILIAR, MAX_VIDA, ESCUDO removidos
                       REDUCAO_DANO_POR_NIVEL, DURACAO_FX_ESCUDO, COR_ESCUDO_FX,
                       RASTRO_MAX_PARTICULAS, RASTRO_DURACAO, RASTRO_TAMANHO_INICIAL, COR_RASTRO_MOTOR,
-                      VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAX_TOTAL_UPGRADES) # MAX_TOTAL_UPGRADES mantido
+                      VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAX_TOTAL_UPGRADES, MAX_DISTANCIA_SOM_AUDIVEL, PANNING_RANGE_SOM, VOLUME_BASE_TIRO_PLAYER) # MAX_TOTAL_UPGRADES mantido
 # ... (resto das importações e código) ...
 # Importa classes necessárias
 from projectiles import Projetil
 from effects import Explosao
 # REMOVED: from enemies import InimigoBase, ...
 from entities import Obstaculo, VidaColetavel # Obstaculo is needed for bot's finding target logic
+
+def tocar_som_posicional(som, pos_fonte, pos_ouvinte, volume_base_config):
+    """
+    Toca um som com volume e panning 2D baseados na posição da fonte
+    e do ouvinte (jogador).
+    """
+    if not som or not pos_ouvinte:
+        return
+
+    try:
+        distancia = pos_fonte.distance_to(pos_ouvinte)
+    except ValueError:
+        distancia = 0 # Fonte e ouvinte estão no mesmo lugar
+
+    # 1. Verifica se está longe demais
+    if distancia > MAX_DISTANCIA_SOM_AUDIVEL:
+        return # Muito longe para ouvir, não toca o som
+
+    # 2. Calcular Volume (Atenuação)
+    # (1.0 = muito perto, 0.0 = no limite da distância)
+    fator_distancia = 1.0 - (distancia / MAX_DISTANCIA_SOM_AUDIVEL)
+    volume_base = volume_base_config * fator_distancia
+
+    # 3. Calcular Panning (Direção Esquerda/Direita)
+    vetor_para_som = pos_fonte - pos_ouvinte
+    dist_x = vetor_para_som.x
+
+    # Normaliza a distância X para um "fator_pan" entre -1.0 (esquerda) e 1.0 (direita)
+    fator_pan = max(-1.0, min(1.0, dist_x / PANNING_RANGE_SOM))
+
+    # 4. Calcular volumes L/R (Equal Power Panning)
+    # Se pan = 0.0 (centro), L=0.5 e R=0.5
+    # Se pan = 1.0 (direita), L=0.0 e R=1.0
+    # Se pan = -1.0 (esquerda), L=1.0 e R=0.0
+    left_percent = (1.0 - fator_pan) / 2.0
+    right_percent = (1.0 + fator_pan) / 2.0
+
+    left_vol = volume_base * left_percent
+    right_vol = volume_base * right_percent
+
+    # 5. Tocar o som em um canal livre com os volumes calculados
+    channel = pygame.mixer.find_channel() # Pega um canal de áudio livre
+    if channel:
+        channel.set_volume(left_vol, right_vol)
+        channel.play(som)
 
 # Referência global para o grupo de explosões
 grupo_explosoes_ref = None
@@ -97,6 +143,7 @@ class NaveAuxiliar(pygame.sprite.Sprite):
                     radianos = math.radians(self.angulo)
                     proj = Projetil(self.posicao.x, self.posicao.y, radianos, self.owner.nivel_dano)
                     grupo_projeteis_destino.add(proj)
+                    tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, nave_player_ref.posicao, VOLUME_BASE_TIRO_PLAYER)
             else:
                 # Se não tem alvo, alinha com o dono
                 self.angulo = self.owner.angulo
@@ -198,7 +245,7 @@ class Nave(pygame.sprite.Sprite):
         pos_x = self.posicao.x + (-math.sin(radianos) * offset_ponta); pos_y = self.posicao.y + (-math.cos(radianos) * offset_ponta)
         return Projetil(pos_x, pos_y, radianos, self.nivel_dano)
     
-    def lidar_com_tiros(self, grupo_destino):
+    def lidar_com_tiros(self, grupo_destino, pos_ouvinte=None):
         # --- CORREÇÃO: Mover 'agora' para o início ---
         agora = pygame.time.get_ticks() # Pega o tempo atual aqui
 
@@ -213,6 +260,8 @@ class Nave(pygame.sprite.Sprite):
             if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
                 self.ultimo_tiro_tempo = agora # Atualiza o tempo do último tiro
                 grupo_destino.add(self.criar_projetil())
+                ouvinte_real = pos_ouvinte if pos_ouvinte is not None else self.posicao
+                tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, ouvinte_real, VOLUME_BASE_TIRO_PLAYER)
     def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
         # ... (foi_atingido code remains the same) ...
         if self.vida_atual <= 0 and estado_jogo_atual == "GAME_OVER": return False
@@ -424,7 +473,8 @@ class Player(Nave):
         # --- FIM DA VERIFICAÇÃO ---
         return super().foi_atingido(dano, estado_jogo_atual, proj_pos)
     def update(self, grupo_projeteis_jogador, camera):
-        self.processar_input_humano(camera); self.rotacionar(); self.mover(); self.lidar_com_tiros(grupo_projeteis_jogador)
+        self.processar_input_humano(camera); self.rotacionar(); self.mover()
+        self.lidar_com_tiros(grupo_projeteis_jogador, self.posicao)
 
     def processar_input_humano(self, camera):
         teclas = pygame.key.get_pressed()
@@ -541,6 +591,7 @@ class NaveBot(Nave):
             lista_alvos_naves = [player_ref] + list(grupo_bots_ref.sprites())
             self.encontrar_alvo(grupo_inimigos_ref, grupo_obstaculos_ref, lista_alvos_naves)
             # --- FIM CORREÇÃO 1.1 ---
+        self.lidar_com_tiros(grupo_projeteis_bots, player_ref.posicao)
         self.processar_input_ia(); self.rotacionar(); self.mover(); self.lidar_com_tiros(grupo_projeteis_bots); self.processar_upgrades_ia()
 
     def encontrar_alvo(self, grupo_inimigos, grupo_obstaculos, lista_alvos_naves):
