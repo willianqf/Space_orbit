@@ -49,6 +49,7 @@ VELOCIDADE_MINION_CONGELANTE = 25       # Reduzido de 50 para 4.5
 # --- FIM DA MODIFICAÇÃO ---
 COOLDOWN_TIRO_MINION_CONGELANTE = 600    # Cooldown de tiro do minion
 MINION_CONGELANTE_LEASH_RANGE = 1500 # Distância máxima do BOSS que o minion persegue o alvo
+MIN_SPAWN_DIST_ENTRE_NAVES_MAE = 800 # Distância mínima entre Motherships/Bosses
 
 # 3. Constantes da Nave e Upgrades
 MAX_NIVEL_ESCUDO = 5

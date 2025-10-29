@@ -276,11 +276,33 @@ def spawnar_bot(pos_referencia):
     # grupo_todos_sprites.add(novo_bot)
 
 def spawnar_mothership(pos_referencia):
-    x, y = calcular_posicao_spawn(pos_referencia)
-    nova_mothership = InimigoMothership(x, y)
-    grupo_inimigos.add(nova_mothership)
-    grupo_motherships.add(nova_mothership)
-    # grupo_todos_sprites.add(nova_mothership)
+    max_tentativas = 10 # Limite para evitar loop infinito
+    for _ in range(max_tentativas):
+        # 1. Calcula uma posição inicial longe do jogador
+        x, y = calcular_posicao_spawn(pos_referencia)
+        pos_potencial = pygame.math.Vector2(x, y)
+
+        # 2. Verifica a distância para outras Motherships existentes
+        muito_perto = False
+        for mothership_existente in grupo_motherships:
+            try:
+                if pos_potencial.distance_to(mothership_existente.posicao) < s.MIN_SPAWN_DIST_ENTRE_NAVES_MAE:
+                    muito_perto = True
+                    break # Encontrou uma perto, não precisa verificar as outras
+            except ValueError:
+                muito_perto = True # Considera perto se der erro de cálculo
+                break
+        
+        # 3. Se a posição for boa, cria a Mothership e sai do loop
+        if not muito_perto:
+            nova_mothership = InimigoMothership(x, y)
+            grupo_inimigos.add(nova_mothership)
+            grupo_motherships.add(nova_mothership)
+            print(f"!!! Mothership spawnou em ({int(x)}, {int(y)}) !!!") # Mensagem opcional
+            return # Sai da função após spawn bem-sucedido
+
+    # 4. Se esgotou as tentativas, imprime um aviso (opcional)
+    print("[AVISO] Não foi possível encontrar uma posição segura para spawnar a Mothership após várias tentativas.")
 
 def spawnar_vida(pos_referencia):
     x, y = calcular_posicao_spawn(pos_referencia)
