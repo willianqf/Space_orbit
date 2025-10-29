@@ -295,6 +295,15 @@ def spawnar_obstaculo(pos_referencia):
     grupo_obstaculos.add(novo_obstaculo)
     # grupo_todos_sprites.add(novo_obstaculo)
 
+def spawnar_boss_congelante_perto(pos_referencia):
+    """ Spawna um Boss Congelante perto da posição de referência (para cheats). """
+    # Usa a distância MÍNIMA de spawn, para que ele apareça na tela ou perto dela
+    x, y = calcular_posicao_spawn(pos_referencia, dist_min_do_jogador=s.SPAWN_DIST_MIN) 
+    novo_boss = BossCongelante(x, y)
+    grupo_inimigos.add(novo_boss)
+    grupo_boss_congelante.add(novo_boss)
+    print(f"[CHEAT] Boss Congelante spawnou perto em ({int(x)}, {int(y)})")
+
 def processar_cheat(comando, nave):
     global variavel_texto_terminal
     comando_limpo = comando.strip().lower()
@@ -302,7 +311,7 @@ def processar_cheat(comando, nave):
         nave.ganhar_pontos(9999)
         print("[CHEAT] +9999 pontos adicionados!")
     elif comando_limpo == "invencivel":
-        # Verifica se a nave é o Player (para evitar erro se passar um Bot)
+        # (código da invencibilidade...)
         if isinstance(nave, Player):
             nave.invencivel = not nave.invencivel # Inverte o estado (liga/desliga)
             estado_str = "ATIVADA" if nave.invencivel else "DESATIVADA"
@@ -316,7 +325,13 @@ def processar_cheat(comando, nave):
              print(f"[CHEAT] +{nave.pontos_upgrade_disponiveis} Pontos de Upgrade adicionados!")
         else:
              print("[CHEAT] Comando 'maxupgrade' só funciona para o Jogador.")
+    
+    # --- ADICIONE ESTE BLOCO ---
+    elif comando_limpo == "spawncongelante":
+        spawnar_boss_congelante_perto(nave.posicao) # Chama a nova função
+        print("[CHEAT] Tentando spawnar Boss Congelante perto do jogador.")
     # --- FIM DO BLOCO ---
+            
     else:
         print(f"[CHEAT] Comando desconhecido: '{comando_limpo}'")
     variavel_texto_terminal = ""

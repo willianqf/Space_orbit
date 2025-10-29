@@ -24,7 +24,7 @@ MAP_RECT = pygame.Rect(0, 0, MAP_WIDTH, MAP_HEIGHT)
 
 # 2. Constantes do Jogo
 MAX_OBSTACULOS = 50
-MAX_INIMIGOS = 15
+MAX_INIMIGOS = 25 # <-- Atualizado para 25, como você mencionou
 MAX_BOTS = 6 # Valor inicial padrão de bots
 MAX_BOTS_LIMITE_SUPERIOR = 10 # Limite máximo configurável
 MAX_MOTHERSHIPS = 2 # <-- ADICIONE ESTA LINHA
@@ -44,9 +44,11 @@ COOLDOWN_SPAWN_MINION_CONGELANTE = 10000 # 10 segundos
 MAX_MINIONS_CONGELANTE = 6                # Máximo de minions ativos
 HP_MINION_CONGELANTE = 10
 PONTOS_MINION_CONGELANTE = 5              # Recompensa por minion
-VELOCIDADE_MINION_CONGELANTE = 50        # Velocidade do minion (ajuste se necessário)
+# --- INÍCIO DA MODIFICAÇÃO (VELOCIDADE) ---
+VELOCIDADE_MINION_CONGELANTE = 25       # Reduzido de 50 para 4.5
+# --- FIM DA MODIFICAÇÃO ---
 COOLDOWN_TIRO_MINION_CONGELANTE = 600    # Cooldown de tiro do minion
-MINION_CONGELANTE_LEASH_RANGE = 600 # Distância máxima do BOSS que o minion persegue o alvo
+MINION_CONGELANTE_LEASH_RANGE = 1500 # Distância máxima do BOSS que o minion persegue o alvo
 
 # 3. Constantes da Nave e Upgrades
 MAX_NIVEL_ESCUDO = 5

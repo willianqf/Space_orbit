@@ -100,6 +100,11 @@ class ProjetilTeleguiadoLento(ProjetilInimigo):
         # Redesenha a imagem com a nova cor
         self.image = pygame.Surface((self.raio * 2, self.raio * 2), pygame.SRCALPHA)
         pygame.draw.circle(self.image, ROXO_TIRO_LENTO, (self.raio, self.raio), self.raio)
+        
+        # --- INÍCIO MODIFICAÇÃO: Recalcula vetor velocidade após mudar valor ---
+        self.velocidade_vetor = self.direcao * self.velocidade_valor
+        # --- FIM MODIFICAÇÃO ---
+
 
     def update(self, *args, **kwargs):
         
@@ -158,15 +163,33 @@ class ProjetilInimigoRapidoCurto(ProjetilInimigo):
         if not MAP_RECT.colliderect(self.rect):
             self.kill()
 
-
-class ProjetilCongelante(ProjetilInimigo):
-    def __init__(self, x, y, pos_alvo):
-        super().__init__(x, y, pos_alvo)
-        # Muda a cor e talvez o raio
-        self.raio = 6 # Um pouco maior para diferenciar
+# --- INÍCIO DA MODIFICAÇÃO (Projétil Congelante Teleguiado) ---
+class ProjetilCongelante(ProjetilTeleguiadoLento): # Herda de TeleguiadoLento
+    def __init__(self, x, y, alvo_sprite):
+        # Chama o __init__ de ProjetilTeleguiadoLento
+        super().__init__(x, y, alvo_sprite) 
+        
+        # Mantém a cor azul e o raio maior
+        self.raio = 6
         self.image = pygame.Surface((self.raio * 2, self.raio * 2), pygame.SRCALPHA)
         pygame.draw.circle(self.image, AZUL_TIRO_CONGELANTE, (self.raio, self.raio), self.raio)
-        # A velocidade é herdada de ProjetilInimigo (valor = 7)
-        # Pode ajustar se quiser:
-        # self.velocidade_valor = 8.0
-        # self.velocidade_vetor = self.direcao * self.velocidade_valor
+        
+        # Ajusta a velocidade (pode ser a mesma do TeleguiadoLento ou um pouco diferente)
+        self.velocidade_valor = 8.0 # Um pouco mais lento que o roxo (9.0)
+        self.velocidade_vetor = self.direcao * self.velocidade_valor
+        
+        # Define uma distância máxima específica para este projétil
+        self.max_distancia = 700 # Menor que MAX_DISTANCIA_TIRO (1000)
+
+    def update(self, *args, **kwargs):
+        # Chama o update da classe pai (ProjetilTeleguiadoLento)
+        # Isso já inclui a lógica de homing e o limite de tempo (duracao_vida)
+        super().update(*args, **kwargs)
+
+        # Adiciona a verificação de distância máxima específica
+        distancia_percorrida = self.posicao.distance_to(self.posicao_inicial)
+        if distancia_percorrida > self.max_distancia:
+            self.kill()
+            return
+        # A verificação de sair do mapa (MAP_RECT) já está no update pai
+# --- FIM DA MODIFICAÇÃO ---

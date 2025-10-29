@@ -58,12 +58,14 @@ class InimigoBase(pygame.sprite.Sprite):
 
     def update_base(self, pos_alvo_generico, dist_despawn):
          # Lógica de despawn simples
-         try:
-             if self.posicao.distance_to(pos_alvo_generico) > dist_despawn:
-                 self.kill()
-                 return False # Indica que foi despawnado
-         except ValueError:
-             pass
+         # --- MODIFICAÇÃO: Lógica de despawn removida para persistência ---
+         # try:
+         #     if self.posicao.distance_to(pos_alvo_generico) > dist_despawn:
+         #         self.kill()
+         #         return False # Indica que foi despawnado
+         # except ValueError:
+         #     pass
+         # --- FIM DA MODIFICAÇÃO ---
          return True # Continua ativo
 
     def desenhar_vida(self, surface, camera):
@@ -85,7 +87,7 @@ class InimigoBase(pygame.sprite.Sprite):
 # --- Minion Congelante --- (Definido ANTES do Boss)
 class MinionCongelante(InimigoBase):
     # ... (código da classe MinionCongelante inalterado) ...
-    def __init__(self, x, y, owner_boss):
+    def __init__(self, x, y, owner_boss, index, max_minions): # <-- MODIFICADO
         # Chama o init base com stats corretos do minion
         super().__init__(x, y, tamanho=18, cor=AZUL_MINION_CONGELANTE, vida=HP_MINION_CONGELANTE)
         self.owner = owner_boss # Referência ao boss que o criou
@@ -95,13 +97,26 @@ class MinionCongelante(InimigoBase):
         self.distancia_parar = 150 # Para perto antes de atirar
         self.distancia_tiro = 400  # Começa a atirar mais de perto
         self.ultimo_tiro_tempo = 0
+        
+        # --- INÍCIO DA MODIFICAÇÃO (Slots de Órbita) ---
+        # Raio em torno do DONO (levemente aleatório para parecer mais orgânico)
+        self.raio_orbita_dono = self.owner.tamanho * 0.8 + random.randint(40, 60) 
+        # Ângulo base baseado no índice (para espalhar)
+        self.angulo_orbita_atual = (index / max(1, max_minions)) * 360 
+        # Velocidade de rotação em torno do dono
+        self.velocidade_orbita = random.uniform(0.3, 0.7) 
+        # --- FIM DA MODIFICAÇÃO ---
+
 
     def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
         # --- Verificações Iniciais ---
         if not self.owner or not self.owner.groups():
             self.kill(); return
         pos_dono = self.owner.posicao # Define pos_dono aqui para usar em despawn
-        if not self.update_base(pos_dono, dist_despawn): return
+        
+        # --- MODIFICAÇÃO: Chamada update_base removida para persistência ---
+        # if not self.update_base(pos_dono, dist_despawn): return
+        # --- FIM DA MODIFICAÇÃO ---
 
         # --- Lógica de Alvo para Tiro ---
         alvo_tiro = None
@@ -115,19 +130,22 @@ class MinionCongelante(InimigoBase):
                 break # Encontrou o player, pode parar
         # --- FIM MODIFICAÇÃO ---
 
-        # Prioriza atacante do boss DENTRO da coleira
+        # Prioriza atacante do boss
         atacante_do_boss = None
         if hasattr(self.owner, 'ultimo_atacante') and self.owner.ultimo_atacante and self.owner.ultimo_atacante.groups():
             atacante_do_boss = self.owner.ultimo_atacante
             try:
                 dist_minion_atacante = self.posicao.distance_to(atacante_do_boss.posicao)
-                dist_dono_atacante = pos_dono.distance_to(atacante_do_boss.posicao)
+                # --- INÍCIO DA MODIFICAÇÃO (Reintroduz "coleira") ---
+                dist_dono_atacante = pos_dono.distance_to(atacante_do_boss.posicao) 
+                
                 if dist_minion_atacante < self.distancia_tiro * 1.5 and dist_dono_atacante < MINION_CONGELANTE_LEASH_RANGE:
+                # --- FIM DA MODIFICAÇÃO ---
                     alvo_tiro = atacante_do_boss
                     dist_min_tiro = dist_minion_atacante
             except ValueError: pass
 
-        # Se não, procura mais próximo DENTRO da coleira
+        # Se não, procura mais próximo
         if not alvo_tiro:
             for alvo in lista_alvos_naves:
                 is_player = type(alvo).__name__ == 'Player'
@@ -135,63 +153,84 @@ class MinionCongelante(InimigoBase):
                 if not is_player and not is_active_bot: continue
                 try:
                     dist_minion_alvo = self.posicao.distance_to(alvo.posicao)
-                    dist_dono_alvo = pos_dono.distance_to(alvo.posicao)
+                    # --- INÍCIO DA MODIFICAÇÃO (Reintroduz "coleira") ---
+                    dist_dono_alvo = pos_dono.distance_to(alvo.posicao) 
+
                     if dist_minion_alvo < self.distancia_tiro and dist_dono_alvo < MINION_CONGELANTE_LEASH_RANGE:
+                    # --- FIM DA MODIFICAÇÃO ---
                         if dist_minion_alvo < dist_min_tiro:
                              dist_min_tiro = dist_minion_alvo
                              alvo_tiro = alvo
                 except ValueError: continue
 
         # --- Lógica de Movimento com Coleira ---
-        objetivo_movimento = None
-        is_orbitando_alvo = False # Flag para saber qual lógica de órbita usar
-
+        is_orbitando_alvo = False
         if alvo_tiro:
-            objetivo_movimento = alvo_tiro.posicao
-            raio_orbita_desejado = 180 # Raio em torno do ALVO
             is_orbitando_alvo = True
-        else:
-            objetivo_movimento = pos_dono
-            raio_orbita_desejado = self.owner.tamanho * 0.8 + 40 # Raio em torno do DONO
-            is_orbitando_alvo = False
 
         # --- Cálculo do Movimento ---
         try:
-            # --- CORREÇÃO: Definir vetor_para_objetivo e vetor_para_dono ANTES do IF ---
-            vetor_para_objetivo = objetivo_movimento - self.posicao
-            distancia_objetivo = vetor_para_objetivo.length()
-            vetor_para_dono = pos_dono - self.posicao # Definido aqui!
-            distancia_dono = vetor_para_dono.length()
-            # --- FIM CORREÇÃO ---
+            # --- INÍCIO DA MODIFICAÇÃO (CÁLCULO DE SEPARAÇÃO) ---
+            
+            # 1. Calcula a Posição Alvo (para onde o minion quer ir)
+            posicao_alvo_seguir = self.posicao # Padrão
+            
+            if is_orbitando_alvo:
+                # Lógica de orbitar o ALVO
+                vetor_para_objetivo = alvo_tiro.posicao - self.posicao
+                distancia_objetivo = vetor_para_objetivo.length()
+                raio_orbita_desejado_alvo = 180 # Raio em torno do ALVO
+                
+                if distancia_objetivo > 10:
+                    vetor_tangencial = vetor_para_objetivo.rotate(90).normalize()
+                    vetor_radial = pygame.math.Vector2(0, 0)
+                    if distancia_objetivo > raio_orbita_desejado_alvo + 20:
+                        vetor_radial = vetor_para_objetivo.normalize()
+                    elif distancia_objetivo < raio_orbita_desejado_alvo - 20:
+                        vetor_radial = -vetor_para_objetivo.normalize()
+                    
+                    direcao_movimento = (vetor_tangencial * 0.6 + vetor_radial * 0.4)
+                    if direcao_movimento.length() > 0:
+                        direcao_movimento.normalize_ip()
+                        # O alvo do LERP é um ponto à frente nesta direção
+                        posicao_alvo_seguir = self.posicao + direcao_movimento * self.velocidade
+            else:
+                # Lógica de orbitar o DONO (baseado no slot)
+                self.angulo_orbita_atual = (self.angulo_orbita_atual + self.velocidade_orbita) % 360
+                rad = math.radians(self.angulo_orbita_atual)
+                posicao_orbita_ideal = pos_dono + pygame.math.Vector2(math.cos(rad), math.sin(rad)) * self.raio_orbita_dono
+                posicao_alvo_seguir = posicao_orbita_ideal
+            
+            # 2. Calcula a nova posição baseada no LERP (movimento principal)
+            # (Usando 0.15 como discutido para ser mais rápido)
+            nova_posicao = self.posicao.lerp(posicao_alvo_seguir, 0.15) 
 
-            direcao_movimento = pygame.math.Vector2(0, 0) # Inicializa
+            # 3. Calcula o Vetor de Separação
+            vetor_separacao = pygame.math.Vector2(0, 0)
+            distancia_separacao_desejada = 40 # (tamanho * 2) - Raio de 40px
+            fator_separacao = 0.5 # Força do "empurrão" (0.5 é sutil)
 
-            if is_orbitando_alvo and distancia_objetivo > 10:
-                vetor_tangencial = vetor_para_objetivo.rotate(90).normalize()
-                vetor_radial = pygame.math.Vector2(0, 0)
-                if distancia_objetivo > raio_orbita_desejado + 20:
-                    vetor_radial = vetor_para_objetivo.normalize()
-                elif distancia_objetivo < raio_orbita_desejado - 20:
-                    vetor_radial = -vetor_para_objetivo.normalize()
-                direcao_movimento = (vetor_tangencial * 0.6 + vetor_radial * 0.4) # Não normaliza ainda para manter proporção
-
-            else: # Voltando para o dono ou já sobre o alvo
-                 if abs(distancia_dono - raio_orbita_desejado) > 15:
-                      vetor_para_dono_norm = vetor_para_dono.normalize()
-                      posicao_orbita_ideal = pos_dono - vetor_para_dono_norm * raio_orbita_desejado
-                      # Move direto para a posição na órbita
-                      direcao_movimento = (posicao_orbita_ideal - self.posicao)
-                 elif distancia_dono > 10 : # Já na órbita, apenas circula (usa vetor_para_dono)
-                      vetor_tangencial_dono = vetor_para_dono.rotate(90).normalize()
-                      direcao_movimento = vetor_tangencial_dono
-                 # Se estiver muito perto do dono (dist < 10), direcao_movimento continua (0,0) -> parado
-
-            # Normaliza a direção final (se não for zero) e aplica movimento
-            if direcao_movimento.length() > 0:
-                 direcao_movimento.normalize_ip() # Normaliza in-place
-                 posicao_alvo_seguir = self.posicao + direcao_movimento * self.velocidade
-                 self.posicao = self.posicao.lerp(posicao_alvo_seguir, 0.15)
-                 self.rect.center = self.posicao
+            # Itera sobre todos os minions do mesmo chefe
+            for minion in self.owner.grupo_minions_congelantes:
+                if minion != self: # Não se compara consigo mesmo
+                    try:
+                        dist = self.posicao.distance_to(minion.posicao)
+                        if 0 < dist < distancia_separacao_desejada:
+                            # Calcula vetor apontando para longe do outro minion
+                            vetor_para_longe = self.posicao - minion.posicao
+                            # A força é inversamente proporcional à distância
+                            # (1 - (dist / dist_desejada)) -> 1.0 (grudado) a 0.0 (no limite)
+                            forca = (1.0 - (dist / distancia_separacao_desejada))
+                            vetor_para_longe.normalize_ip()
+                            vetor_separacao += vetor_para_longe * forca * fator_separacao
+                    except ValueError:
+                        pass # Evita erro se posições forem idênticas
+            
+            # 4. Aplica o movimento principal (lerp) + o empurrão (separação)
+            self.posicao = nova_posicao + vetor_separacao
+            self.rect.center = self.posicao
+            
+            # --- FIM DA MODIFICAÇÃO (CÁLCULO DE SEPARAÇÃO) ---
 
         except ValueError:
              pass # Fica parado se alguma distância for zero
@@ -246,6 +285,10 @@ class BossCongelante(InimigoBase):
         self.grupo_minions_congelantes = pygame.sprite.Group()
         self.ultimo_atacante = None # Ainda não implementado como receber isso
         self.foi_atacado_recentemente = False
+        
+        # --- INÍCIO DA MODIFICAÇÃO (Wander) ---
+        self.wander_target = None # Alvo para onde está vagando
+        # --- FIM DA MODIFICAÇÃO ---
 
     # ... (código de foi_atingido inalterado) ...
     def foi_atingido(self, dano):
@@ -286,10 +329,12 @@ class BossCongelante(InimigoBase):
                          pos_referencia = alvo.posicao
                  except ValueError:
                      continue
-
-        if not self.update_base(pos_referencia, dist_despawn):
-            self.grupo_minions_congelantes.empty()
-            return
+        
+        # --- MODIFICAÇÃO: Chamada update_base removida para persistência ---
+        # if not self.update_base(pos_referencia, dist_despawn):
+        #     self.grupo_minions_congelantes.empty()
+        #     return
+        # --- FIM DA MODIFICAÇÃO ---
 
         self.alvo_ataque = alvo_mais_proximo_geral
         # print(f"[{self.nome}] Alvo: {self.alvo_ataque.nome if self.alvo_ataque else 'Nenhum'}") # DEBUG
@@ -301,7 +346,7 @@ class BossCongelante(InimigoBase):
             if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
                 print(f"[{self.nome}] Atirando!") # DEBUG
                 # --- MODIFICAÇÃO: Passa pos_ouvinte ---
-                self.atirar(self.alvo_ataque.posicao, grupo_projeteis_inimigos, pos_ouvinte)
+                self.atirar(self.alvo_ataque, grupo_projeteis_inimigos, pos_ouvinte)
                 self.ultimo_tiro_tempo = agora
             # else: print(f"[{self.nome}] Tiro em cooldown...") # DEBUG
 
@@ -314,25 +359,41 @@ class BossCongelante(InimigoBase):
              self.foi_atacado_recentemente = False # Reseta flag
         # elif self.foi_atacado_recentemente: print(f"[{self.nome}] Foi atacado, spawn em cooldown...") # DEBUG
 
+        # --- INÍCIO MODIFICAÇÃO: Lógica de Vaguear (Wander) ---
         # Movimento
         try:
-             vetor_para_centro = pygame.math.Vector2(MAP_WIDTH/2, MAP_HEIGHT/2) - self.posicao
-             if vetor_para_centro.length() > 50:
-                 self.posicao += vetor_para_centro.normalize() * self.velocidade # Velocidade normal (1.0)
-                 self.rect.center = self.posicao
-                 # print(f"[{self.nome}] Movendo...") # DEBUG
+            # 1. Se não tem alvo ou chegou perto do alvo, define um novo
+            if self.wander_target is None or self.posicao.distance_to(self.wander_target) < 100:
+                # Escolhe um ponto aleatório no mapa (com margem de borda)
+                map_margin = 100
+                target_x = random.randint(map_margin, MAP_WIDTH - map_margin)
+                target_y = random.randint(map_margin, MAP_HEIGHT - map_margin)
+                self.wander_target = pygame.math.Vector2(target_x, target_y)
+                # print(f"[{self.nome}] Novo alvo de wander: {self.wander_target}") # DEBUG
+
+            # 2. Move em direção ao alvo
+            vetor_para_alvo = self.wander_target - self.posicao
+            if vetor_para_alvo.length() > 5: # 5 é a distância mínima para parar
+                # self.velocidade é 1 (definido no init), o que é bom para um boss
+                self.posicao += vetor_para_alvo.normalize() * self.velocidade 
+                self.rect.center = self.posicao
+                
         except ValueError:
+             self.wander_target = None # Reseta o alvo se houver um erro
              pass
+        # --- FIM MODIFICAÇÃO ---
 
     # --- MODIFICAÇÃO: Usa SOM_TIRO_CONGELANTE e VOLUME_BASE_TIRO_CONGELANTE ---
-    def atirar(self, pos_alvo, grupo_projeteis_inimigos, pos_ouvinte=None):
+    def atirar(self, alvo_sprite, grupo_projeteis_inimigos, pos_ouvinte=None): # Mudou de pos_alvo para alvo_sprite
         # Este método agora pertence ao BossCongelante
-        proj = ProjetilCongelante(self.posicao.x, self.posicao.y, pos_alvo)
-        grupo_projeteis_inimigos.add(proj)
-        
-        # Toca o som congelante
-        if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_CONGELANTE:
-            tocar_som_posicional(s.SOM_TIRO_CONGELANTE, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_CONGELANTE)
+        # Verifica se o alvo_sprite ainda é válido antes de criar o projétil
+        if alvo_sprite and alvo_sprite.groups():
+            proj = ProjetilCongelante(self.posicao.x, self.posicao.y, alvo_sprite) # Passa o sprite
+            grupo_projeteis_inimigos.add(proj)
+            
+            # Toca o som congelante
+            if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_CONGELANTE:
+                tocar_som_posicional(s.SOM_TIRO_CONGELANTE, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_CONGELANTE)
             
     # ... (código de spawnar_minion inalterado) ...
     def spawnar_minion(self):
@@ -342,7 +403,12 @@ class BossCongelante(InimigoBase):
         spawn_x = self.posicao.x + math.cos(angulo_rad) * raio_spawn
         spawn_y = self.posicao.y + math.sin(angulo_rad) * raio_spawn
 
-        minion = MinionCongelante(spawn_x, spawn_y, self)
+        # --- INÍCIO DA MODIFICAÇÃO ---
+        # Passa o índice atual e o máximo de minions para o construtor
+        indice_minion_atual = len(self.grupo_minions_congelantes)
+        minion = MinionCongelante(spawn_x, spawn_y, self, indice_minion_atual, self.max_minions)
+        # --- FIM DA MODIFICAÇÃO ---
+        
         self.grupo_minions_congelantes.add(minion)
 
         if grupo_inimigos_global_ref is not None:
@@ -384,11 +450,15 @@ class InimigoPerseguidor(InimigoBase):
             if dist < dist_min: dist_min = dist; alvo_mais_proximo = alvo
 
         if not alvo_mais_proximo:
-             if not self.update_base(self.posicao, dist_despawn): return # Verifica despawn mesmo sem alvo
+             # --- MODIFICAÇÃO: Chamada update_base removida para persistência ---
+             # if not self.update_base(self.posicao, dist_despawn): return
+             # --- FIM DA MODIFICAÇÃO ---
              return
 
         pos_alvo = alvo_mais_proximo.posicao
-        if not self.update_base(pos_alvo, dist_despawn): return
+        # --- MODIFICAÇÃO: Chamada update_base removida para persistência ---
+        # if not self.update_base(pos_alvo, dist_despawn): return
+        # --- FIM DA MODIFICAÇÃO ---
         distancia_alvo = dist_min
 
         if distancia_alvo > self.distancia_parar:
@@ -419,6 +489,7 @@ class InimigoAtiradorRapido(InimigoPerseguidor):
         self.max_vida = 1; self.vida_atual = 1
         self.cooldown_tiro = 500; self.distancia_parar = 300; self.pontos_por_morte = 10
     # O método 'atirar' é herdado (já modificado na classe InimigoPerseguidor)
+    # O método 'update' é herdado (já modificado na classe InimigoPerseguidor)
 
 # Inimigo Bomba (Amarelo)
 class InimigoBomba(InimigoBase):
@@ -437,11 +508,15 @@ class InimigoBomba(InimigoBase):
             if dist < dist_min: dist_min = dist; alvo_mais_proximo = alvo
 
         if not alvo_mais_proximo:
-            if not self.update_base(self.posicao, dist_despawn): return
+            # --- MODIFICAÇÃO: Chamada update_base removida para persistência ---
+            # if not self.update_base(self.posicao, dist_despawn): return
+            # --- FIM DA MODIFICAÇÃO ---
             return
 
         pos_alvo = alvo_mais_proximo.posicao
-        if not self.update_base(pos_alvo, dist_despawn): return
+        # --- MODIFICAÇÃO: Chamada update_base removida para persistência ---
+        # if not self.update_base(pos_alvo, dist_despawn): return
+        # --- FIM DA MODIFICAÇÃO ---
 
         try: direcao = (pos_alvo - self.posicao).normalize(); self.posicao += direcao * self.velocidade; self.rect.center = self.posicao
         except ValueError: pass
@@ -457,6 +532,8 @@ class InimigoRapido(InimigoPerseguidor):
         self.velocidade = 4.0
         self.cooldown_tiro = 800
         self.pontos_por_morte = 9
+    
+    # O método 'update' é herdado (já modificado na classe InimigoPerseguidor)
 
     # --- MODIFICAÇÃO: Aceita pos_ouvinte e toca som ---
     def atirar(self, pos_alvo, grupo_projeteis_inimigos, pos_ouvinte=None):
@@ -478,6 +555,8 @@ class InimigoTiroRapido(InimigoPerseguidor):
         self.image.fill(self.cor)
         self.max_vida = 10; self.vida_atual = 10
         self.velocidade = 1.5; self.cooldown_tiro = 1500; self.pontos_por_morte = 20
+    
+    # O método 'update' é herdado (já modificado na classe InimigoPerseguidor)
 
     # --- MODIFICAÇÃO: Aceita pos_ouvinte e toca som (SOM ESPECIAL) ---
     def atirar(self, pos_alvo, grupo_projeteis_inimigos, pos_ouvinte=None):
@@ -522,11 +601,15 @@ class InimigoAtordoador(InimigoPerseguidor):
             if dist < dist_min: dist_min = dist; alvo_mais_proximo = alvo
 
         if not alvo_mais_proximo:
-             if not self.update_base(self.posicao, dist_despawn): return
+             # --- MODIFICAÇÃO: Chamada update_base removida para persistência ---
+             # if not self.update_base(self.posicao, dist_despawn): return
+             # --- FIM DA MODIFICAÇÃO ---
              return
 
         pos_alvo_para_mov = alvo_mais_proximo.posicao
-        if not self.update_base(pos_alvo_para_mov, dist_despawn): return
+        # --- MODIFICAÇÃO: Chamada update_base removida para persistência ---
+        # if not self.update_base(pos_alvo_para_mov, dist_despawn): return
+        # --- FIM DA MODIFICAÇÃO ---
         distancia_alvo = dist_min
 
         if distancia_alvo > self.distancia_parar:
@@ -582,7 +665,31 @@ class InimigoMinion(InimigoBase):
 
     def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
         # Verifica se dono ou alvo ainda existem e se estão perto
-        deve_morrer = False
+        
+        # --- INÍCIO DA MODIFICAÇÃO (Lógica de Persistência e "Coleira") ---
+        if self.owner is None or not self.owner.groups(): 
+            self.kill() # Dono morreu, minion morre
+            return
+            
+        # Verifica se o alvo (target) ainda é válido
+        if self.target:
+            if not self.target.groups(): # Alvo morreu
+                self.target = None
+            elif not (type(self.target).__name__ == 'Player' or (type(self.target).__name__ == 'NaveBot' and self.target.groups())): # Alvo não é mais um tipo válido
+                self.target = None
+            else:
+                # Lógica da "coleira" (leash) REATIVADA
+                try: 
+                    if self.owner.posicao.distance_to(self.target.posicao) > self.distancia_despawn_minion: 
+                        self.target = None # Perde o alvo se o dono ficar longe, mas não morre
+                except ValueError: 
+                    self.target = None
+        
+        # Se não tem alvo, tenta encontrar um novo (opcional, mas bom para IA)
+        # (Por enquanto, se perder o alvo, ele só orbita o dono)
+        
+        # --- FIM DA MODIFICAÇÃO ---
+
         
         # --- MODIFICAÇÃO: Encontra o ouvinte (player) ---
         pos_ouvinte = None
@@ -595,35 +702,38 @@ class InimigoMinion(InimigoBase):
                     break
         # --- FIM MODIFICAÇÃO ---
 
-        if self.owner is None or not self.owner.groups(): deve_morrer = True
-        elif self.target is None or not self.target.groups(): deve_morrer = True # Verifica se alvo existe
-        elif not (type(self.target).__name__ == 'Player' or (type(self.target).__name__ == 'NaveBot' and self.target.groups())): deve_morrer = True # Verifica tipo do alvo
-        else:
-            try: # Verifica distância entre dono e alvo
-                if self.owner.posicao.distance_to(self.target.posicao) > self.distancia_despawn_minion: deve_morrer = True
-            except ValueError: # Caso erro de distância
-                deve_morrer = True
-
-        if deve_morrer: self.kill(); return
-
         # Órbita
         self.angulo_orbita_atual = (self.angulo_orbita_atual + self.velocidade_orbita) % 360; rad = math.radians(self.angulo_orbita_atual)
         pos_alvo_orbita = self.owner.posicao + pygame.math.Vector2(math.cos(rad), math.sin(rad)) * self.raio_orbita
         self.posicao = self.posicao.lerp(pos_alvo_orbita, 0.05)
 
         # Mira e Tiro (no alvo guardado)
-        try:
-            dist_para_alvo = self.posicao.distance_to(self.target.posicao); direcao_vetor = (self.target.posicao - self.posicao)
-            if direcao_vetor.length() > 0:
-                 # Calcula ângulo para mirar
-                 self.angulo_mira = pygame.math.Vector2(0, -1).angle_to(direcao_vetor)
-                 if dist_para_alvo < self.distancia_tiro:
-                     # --- MODIFICAÇÃO: Passa pos_ouvinte ---
-                     self.atirar(self.target.posicao, grupo_projeteis_inimigos, pos_ouvinte)
-            else: # Se estiver exatamente sobre o alvo, mira para cima
+        # --- MODIFICAÇÃO: Adiciona verificação se 'self.target' existe ---
+        if self.target:
+            try:
+                dist_para_alvo = self.posicao.distance_to(self.target.posicao); direcao_vetor = (self.target.posicao - self.posicao)
+                if direcao_vetor.length() > 0:
+                     # Calcula ângulo para mirar
+                     self.angulo_mira = pygame.math.Vector2(0, -1).angle_to(direcao_vetor)
+                     if dist_para_alvo < self.distancia_tiro:
+                         # --- MODIFICAÇÃO: Passa pos_ouvinte ---
+                         self.atirar(self.target.posicao, grupo_projeteis_inimigos, pos_ouvinte)
+                else: # Se estiver exatamente sobre o alvo, mira para cima
+                    self.angulo_mira = 0
+            except ValueError:
+                 self.angulo_mira = 0 # Erro ao calcular, mira para cima
+        else:
+            # Se não tem alvo, mira para "frente" (ângulo da órbita)
+            # ou alinha com o dono (mais simples)
+            try:
+                vetor_para_dono = self.owner.posicao - self.posicao
+                if vetor_para_dono.length() > 0:
+                    self.angulo_mira = pygame.math.Vector2(0, -1).angle_to(vetor_para_dono) + 90 # Tangencial
+                else:
+                    self.angulo_mira = 0
+            except ValueError:
                 self.angulo_mira = 0
-        except ValueError:
-             self.angulo_mira = 0 # Erro ao calcular, mira para cima
+        # --- FIM DA MODIFICAÇÃO ---
 
         # Rotaciona imagem
         self.image = pygame.transform.rotate(self.imagem_original, self.angulo_mira);
@@ -694,9 +804,11 @@ class InimigoMothership(InimigoPerseguidor):
                          pos_referencia = alvo.posicao
                  except ValueError: continue
 
-        if not self.update_base(pos_referencia, dist_despawn):
-             self.grupo_minions.empty() # Limpa minions ao despawnar
-             return
+        # --- MODIFICAÇÃO: Chamada update_base removida para persistência ---
+        # if not self.update_base(pos_referencia, dist_despawn):
+        #      self.grupo_minions.empty() # Limpa minions ao despawnar
+        #      return
+        # --- FIM DA MODIFICAÇÃO ---
 
         agora = pygame.time.get_ticks()
 
@@ -724,9 +836,13 @@ class InimigoMothership(InimigoPerseguidor):
                 is_active_bot = type(self.alvo_retaliacao).__name__ == 'NaveBot' and self.alvo_retaliacao.groups()
                 if not is_player and not is_active_bot: perdeu_alvo = True
                 else:
+                    # --- MODIFICAÇÃO: Lógica da "coleira" (leash) REATIVADA ---
                     try: # Verifica distância para o alvo
-                        if self.posicao.distance_to(self.alvo_retaliacao.posicao) > self.distancia_despawn_minion: perdeu_alvo = True
-                    except ValueError: perdeu_alvo = True
+                       if self.posicao.distance_to(self.alvo_retaliacao.posicao) > self.distancia_despawn_minion: 
+                           perdeu_alvo = True
+                    except ValueError: 
+                        perdeu_alvo = True
+                    # --- FIM DA MODIFICAÇÃO ---
 
 
             if perdeu_alvo:
