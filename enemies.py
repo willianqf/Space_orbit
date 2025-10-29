@@ -2,20 +2,21 @@
 import pygame
 import math
 import random
-import settings as s # <--- ADICIONE (Já estava no seu)
+import settings as s 
 from settings import (VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAP_WIDTH, MAP_HEIGHT,
                       VERMELHO_PERSEGUIDOR, ROXO_ATIRADOR_RAPIDO, AMARELO_BOMBA, CIANO_MINION, CIANO_MOTHERSHIP,
                       LARANJA_RAPIDO, AZUL_TIRO_RAPIDO, ROXO_ATORDOADOR, BRANCO, AZUL_MINION_CONGELANTE, HP_MINION_CONGELANTE, PONTOS_MINION_CONGELANTE,
                         VELOCIDADE_MINION_CONGELANTE, COOLDOWN_TIRO_MINION_CONGELANTE, AZUL_CONGELANTE, HP_BOSS_CONGELANTE, PONTOS_BOSS_CONGELANTE,
     COOLDOWN_TIRO_CONGELANTE, COOLDOWN_SPAWN_MINION_CONGELANTE,
-    MAX_MINIONS_CONGELANTE, MINION_CONGELANTE_LEASH_RANGE, VOLUME_BASE_TIRO_INIMIGO) # <--- (Já estava no seu)
+    MAX_MINIONS_CONGELANTE, MINION_CONGELANTE_LEASH_RANGE, VOLUME_BASE_TIRO_INIMIGO, 
+    VOLUME_BASE_TIRO_LASER_LONGO, VOLUME_BASE_TIRO_CONGELANTE) # <--- ADICIONADO
 # Importa as classes de projéteis necessárias
-from projectiles import ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento, ProjetilInimigoRapidoCurto, ProjetilCongelante # Importa ProjetilCongelante
+from projectiles import ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento, ProjetilInimigoRapidoCurto, ProjetilCongelante 
 # Importa a classe Explosao
 from effects import Explosao
 
 try:
-    from ships import tocar_som_posicional # <--- (Já estava no seu)
+    from ships import tocar_som_posicional 
 except ImportError:
     print("[AVISO] Nao foi possivel importar 'tocar_som_posicional'. Sons de inimigos podem falhar.")
     tocar_som_posicional = None
@@ -32,6 +33,7 @@ def set_global_enemy_references(explosions_group, enemies_group):
 
 # Classe Base para Inimigos
 class InimigoBase(pygame.sprite.Sprite):
+    # ... (código da classe InimigoBase inalterado) ...
     def __init__(self, x, y, tamanho, cor, vida):
         super().__init__()
         self.tamanho = tamanho
@@ -82,6 +84,7 @@ class InimigoBase(pygame.sprite.Sprite):
 
 # --- Minion Congelante --- (Definido ANTES do Boss)
 class MinionCongelante(InimigoBase):
+    # ... (código da classe MinionCongelante inalterado) ...
     def __init__(self, x, y, owner_boss):
         # Chama o init base com stats corretos do minion
         super().__init__(x, y, tamanho=18, cor=AZUL_MINION_CONGELANTE, vida=HP_MINION_CONGELANTE)
@@ -218,6 +221,7 @@ class MinionCongelante(InimigoBase):
 
 # --- Boss Congelante ---
 class BossCongelante(InimigoBase):
+    # ... (código do init inalterado) ...
     def __init__(self, x, y):
         # Chama super().__init__ PRIMEIRO para definir self.cor etc.
         super().__init__(x, y, tamanho=100, cor=AZUL_CONGELANTE, vida=HP_BOSS_CONGELANTE)
@@ -243,6 +247,7 @@ class BossCongelante(InimigoBase):
         self.ultimo_atacante = None # Ainda não implementado como receber isso
         self.foi_atacado_recentemente = False
 
+    # ... (código de foi_atingido inalterado) ...
     def foi_atingido(self, dano):
         vida_antes = self.vida_atual
         morreu = super().foi_atingido(dano)
@@ -253,6 +258,7 @@ class BossCongelante(InimigoBase):
              self.grupo_minions_congelantes.empty() # Remove os minions dos grupos
         return morreu
 
+    # ... (código do update inalterado) ...
     def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
         # Lógica base de despawn
         pos_referencia = self.posicao
@@ -318,17 +324,17 @@ class BossCongelante(InimigoBase):
         except ValueError:
              pass
 
-    # --- MODIFICAÇÃO: Aceita pos_ouvinte e toca som ---
+    # --- MODIFICAÇÃO: Usa SOM_TIRO_CONGELANTE e VOLUME_BASE_TIRO_CONGELANTE ---
     def atirar(self, pos_alvo, grupo_projeteis_inimigos, pos_ouvinte=None):
         # Este método agora pertence ao BossCongelante
         proj = ProjetilCongelante(self.posicao.x, self.posicao.y, pos_alvo)
         grupo_projeteis_inimigos.add(proj)
         
-        # Toca o som
-        if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_INIMIGO_SIMPLES:
-            # O Boss pode ter um som diferente, mas por enquanto usa o simples
-            tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_INIMIGO)
-
+        # Toca o som congelante
+        if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_CONGELANTE:
+            tocar_som_posicional(s.SOM_TIRO_CONGELANTE, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_CONGELANTE)
+            
+    # ... (código de spawnar_minion inalterado) ...
     def spawnar_minion(self):
         # Este método agora pertence ao BossCongelante
         angulo_rad = random.uniform(0, 2 * math.pi)
@@ -348,6 +354,7 @@ class BossCongelante(InimigoBase):
 
 
 # --- Outros Inimigos ---
+# (Resto do arquivo inalterado, pois os outros inimigos já usam o som correto)
 
 # Inimigo Perseguidor Padrão (Vermelho)
 class InimigoPerseguidor(InimigoBase):
@@ -368,6 +375,7 @@ class InimigoPerseguidor(InimigoBase):
             if type(alvo).__name__ == 'Player':
                 pos_ouvinte = alvo.posicao
              # --- FIM MODIFICAÇÃO ---
+        
             is_player = type(alvo).__name__ == 'Player'
             is_active_bot = type(alvo).__name__ == 'NaveBot' and alvo.groups()
             if not is_player and not is_active_bot: continue
@@ -471,7 +479,7 @@ class InimigoTiroRapido(InimigoPerseguidor):
         self.max_vida = 10; self.vida_atual = 10
         self.velocidade = 1.5; self.cooldown_tiro = 1500; self.pontos_por_morte = 20
 
-    # --- MODIFICAÇÃO: Aceita pos_ouvinte e toca som ---
+    # --- MODIFICAÇÃO: Aceita pos_ouvinte e toca som (SOM ESPECIAL) ---
     def atirar(self, pos_alvo, grupo_projeteis_inimigos, pos_ouvinte=None):
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
@@ -479,9 +487,9 @@ class InimigoTiroRapido(InimigoPerseguidor):
             proj = ProjetilInimigoRapido(self.posicao.x, self.posicao.y, pos_alvo)
             grupo_projeteis_inimigos.add(proj)
             
-            # Toca o som
-            if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_INIMIGO_SIMPLES:
-                tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_INIMIGO)
+            # Toca o som especial de laser longo
+            if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_LASER_LONGO:
+                tocar_som_posicional(s.SOM_TIRO_LASER_LONGO, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_LASER_LONGO)
 
 # Inimigo Atordoador (Roxo)
 class InimigoAtordoador(InimigoPerseguidor):
@@ -536,7 +544,7 @@ class InimigoAtordoador(InimigoPerseguidor):
             proj = ProjetilTeleguiadoLento(self.posicao.x, self.posicao.y, alvo_sprite)
             grupo_projeteis_inimigos.add(proj)
             
-            # Toca o som
+            # Toca o som (som normal de inimigo, a menos que queira um som de "stun")
             if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_INIMIGO_SIMPLES:
                 tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_INIMIGO)
 

@@ -3,7 +3,8 @@ import pygame
 import sys
 import random
 import math
-from settings import MAX_TOTAL_UPGRADES, VOLUME_BASE_EXPLOSAO_BOSS, VOLUME_BASE_EXPLOSAO_NPC # <--- MODIFICADO
+from settings import (MAX_TOTAL_UPGRADES, VOLUME_BASE_EXPLOSAO_BOSS, VOLUME_BASE_EXPLOSAO_NPC, 
+                      VOLUME_BASE_TIRO_LASER_LONGO, VOLUME_BASE_TIRO_CONGELANTE) # <--- MODIFICADO
 # 1. Importações dos Módulos
 import settings as s # Importa tudo de settings com alias 's'
 from camera import Camera
@@ -46,10 +47,18 @@ try:
     s.SOM_EXPLOSAO_BOSS = pygame.mixer.Sound(caminho_som_explosao_boss)
     print(f"Som '{caminho_som_explosao_boss}' carregado com sucesso!")
     
-    # --- ADICIONE ESTE BLOCO ---
-    caminho_som_explosao_npc = "sons/explosão_npcs.wav" # <-- Verifique se este nome está correto
+    caminho_som_explosao_npc = "sons/explosão_npcs.wav" 
     s.SOM_EXPLOSAO_NPC = pygame.mixer.Sound(caminho_som_explosao_npc)
     print(f"Som '{caminho_som_explosao_npc}' carregado com sucesso!")
+
+    caminho_som_laser_longo = "sons/laser_tiro_longo.wav"
+    s.SOM_TIRO_LASER_LONGO = pygame.mixer.Sound(caminho_som_laser_longo)
+    print(f"Som '{caminho_som_laser_longo}' carregado com sucesso!")
+
+    # --- ADICIONE ESTE BLOCO ---
+    caminho_som_congelante = "sons/congelar_tiro.wav"
+    s.SOM_TIRO_CONGELANTE = pygame.mixer.Sound(caminho_som_congelante)
+    print(f"Som '{caminho_som_congelante}' carregado com sucesso!")
     # --- FIM DO BLOCO ---
 
 except pygame.error as e:
@@ -58,14 +67,18 @@ except pygame.error as e:
     if not s.SOM_TIRO_PLAYER: s.SOM_TIRO_PLAYER = None
     if not s.SOM_TIRO_INIMIGO_SIMPLES: s.SOM_TIRO_INIMIGO_SIMPLES = None
     if not s.SOM_EXPLOSAO_BOSS: s.SOM_EXPLOSAO_BOSS = None 
-    if not s.SOM_EXPLOSAO_NPC: s.SOM_EXPLOSAO_NPC = None # <--- ADICIONADO
+    if not s.SOM_EXPLOSAO_NPC: s.SOM_EXPLOSAO_NPC = None 
+    if not s.SOM_TIRO_LASER_LONGO: s.SOM_TIRO_LASER_LONGO = None
+    if not s.SOM_TIRO_CONGELANTE: s.SOM_TIRO_CONGELANTE = None # <--- ADICIONADO
     
 except Exception as e:
     print(f"[ERRO] Erro inesperado ao carregar sons: {e}")
     s.SOM_TIRO_PLAYER = None
     s.SOM_TIRO_INIMIGO_SIMPLES = None
     s.SOM_EXPLOSAO_BOSS = None 
-    s.SOM_EXPLOSAO_NPC = None # <--- ADICIONADO
+    s.SOM_EXPLOSAO_NPC = None 
+    s.SOM_TIRO_LASER_LONGO = None 
+    s.SOM_TIRO_CONGELANTE = None # <--- ADICIONADO
     
 # --- FIM: GERAÇÃO DE SONS ---
 
@@ -553,6 +566,14 @@ while rodando:
                         if tocar_som_posicional and s.SOM_EXPLOSAO_NPC:
                             tocar_som_posicional(s.SOM_EXPLOSAO_NPC, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
                     # --- FIM DA MODIFICAÇÃO ---
+
+        # --- INÍCIO DA CORREÇÃO: Projéteis Player vs Bots ---
+        colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_bots, True, False)
+        for proj, bot_list in colisoes.items():
+            for bot in bot_list:
+                # O jogador (dono dos projéteis) causa dano ao bot
+                bot.foi_atingido(nave_player.nivel_dano, estado_jogo, proj.posicao) 
+        # --- FIM DA CORREÇÃO ---
 
         # Projéteis Bots vs ...
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_obstaculos, True, True)

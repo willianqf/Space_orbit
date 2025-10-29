@@ -112,14 +112,18 @@ PANNING_RANGE_SOM = 800      # A "largura" da sua audição (para calcular esq/d
 VOLUME_BASE_TIRO_PLAYER = 0.4  # Volume base (será 0.4 no máximo, caindo para 0)
 VOLUME_BASE_TIRO_INIMIGO = 0.3 
 VOLUME_BASE_EXPLOSAO_BOSS = 0.7 
-VOLUME_BASE_EXPLOSAO_NPC = 0.5 # <--- ADICIONE ESTA LINHA
+VOLUME_BASE_EXPLOSAO_NPC = 0.5 
+VOLUME_BASE_TIRO_LASER_LONGO = 0.5
+VOLUME_BASE_TIRO_CONGELANTE = 0.6 # <--- ADICIONE ESTA LINHA
 
 # --- INÍCIO: GERAÇÃO DE SONS ---
 # Esses sons são gerados e definidos em main.py após a inicialização do mixer
 SOM_TIRO_PLAYER = None
 SOM_TIRO_INIMIGO_SIMPLES = None
 SOM_EXPLOSAO_BOSS = None 
-SOM_EXPLOSAO_NPC = None # <--- ADICIONE ESTA LINHA
+SOM_EXPLOSAO_NPC = None 
+SOM_TIRO_LASER_LONGO = None
+SOM_TIRO_CONGELANTE = None # <--- ADICIONE ESTA LINHA
 # --- FIM: GERAÇÃO DE SONS ---
 
 

@@ -517,7 +517,19 @@ class NaveBot(Nave):
         vida_antes = self.vida_atual; morreu = super().foi_atingido(dano, estado_jogo_atual, proj_pos)
         if morreu:
             print(f"[{self.nome}] BOT MORREU! Resetando...")
-            self.posicao = pygame.math.Vector2(MAP_WIDTH // 2, MAP_HEIGHT // 2); self.rect.center = self.posicao
+            
+            # --- MODIFICAÇÃO AQUI ---
+            # Original:
+            # self.posicao = pygame.math.Vector2(MAP_WIDTH // 2, MAP_HEIGHT // 2); self.rect.center = self.posicao
+            
+            # Novo (Respawn Aleatório):
+            # Gera uma posição aleatória no mapa, com uma margem de 50px
+            novo_x = random.randint(50, MAP_WIDTH - 50) 
+            novo_y = random.randint(50, MAP_HEIGHT - 50)
+            self.posicao = pygame.math.Vector2(novo_x, novo_y); self.rect.center = self.posicao
+            print(f"[{self.nome}] Respawn em ({int(novo_x)}, {int(novo_y)})")
+            # --- FIM DA MODIFICAÇÃO ---
+            
             self.grupo_auxiliares_ativos.empty(); self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0
             self.velocidade_movimento_base = 4 + self.nivel_motor; self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
             self.alvo_selecionado = None; self.posicao_alvo_mouse = None; self.tempo_fim_lentidao = 0; self.rastro_particulas = []
@@ -591,8 +603,9 @@ class NaveBot(Nave):
             lista_alvos_naves = [player_ref] + list(grupo_bots_ref.sprites())
             self.encontrar_alvo(grupo_inimigos_ref, grupo_obstaculos_ref, lista_alvos_naves)
             # --- FIM CORREÇÃO 1.1 ---
-        self.lidar_com_tiros(grupo_projeteis_bots, player_ref.posicao)
-        self.processar_input_ia(); self.rotacionar(); self.mover(); self.lidar_com_tiros(grupo_projeteis_bots); self.processar_upgrades_ia()
+        self.processar_input_ia(); self.rotacionar(); self.mover()
+        self.lidar_com_tiros(grupo_projeteis_bots, player_ref.posicao) 
+        self.processar_upgrades_ia()
 
     def encontrar_alvo(self, grupo_inimigos, grupo_obstaculos, lista_alvos_naves):
         self.alvo_atual = None

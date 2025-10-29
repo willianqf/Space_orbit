@@ -73,8 +73,9 @@ class ProjetilInimigo(pygame.sprite.Sprite):
 class ProjetilInimigoRapido(ProjetilInimigo):
     def __init__(self, x, y, pos_alvo):
         super().__init__(x, y, pos_alvo)
-        # A única mudança é a velocidade
-        self.velocidade_valor = 15 # O padrão é 7
+        # --- MODIFICAÇÃO AQUI ---
+        self.velocidade_valor = 22 # O padrão era 15
+        # --- FIM DA MODIFICAÇÃO ---
         self.velocidade_vetor = self.direcao * self.velocidade_valor
 
 # Projétil Teleguiado Lento (Roxo)
