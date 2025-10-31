@@ -9,7 +9,11 @@ from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, MAP_WI
                       MAX_NIVEL_ESCUDO, # <-- CUSTO_BASE_AUXILIAR, MAX_VIDA, ESCUDO removidos
                       REDUCAO_DANO_POR_NIVEL, DURACAO_FX_ESCUDO, COR_ESCUDO_FX,
                       RASTRO_MAX_PARTICULAS, RASTRO_DURACAO, RASTRO_TAMANHO_INICIAL, COR_RASTRO_MOTOR,
-                      VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAX_TOTAL_UPGRADES, MAX_DISTANCIA_SOM_AUDIVEL, PANNING_RANGE_SOM, VOLUME_BASE_TIRO_PLAYER) # MAX_TOTAL_UPGRADES mantido
+                      VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAX_TOTAL_UPGRADES, MAX_DISTANCIA_SOM_AUDIVEL, PANNING_RANGE_SOM, VOLUME_BASE_TIRO_PLAYER,
+                      # --- INÍCIO: NOVAS IMPORTAÇÕES ---
+                      PONTOS_LIMIARES_PARA_UPGRADE, PONTOS_SCORE_PARA_MUDAR_LIMIAR, CUSTOS_AUXILIARES
+                      # --- FIM: NOVAS IMPORTAÇÕES ---
+                      ) 
 # ... (resto das importações e código) ...
 # Importa classes necessárias
 from projectiles import Projetil
@@ -170,15 +174,20 @@ class Nave(pygame.sprite.Sprite):
         centro_x = tamanho_surface / 2; centro_y = tamanho_surface / 2; ponto_topo = (centro_x, centro_y - self.altura / 2); ponto_base_esq = (centro_x - self.largura_base / 2, centro_y + self.altura / 2); ponto_base_dir = (centro_x + self.largura_base / 2, centro_y + self.altura / 2)
         pygame.draw.polygon(self.imagem_original, self.cor, [ponto_topo, ponto_base_esq, ponto_base_dir])
         ponta_largura = 4; ponta_altura = 8; pygame.draw.rect(self.imagem_original, PONTA_NAVE, (ponto_topo[0] - ponta_largura / 2, ponto_topo[1] - ponta_altura, ponta_largura, ponta_altura))
-        # --- NOVOS ATRIBUTOS DE UPGRADE ---
+        
+        # --- INÍCIO: MODIFICAÇÃO ATRIBUTOS DE UPGRADE (USA SETTINGS) ---
         self.pontos_upgrade_disponiveis = 0
         self.total_upgrades_feitos = 0
         self._pontos_acumulados_para_upgrade = 0 # Contador interno
-        self._limiar_pontos_atual = 50 # Primeiro limiar
-        self._indice_limiar = 0 # 0: 50, 1: 100, 2: 150
-        self._limiares = [50, 100, 150]
-        self._pontos_no_limiar = [200, 600] # Pontuações onde o limiar muda
-        # --- FIM NOVOS ATRIBUTOS ---
+        
+        # Usa os valores importados de settings.py
+        self._limiares = PONTOS_LIMIARES_PARA_UPGRADE[:] # Copia a lista
+        self._pontos_no_limiar = PONTOS_SCORE_PARA_MUDAR_LIMIAR[:] # Copia a lista
+        
+        self._limiar_pontos_atual = self._limiares[0] # Primeiro limiar (ex: 100)
+        self._indice_limiar = 0 
+        # --- FIM: MODIFICAÇÃO ATRIBUTOS DE UPGRADE ---
+        
         self.image = self.imagem_original; self.rect = pygame.Rect(x, y, self.largura_base * 0.8, self.altura * 0.8); self.rect.center = self.posicao
         self.cooldown_tiro = 250; self.ultimo_tiro_tempo = 0; self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0
         self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida; self.velocidade_movimento_base = 4 + self.nivel_motor
@@ -290,6 +299,8 @@ class Nave(pygame.sprite.Sprite):
         agora = pygame.time.get_ticks()
         self.tempo_fim_congelamento = max(self.tempo_fim_congelamento, agora + duracao_ms)
         print(f"[{self.nome}] CONGELADO por {duracao_ms}ms!")
+    
+    # Lógica de ganhar pontos (usa os _limiares e _pontos_no_limiar definidos no __init__)
     def ganhar_pontos(self, quantidade):
         if quantidade <= 0:
             return
@@ -307,36 +318,16 @@ class Nave(pygame.sprite.Sprite):
 
             # Verifica se precisa mudar o limiar para o próximo ponto
             pontos_totais_aproximados = self.pontos # Usa self.pontos como referência geral
-            if self._indice_limiar == 0 and pontos_totais_aproximados >= self._pontos_no_limiar[0]:
-                self._indice_limiar = 1
+            
+            # Checa se pode avançar para o próximo nível de dificuldade (ex: 2000 pontos)
+            if self._indice_limiar < len(self._pontos_no_limiar) and \
+               pontos_totais_aproximados >= self._pontos_no_limiar[self._indice_limiar]:
+                
+                self._indice_limiar += 1
                 self._limiar_pontos_atual = self._limiares[self._indice_limiar]
-                print(f"[{self.nome}] Próximo Ponto de Upgrade a cada {self._limiar_pontos_atual} pontos.")
-            elif self._indice_limiar == 1 and pontos_totais_aproximados >= self._pontos_no_limiar[1]:
-                self._indice_limiar = 2
-                self._limiar_pontos_atual = self._limiares[self._indice_limiar]
-                print(f"[{self.nome}] Próximo Ponto de Upgrade a cada {self._limiar_pontos_atual} pontos.")
+                print(f"[{self.nome}] Próximo Ponto de Upgrade a cada {self._limiar_pontos_atual} pontos de score.")
 
-        self.pontos += quantidade # Continua acumulando pontos para o ranking
-        self._pontos_acumulados_para_upgrade += quantidade
-        
-        # Verifica se ganhou pontos de upgrade
-        ganhou_ponto = False
-        while self._pontos_acumulados_para_upgrade >= self._limiar_pontos_atual:
-            self.pontos_upgrade_disponiveis += 1
-            self._pontos_acumulados_para_upgrade -= self._limiar_pontos_atual # Subtrai o limiar alcançado
-            ganhou_ponto = True
-            print(f"[{self.nome}] Ganhou 1 Ponto de Upgrade! (Total: {self.pontos_upgrade_disponiveis})")
-
-            # Verifica se precisa mudar o limiar para o próximo ponto
-            pontos_totais_aproximados = self.pontos # Usa self.pontos como referência geral
-            if self._indice_limiar == 0 and pontos_totais_aproximados >= self._pontos_no_limiar[0]:
-                self._indice_limiar = 1
-                self._limiar_pontos_atual = self._limiares[self._indice_limiar]
-                print(f"[{self.nome}] Próximo Ponto de Upgrade a cada {self._limiar_pontos_atual} pontos.")
-            elif self._indice_limiar == 1 and pontos_totais_aproximados >= self._pontos_no_limiar[1]:
-                self._indice_limiar = 2
-                self._limiar_pontos_atual = self._limiares[self._indice_limiar]
-                print(f"[{self.nome}] Próximo Ponto de Upgrade a cada {self._limiar_pontos_atual} pontos.")
+        # --- FIM MODIFICAÇÃO GANHAR PONTOS ---
         
     def comprar_auxiliar(self):
         num_ativos = len(self.grupo_auxiliares_ativos)
@@ -371,51 +362,79 @@ class Nave(pygame.sprite.Sprite):
 
         comprou = False
         
-        # Lógica para cada tipo de upgrade (custo agora é 1 ponto)
+        # --- INÍCIO: MODIFICAÇÃO LÓGICA DE CUSTO ---
+        
+        # Custo fixo de 1 ponto para todos, EXCETO auxiliares
+        custo_upgrade_atual = 1
+        
         if tipo == "motor":
             if self.nivel_motor < MAX_NIVEL_MOTOR:
-                self.pontos_upgrade_disponiveis -= 1
-                self.total_upgrades_feitos += 1
-                self.nivel_motor += 1
-                self.velocidade_movimento_base = 4 + self.nivel_motor
-                print(f"[{self.nome}] Motor comprado! Nível {self.nivel_motor}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
-                comprou = True
+                if self.pontos_upgrade_disponiveis >= custo_upgrade_atual:
+                    self.pontos_upgrade_disponiveis -= custo_upgrade_atual
+                    self.total_upgrades_feitos += 1
+                    self.nivel_motor += 1
+                    self.velocidade_movimento_base = 4 + self.nivel_motor
+                    print(f"[{self.nome}] Motor comprado! Nível {self.nivel_motor}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
+                    comprou = True
+                else: print(f"[{self.nome}] Pontos insuficientes!") # (Não deve acontecer se custo=1 e >0)
             else: print(f"[{self.nome}] Nível máximo de motor atingido!")
+        
         elif tipo == "dano":
             if self.nivel_dano < MAX_NIVEL_DANO:
-                self.pontos_upgrade_disponiveis -= 1
-                self.total_upgrades_feitos += 1
-                self.nivel_dano += 1
-                print(f"[{self.nome}] Dano comprado! Nível {self.nivel_dano}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
-                comprou = True
+                if self.pontos_upgrade_disponiveis >= custo_upgrade_atual:
+                    self.pontos_upgrade_disponiveis -= custo_upgrade_atual
+                    self.total_upgrades_feitos += 1
+                    self.nivel_dano += 1
+                    print(f"[{self.nome}] Dano comprado! Nível {self.nivel_dano}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
+                    comprou = True
+                else: print(f"[{self.nome}] Pontos insuficientes!")
             else: print(f"[{self.nome}] Nível máximo de dano atingido!")
+        
         elif tipo == "auxiliar":
             num_ativos = len(self.grupo_auxiliares_ativos)
-            if num_ativos < len(self.lista_todas_auxiliares):
-                if self.comprar_auxiliar(): # comprar_auxiliar() já adiciona ao grupo
-                    self.pontos_upgrade_disponiveis -= 1
-                    self.total_upgrades_feitos += 1
-                    print(f"[{self.nome}] Auxiliar comprado! ({self.pontos_upgrade_disponiveis} Pts Restantes)")
-                    comprou = True
-            else: print(f"[{self.nome}] Nível máximo de auxiliares atingido!")
+            max_aux = len(self.lista_todas_auxiliares) # Geralmente 4
+            
+            if num_ativos < max_aux:
+                # Custo escalonável da lista CUSTOS_AUXILIARES (importada)
+                # CUSTOS_AUXILIARES[0] -> 1ª nave (num_ativos=0)
+                # CUSTOS_AUXILIARES[1] -> 2ª nave (num_ativos=1)
+                custo_atual_aux = CUSTOS_AUXILIARES[num_ativos] 
+                
+                if self.pontos_upgrade_disponiveis >= custo_atual_aux:
+                    if self.comprar_auxiliar(): # Tenta ativar a auxiliar
+                        self.pontos_upgrade_disponiveis -= custo_atual_aux # Subtrai o custo escalonável
+                        self.total_upgrades_feitos += 1 # Ainda conta como 1 upgrade no total
+                        print(f"[{self.nome}] Auxiliar comprado por {custo_atual_aux} pts! ({self.pontos_upgrade_disponiveis} Pts Restantes)")
+                        comprou = True
+                else:
+                    print(f"[{self.nome}] Pontos insuficientes para Auxiliar! Custo: {custo_atual_aux} Pts. Você tem: {self.pontos_upgrade_disponiveis}")
+            else: 
+                print(f"[{self.nome}] Nível máximo de auxiliares atingido!")
+        
         elif tipo == "max_health":
-            # Sem limite explícito para vida máxima, mas limitado pelo total de upgrades
-            self.pontos_upgrade_disponiveis -= 1
-            self.total_upgrades_feitos += 1
-            self.nivel_max_vida += 1
-            self.max_vida = 4 + self.nivel_max_vida
-            self.vida_atual += 1 # Ganha 1 de vida ao comprar
-            self.ultimo_hit_tempo = pygame.time.get_ticks() # Atualiza barra de vida
-            print(f"[{self.nome}] Vida Máx. aumentada! Nível {self.nivel_max_vida}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
-            comprou = True
+            if self.pontos_upgrade_disponiveis >= custo_upgrade_atual:
+                self.pontos_upgrade_disponiveis -= custo_upgrade_atual
+                self.total_upgrades_feitos += 1
+                self.nivel_max_vida += 1
+                self.max_vida = 4 + self.nivel_max_vida
+                self.vida_atual += 1 # Ganha 1 de vida ao comprar
+                self.ultimo_hit_tempo = pygame.time.get_ticks() # Atualiza barra de vida
+                print(f"[{self.nome}] Vida Máx. aumentada! Nível {self.nivel_max_vida}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
+                comprou = True
+            else: print(f"[{self.nome}] Pontos insuficientes!")
+        
         elif tipo == "escudo":
             if self.nivel_escudo < MAX_NIVEL_ESCUDO:
-                self.pontos_upgrade_disponiveis -= 1
-                self.total_upgrades_feitos += 1
-                self.nivel_escudo += 1
-                print(f"[{self.nome}] Escudo comprado! Nível {self.nivel_escudo}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
-                comprou = True
+                if self.pontos_upgrade_disponiveis >= custo_upgrade_atual:
+                    self.pontos_upgrade_disponiveis -= custo_upgrade_atual
+                    self.total_upgrades_feitos += 1
+                    self.nivel_escudo += 1
+                    print(f"[{self.nome}] Escudo comprado! Nível {self.nivel_escudo}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
+                    comprou = True
+                else: print(f"[{self.nome}] Pontos insuficientes!")
             else: print(f"[{self.nome}] Nível máximo de escudo atingido!")
+            
+        # --- FIM: MODIFICAÇÃO LÓGICA DE CUSTO ---
             
         return comprou
 

@@ -24,6 +24,12 @@ MAP_RECT = pygame.Rect(0, 0, MAP_WIDTH, MAP_HEIGHT)
 
 # 2. Constantes do Jogo
 MAX_OBSTACULOS = 50
+# --- INÍCIO: MODIFICAÇÃO OBSTÁCULOS ---
+OBSTACULO_RAIO_MIN = 20
+OBSTACULO_RAIO_MAX = 40
+OBSTACULO_PONTOS_MIN = 1
+OBSTACULO_PONTOS_MAX = 5
+# --- FIM: MODIFICAÇÃO OBSTÁCULOS ---
 MAX_INIMIGOS = 25 # <-- Atualizado para 25, como você mencionou
 MAX_BOTS = 6 # Valor inicial padrão de bots
 MAX_BOTS_LIMITE_SUPERIOR = 10 # Limite máximo configurável
@@ -64,6 +70,16 @@ VIDA_COLETADA_CURA = 1
 
 # 4. Constantes da Loja
 MAX_TOTAL_UPGRADES = 12 # Limite total de upgrades que podem ser comprados
+
+# --- INÍCIO: MODIFICAÇÃO DE DIFICULDADE E CUSTOS ---
+# Define os limiares de pontos de score necessários para ganhar 1 ponto de upgrade
+PONTOS_LIMIARES_PARA_UPGRADE = [100, 250, 500] # Custo: 100, depois 250, depois 500
+# Define o score total em que a dificuldade de upgrade muda
+PONTOS_SCORE_PARA_MUDAR_LIMIAR = [500, 2000] # Muda para 250 em 500 pts, muda para 500 em 2000 pts
+# Define o custo escalonável para as naves auxiliares
+CUSTOS_AUXILIARES = [1, 2, 3, 4] # Custo em PONTOS DE UPGRADE (1ª custa 1, 2ª custa 2, etc)
+# --- FIM: MODIFICAÇÃO DE DIFICULDADE E CUSTOS ---
+
 
 # 5. Cores
 PRETO = (0, 0, 0)

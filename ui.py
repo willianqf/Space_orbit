@@ -73,9 +73,12 @@ def recalculate_ui_positions(w, h):
     RECT_BOTAO_AUX.topleft = (btn_x_loja, btn_y_start_loja + btn_y_spacing_loja * 2)
     RECT_BOTAO_MAX_HP.topleft = (btn_x_loja, btn_y_start_loja + btn_y_spacing_loja * 3)
     RECT_BOTAO_ESCUDO.topleft = (btn_x_loja, btn_y_start_loja + btn_y_spacing_loja * 4)
-    RECT_BOTAO_VOLTAR_MENU.midbottom = (RECT_PAUSE_FUNDO.centerx, RECT_TEXTO_VOLTAR.top - 10)
+    
+    # <--- LINHA REMOVIDA ---
+    # A linha abaixo estava duplicada e no local errado, causando o bug de posicionamento.
+    # RECT_BOTAO_VOLTAR_MENU.midbottom = (RECT_PAUSE_FUNDO.centerx, RECT_TEXTO_VOLTAR.top - 10)
+    # <--- FIM DA REMOÇÃO ---
    
-
     # Botão Reiniciar (Game Over - Centralizado)
     RECT_BOTAO_REINICIAR.center = (w // 2, h // 2 + 50)
 
@@ -244,15 +247,16 @@ def desenhar_loja(surface, nave, largura_tela, altura_tela):
         text_rect = text_surf.get_rect(center=rect.center)
         surface.blit(text_surf, text_rect)
 
-    # --- ALTERAÇÕES NOS BOTÕES ---
+    # --- INÍCIO: ALTERAÇÕES BOTÕES LOJA ---
     pode_comprar_geral = nave.pontos_upgrade_disponiveis > 0 and nave.total_upgrades_feitos < MAX_TOTAL_UPGRADES
+    custo_padrao = 1 # Custo padrão para a maioria dos upgrades
 
     # Botão Motor
     pode_motor = pode_comprar_geral and nave.nivel_motor < MAX_NIVEL_MOTOR
     cor_motor = BRANCO if pode_motor else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_motor, RECT_BOTAO_MOTOR, border_radius=5)
     if nave.nivel_motor < MAX_NIVEL_MOTOR:
-        txt_motor = f"Motor Nv. {nave.nivel_motor + 1}/{MAX_NIVEL_MOTOR} (Custo: 1 Pt)" # Custo fixo
+        txt_motor = f"Motor Nv. {nave.nivel_motor + 1}/{MAX_NIVEL_MOTOR} (Custo: {custo_padrao} Pt)"
     else: txt_motor = f"Motor Nv. {nave.nivel_motor} (MAX)"
     draw_text_on_button(RECT_BOTAO_MOTOR, txt_motor, FONT_PADRAO, PRETO)
 
@@ -261,36 +265,49 @@ def desenhar_loja(surface, nave, largura_tela, altura_tela):
     cor_dano = BRANCO if pode_dano else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_dano, RECT_BOTAO_DANO, border_radius=5)
     if nave.nivel_dano < MAX_NIVEL_DANO:
-        txt_dano = f"Dano Nv. {nave.nivel_dano + 1}/{MAX_NIVEL_DANO} (Custo: 1 Pt)" # Custo fixo
+        txt_dano = f"Dano Nv. {nave.nivel_dano + 1}/{MAX_NIVEL_DANO} (Custo: {custo_padrao} Pt)"
     else: txt_dano = f"Dano Nv. {nave.nivel_dano} (MAX)"
     draw_text_on_button(RECT_BOTAO_DANO, txt_dano, FONT_PADRAO, PRETO)
 
-    # Botão Auxiliar
+    # --- INÍCIO: MODIFICAÇÃO BOTÃO AUXILIAR ---
     num_ativos = len(nave.grupo_auxiliares_ativos)
-    max_aux = len(nave.lista_todas_auxiliares)
-    pode_aux = pode_comprar_geral and num_ativos < max_aux
+    max_aux = len(nave.lista_todas_auxiliares) # Geralmente 4
+    
+    # Verifica se ainda pode comprar auxiliares
+    if num_ativos < max_aux:
+        # Pega o custo da lista CUSTOS_AUXILIARES (de settings.py)
+        # num_ativos = 0 -> CUSTOS_AUXILIARES[0] (custo 1)
+        # num_ativos = 1 -> CUSTOS_AUXILIARES[1] (custo 2)
+        custo_atual_aux = CUSTOS_AUXILIARES[num_ativos]
+        
+        txt_aux = f"Comprar Auxiliar {num_ativos + 1}/{max_aux} (Custo: {custo_atual_aux} Pts)"
+        
+        # Verifica se pode comprar (limite total E se tem pontos suficientes para ESTE custo)
+        pode_aux = pode_comprar_geral and nave.pontos_upgrade_disponiveis >= custo_atual_aux
+    else:
+        txt_aux = "Máx. Auxiliares"
+        pode_aux = False # Não pode comprar mais
+        
     cor_aux = BRANCO if pode_aux else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_aux, RECT_BOTAO_AUX, border_radius=5)
-    if num_ativos < max_aux:
-        txt_aux = f"Comprar Auxiliar {num_ativos + 1}/{max_aux} (Custo: 1 Pt)" # Custo fixo
-    else: txt_aux = "Máx. Auxiliares"
     draw_text_on_button(RECT_BOTAO_AUX, txt_aux, FONT_PADRAO, PRETO)
+    # --- FIM: MODIFICAÇÃO BOTÃO AUXILIAR ---
 
     # Botão Max HP
     pode_maxhp = pode_comprar_geral # Sem limite específico de nível
     cor_maxhp = BRANCO if pode_maxhp else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_maxhp, RECT_BOTAO_MAX_HP, border_radius=5)
-    draw_text_on_button(RECT_BOTAO_MAX_HP, f"Vida Max Nv. {nave.nivel_max_vida + 1} (Custo: 1 Pt)", FONT_PADRAO, PRETO) # Custo fixo
+    draw_text_on_button(RECT_BOTAO_MAX_HP, f"Vida Max Nv. {nave.nivel_max_vida + 1} (Custo: {custo_padrao} Pt)", FONT_PADRAO, PRETO)
 
     # Botão Escudo
     pode_escudo = pode_comprar_geral and nave.nivel_escudo < MAX_NIVEL_ESCUDO
     cor_escudo = BRANCO if pode_escudo else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_escudo, RECT_BOTAO_ESCUDO, border_radius=5)
     if nave.nivel_escudo < MAX_NIVEL_ESCUDO:
-        txt_escudo = f"Escudo Nv. {nave.nivel_escudo + 1}/{MAX_NIVEL_ESCUDO} (Custo: 1 Pt)" # Custo fixo
+        txt_escudo = f"Escudo Nv. {nave.nivel_escudo + 1}/{MAX_NIVEL_ESCUDO} (Custo: {custo_padrao} Pt)"
     else: txt_escudo = f"Escudo Nv. {nave.nivel_escudo} (MAX)"
     draw_text_on_button(RECT_BOTAO_ESCUDO, txt_escudo, FONT_PADRAO, PRETO)
-    # --- FIM ALTERAÇÕES BOTÕES ---
+    # --- FIM: ALTERAÇÕES BOTÕES LOJA ---
 
     # Instrução para fechar
     texto_fechar = FONT_PADRAO.render("Aperte 'V' para fechar a loja", True, BRANCO)

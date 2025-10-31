@@ -310,12 +310,15 @@ def spawnar_vida(pos_referencia):
     grupo_vidas_coletaveis.add(nova_vida)
     # grupo_todos_sprites.add(nova_vida)
 
+# --- INÍCIO: MODIFICAÇÃO SPAWN OBSTÁCULO ---
 def spawnar_obstaculo(pos_referencia):
     x, y = calcular_posicao_spawn(pos_referencia)
-    raio = random.randint(20, 40)
+    # Usa as constantes de settings.py
+    raio = random.randint(s.OBSTACULO_RAIO_MIN, s.OBSTACULO_RAIO_MAX)
     novo_obstaculo = Obstaculo(x, y, raio)
     grupo_obstaculos.add(novo_obstaculo)
     # grupo_todos_sprites.add(novo_obstaculo)
+# --- FIM: MODIFICAÇÃO SPAWN OBSTÁCULO ---
 
 def spawnar_boss_congelante_perto(pos_referencia):
     """ Spawna um Boss Congelante perto da posição de referência (para cheats). """
@@ -453,26 +456,17 @@ while rodando:
                 elif event.key == pygame.K_ESCAPE: estado_jogo = "PAUSE"; print("Jogo Pausado.")
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos_tela = pygame.mouse.get_pos()
-                if ui.RECT_BOTAO_VOLTAR_MENU.collidepoint(mouse_pos):
-                    # Limpa todos os bots e inimigos para não continuarem no menu
-                    # --- ADICIONE LIMPEZA AQUI ---
-                    grupo_bots.empty()
-                    grupo_inimigos.empty()
-                    grupo_motherships.empty()
-                    grupo_boss_congelante.empty() # Limpa o boss
-                    grupo_projeteis_bots.empty()
-                    grupo_projeteis_inimigos.empty()
-                    grupo_projeteis_player.empty() # Limpa projéteis do player também
-                    grupo_obstaculos.empty() # Limpa obstáculos
-                    grupo_vidas_coletaveis.empty() # Limpa vidas
-                    # --- FIM DA ADIÇÃO ---
-                    grupo_bots.empty()
-                    grupo_inimigos.empty()
-                    grupo_motherships.empty()
-                    grupo_projeteis_bots.empty()
-                    grupo_projeteis_inimigos.empty()
-                    estado_jogo = "MENU"
-                    print("Voltando ao Menu Principal.")
+                
+                # <--- BLOCO REMOVIDO ---
+                # O bloco de código abaixo estava aqui por engano. Ele pertence ao estado "PAUSE".
+                # if ui.RECT_BOTAO_VOLTAR_MENU.collidepoint(mouse_pos_tela): # <-- (Também usava 'mouse_pos' indefinido)
+                #     grupo_bots.empty()
+                #     grupo_inimigos.empty()
+                #     ...
+                #     estado_jogo = "MENU"
+                #     print("Voltando ao Menu Principal.")
+                # <--- FIM DO BLOCO REMOVIDO ---
+
                 if event.button == 1: # Esquerdo
                     if ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela):
                          estado_jogo = "LOJA"; print("Abrindo loja via clique no botão HUD...")
@@ -496,9 +490,23 @@ while rodando:
                 if event.key == pygame.K_ESCAPE: estado_jogo = "JOGANDO"; print("Jogo Retomado.")
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
+                
+                # Este é o local CORRETO para este bloco
                 if ui.RECT_BOTAO_VOLTAR_MENU.collidepoint(mouse_pos):
+                    # Limpa todos os bots e inimigos para não continuarem no menu
+                    grupo_bots.empty()
+                    grupo_inimigos.empty()
+                    grupo_motherships.empty()
+                    grupo_boss_congelante.empty() 
+                    grupo_projeteis_bots.empty()
+                    grupo_projeteis_inimigos.empty()
+                    grupo_projeteis_player.empty() 
+                    grupo_obstaculos.empty() 
+                    grupo_vidas_coletaveis.empty()
+                    
                     estado_jogo = "MENU"
                     print("Voltando ao Menu Principal...")
+                    
                 if ui.RECT_BOTAO_BOT_MENOS.collidepoint(mouse_pos):
                     if max_bots_atual > 0:
                         max_bots_atual -= 1
@@ -586,7 +594,11 @@ while rodando:
         
         # Projéteis Player vs ...
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_obstaculos, True, True)
-        for _, obst_list in colisoes.items(): nave_player.ganhar_pontos(len(obst_list)) # Jogador ganha pontos
+        # --- INÍCIO: MODIFICAÇÃO PONTOS OBSTÁCULO (PLAYER) ---
+        for _, obst_list in colisoes.items():
+            for obst in obst_list: # Itera sobre cada obstáculo destruído
+                nave_player.ganhar_pontos(obst.pontos_por_morte) # Concede os pontos específicos do obstáculo
+        # --- FIM: MODIFICAÇÃO PONTOS OBSTÁCULO (PLAYER) ---
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_inimigos, True, False)
         for _, inim_list in colisoes.items():
             for inimigo in inim_list:
@@ -614,9 +626,21 @@ while rodando:
 
         # Projéteis Bots vs ...
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_obstaculos, True, True)
+        # --- INÍCIO: MODIFICAÇÃO PONTOS OBSTÁCULO (BOT) ---
         for proj, obst_list in colisoes.items():
-            for bot in grupo_bots:
-                if bot.posicao.distance_to(proj.posicao) < bot.distancia_scan: bot.ganhar_pontos(len(obst_list)); break
+            # Encontra qual bot atirou (lógica existente)
+            bot_que_acertou = None
+            for bot_ in grupo_bots:
+                # (Usamos a posição do projétil, não do obstáculo, para achar o bot)
+                if bot_.posicao.distance_to(proj.posicao) < bot_.distancia_scan:
+                    bot_que_acertou = bot_
+                    break
+            
+            if bot_que_acertou:
+                # Concede os pontos corretos para cada obstáculo
+                for obst in obst_list:
+                    bot_que_acertou.ganhar_pontos(obst.pontos_por_morte)
+        # --- FIM: MODIFICAÇÃO PONTOS OBSTÁCULO (BOT) ---
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_inimigos, True, False)
         for proj, inim_list in colisoes.items():
             bot_que_acertou = None; dano_bot = 1

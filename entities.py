@@ -1,7 +1,11 @@
 # entities.py
 import pygame
 import math
-from settings import CINZA_OBSTACULO, BRANCO, VERMELHO_VIDA_COLETAVEL
+# --- INÍCIO: MODIFICAÇÃO IMPORTAÇÕES ---
+from settings import (CINZA_OBSTACULO, BRANCO, VERMELHO_VIDA_COLETAVEL,
+                      OBSTACULO_RAIO_MIN, OBSTACULO_RAIO_MAX,
+                      OBSTACULO_PONTOS_MIN, OBSTACULO_PONTOS_MAX)
+# --- FIM: MODIFICAÇÃO IMPORTAÇÕES ---
 
 # Obstáculo (Asteroide/Detrito)
 class Obstaculo(pygame.sprite.Sprite):
@@ -14,7 +18,22 @@ class Obstaculo(pygame.sprite.Sprite):
         pygame.draw.circle(self.image, BRANCO, (self.raio, self.raio), self.raio, 2) # Borda
         self.posicao = pygame.math.Vector2(x, y)
         self.rect = self.image.get_rect(center=self.posicao)
-        self.pontos_por_morte = 1 # Pontos que o jogador/bot ganha ao destruir
+        
+        # --- INÍCIO: MODIFICAÇÃO PONTOS POR TAMANHO ---
+        # Garante que o raio esteja dentro dos limites esperados para evitar divisão por zero
+        raio_normalizado = max(OBSTACULO_RAIO_MIN, min(self.raio, OBSTACULO_RAIO_MAX))
+        range_raio = OBSTACULO_RAIO_MAX - OBSTACULO_RAIO_MIN
+        range_pontos = OBSTACULO_PONTOS_MAX - OBSTACULO_PONTOS_MIN
+        
+        percentual = 0.0
+        # Evita divisão por zero se MIN e MAX forem iguais
+        if range_raio > 0:
+            percentual = (raio_normalizado - OBSTACULO_RAIO_MIN) / range_raio
+        
+        # Mapeia linearmente e arredonda para o inteiro mais próximo
+        pontos_calculados = OBSTACULO_PONTOS_MIN + (percentual * range_pontos)
+        self.pontos_por_morte = int(round(pontos_calculados))
+        # --- FIM: MODIFICAÇÃO PONTOS POR TAMANHO ---
 
     def update(self, *args, **kwargs):
         # Obstáculos são estáticos por enquanto
