@@ -11,7 +11,7 @@ from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, MAP_WI
                       RASTRO_MAX_PARTICULAS, RASTRO_DURACAO, RASTRO_TAMANHO_INICIAL, COR_RASTRO_MOTOR,
                       VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAX_TOTAL_UPGRADES, MAX_DISTANCIA_SOM_AUDIVEL, PANNING_RANGE_SOM, VOLUME_BASE_TIRO_PLAYER,
                       # --- INÍCIO: NOVAS IMPORTAÇÕES ---
-                      PONTOS_LIMIARES_PARA_UPGRADE, PONTOS_SCORE_PARA_MUDAR_LIMIAR, CUSTOS_AUXILIARES, FONT_NOME_JOGADOR, BRANCO
+                      PONTOS_LIMIARES_PARA_UPGRADE, PONTOS_SCORE_PARA_MUDAR_LIMIAR, CUSTOS_AUXILIARES, FONT_NOME_JOGADOR, BRANCO, VELOCIDADE_ROTACAO_NAVE
                       # --- FIM: NOVAS IMPORTAÇÕES ---
                       ) 
 # ... (resto das importações e código) ...
@@ -168,7 +168,7 @@ class Nave(pygame.sprite.Sprite):
         # ... (init code remains the same) ...
         super().__init__()
         self.nome = nome; self.posicao = pygame.math.Vector2(x, y); self.largura_base = 30; self.altura = 30; self.cor = cor
-        self.velocidade_rotacao = 5; self.angulo = 0.0; self.velocidade_movimento_base = 4
+        self.velocidade_rotacao = VELOCIDADE_ROTACAO_NAVE; self.angulo = 0.0; self.velocidade_movimento_base = 4
         self.tempo_fim_congelamento = 0
         tamanho_surface = max(self.largura_base, self.altura) + 10; self.imagem_original = pygame.Surface((tamanho_surface, tamanho_surface), pygame.SRCALPHA)
         centro_x = tamanho_surface / 2; centro_y = tamanho_surface / 2; ponto_topo = (centro_x, centro_y - self.altura / 2); ponto_base_esq = (centro_x - self.largura_base / 2, centro_y + self.altura / 2); ponto_base_dir = (centro_x + self.largura_base / 2, centro_y + self.altura / 2)
@@ -525,9 +525,30 @@ class Player(Nave):
             return False # Retorna False (não morreu) sem aplicar dano
         # --- FIM DA VERIFICAÇÃO ---
         return super().foi_atingido(dano, estado_jogo_atual, proj_pos)
-    def update(self, grupo_projeteis_jogador, camera):
-        self.processar_input_humano(camera); self.rotacionar(); self.mover()
-        self.lidar_com_tiros(grupo_projeteis_jogador, self.posicao)
+    def update(self, grupo_projeteis_jogador, camera, client_socket=None):
+        # Se estivermos offline (client_socket is None), processa o input local.
+        if client_socket is None:
+            self.processar_input_humano(camera)
+        else:
+            # Se estivermos online, o servidor é que manda.
+            # Apenas limpamos os inputs locais para garantir que a nave não
+            # se mova sozinha com base em inputs antigos (pré-conexão).
+            self.quer_virar_esquerda = False
+            self.quer_virar_direita = False
+            self.quer_mover_frente = False
+            self.quer_mover_tras = False
+            self.quer_atirar = False
+            # (No futuro, o servidor irá definir estas flags)
+        
+        # A lógica de rotação, movimento e tiro continua a ser chamada,
+        # mas só fará algo se as flags (quer_mover, etc.) forem True.
+        self.rotacionar()
+        self.mover()
+        
+        # Apenas dispara no modo offline (por enquanto)
+        if client_socket is None:
+            self.lidar_com_tiros(grupo_projeteis_jogador, self.posicao)
+    # --- FIM DA MODIFICAÇÃO ---
 
     def processar_input_humano(self, camera):
         teclas = pygame.key.get_pressed()

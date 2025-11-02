@@ -58,6 +58,7 @@ MINION_CONGELANTE_LEASH_RANGE = 1500 # Distância máxima do BOSS que o minion p
 MIN_SPAWN_DIST_ENTRE_NAVES_MAE = 800 # Distância mínima entre Motherships/Bosses
 
 # 3. Constantes da Nave e Upgrades
+VELOCIDADE_ROTACAO_NAVE = 5
 MAX_NIVEL_ESCUDO = 5
 DURACAO_FX_ESCUDO = 150
 REDUCAO_DANO_POR_NIVEL = 15

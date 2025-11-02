@@ -14,16 +14,19 @@ TERMINAL_H = 35
 PAUSE_PANEL_W, PAUSE_PANEL_H = 350, 250
 BTN_PAUSE_CTRL_W, BTN_PAUSE_CTRL_H = 40, 40
 
-# --- ADICIONE ESTE BLOCO ---
+# --- Bloco da Tela de Nome (Login) ---
 LOGIN_PANEL_W, LOGIN_PANEL_H = 350, 250
 LOGIN_INPUT_W, LOGIN_INPUT_H = 300, 40
 LOGIN_BTN_W, LOGIN_BTN_H = 200, 50
-# --- FIM DO BLOCO ---
+
+# --- INÍCIO DA MODIFICAÇÃO (Adicionar Tela de Conexão) ---
+CONNECT_PANEL_W, CONNECT_PANEL_H = 350, 300 # Um pouco mais alto
+CONNECT_INPUT_W, CONNECT_INPUT_H = 300, 40
+CONNECT_BTN_W, CONNECT_BTN_H = 200, 50
+# --- FIM DA MODIFICAÇÃO ---
 
 MINIMAP_WIDTH = 150 # Definido localmente aqui, mas poderia vir de settings
 MINIMAP_HEIGHT = 150 # Definido localmente aqui, mas poderia vir de settings
-# BTN_LOJA_W, BTN_LOJA_H = 300, 50 # <-- Duplicado do original, removido
-# BTN_MENU_W, BTN_MENU_H = 250, 50 # <-- Duplicado do original, removido
 
 # Rects (inicializados com tamanho, posição será definida depois)
 RECT_TERMINAL_INPUT = pygame.Rect(0, 0, 0, TERMINAL_H)
@@ -48,11 +51,17 @@ RECT_BOTAO_VOLTAR_MENU = pygame.Rect(0, 0, 200, 40)
 RECT_TEXTO_VOLTAR = pygame.Rect(0, 0, 200, 30)
 RECT_BOTAO_VOLTAR_MENU = pygame.Rect(0, 0, BTN_REINICIAR_W, BTN_REINICIAR_H)
 
-# --- ADICIONE ESTE BLOCO ---
+# --- Rects da Tela de Nome (Login) ---
 RECT_LOGIN_PAINEL = pygame.Rect(0, 0, LOGIN_PANEL_W, LOGIN_PANEL_H)
 RECT_LOGIN_INPUT = pygame.Rect(0, 0, LOGIN_INPUT_W, LOGIN_INPUT_H)
 RECT_LOGIN_BOTAO = pygame.Rect(0, 0, LOGIN_BTN_W, LOGIN_BTN_H)
-# --- FIM DO BLOCO ---
+
+# --- INÍCIO DA MODIFICAÇÃO (Rects da Tela de Conexão) ---
+RECT_CONNECT_PAINEL = pygame.Rect(0, 0, CONNECT_PANEL_W, CONNECT_PANEL_H)
+RECT_CONNECT_NOME = pygame.Rect(0, 0, CONNECT_INPUT_W, CONNECT_INPUT_H)
+RECT_CONNECT_IP = pygame.Rect(0, 0, CONNECT_INPUT_W, CONNECT_INPUT_H)
+RECT_CONNECT_BOTAO = pygame.Rect(0, 0, CONNECT_BTN_W, CONNECT_BTN_H)
+# --- FIM DA MODIFICAÇÃO ---
 
 
 # Variáveis para guardar posições calculadas
@@ -66,10 +75,14 @@ def recalculate_ui_positions(w, h):
     global RECT_BOTAO_JOGAR_OFF, RECT_BOTAO_MULTIPLAYER, RECT_BOTAO_SAIR
     # Adiciona os novos Rects de Pausa
     global RECT_PAUSE_FUNDO, RECT_TEXTO_BOTS, RECT_BOTAO_BOT_MENOS, RECT_BOTAO_BOT_MAIS, RECT_TEXTO_VOLTAR, RECT_BOTAO_VOLTAR_MENU
-    global RECT_BOTAO_VOLTAR_MENU, RECT_TEXTO_VOLTAR # <-- MODIFIQUE ESTA LINHA
+    global RECT_BOTAO_VOLTAR_MENU, RECT_TEXTO_VOLTAR
     
-    # --- ADICIONE OS NOVOS RECTS DE LOGIN ---
+    # Rects de Login
     global RECT_LOGIN_PAINEL, RECT_LOGIN_INPUT, RECT_LOGIN_BOTAO
+    
+    # --- INÍCIO DA MODIFICAÇÃO (Globals da Tela de Conexão) ---
+    global RECT_CONNECT_PAINEL, RECT_CONNECT_NOME, RECT_CONNECT_IP, RECT_CONNECT_BOTAO
+    # --- FIM DA MODIFICAÇÃO ---
 
     # Minimapa
     MINIMAP_POS_X = w - MINIMAP_WIDTH - 10
@@ -89,11 +102,6 @@ def recalculate_ui_positions(w, h):
     RECT_BOTAO_AUX.topleft = (btn_x_loja, btn_y_start_loja + btn_y_spacing_loja * 2)
     RECT_BOTAO_MAX_HP.topleft = (btn_x_loja, btn_y_start_loja + btn_y_spacing_loja * 3)
     RECT_BOTAO_ESCUDO.topleft = (btn_x_loja, btn_y_start_loja + btn_y_spacing_loja * 4)
-    
-    # <--- LINHA REMOVIDA ---
-    # A linha abaixo estava duplicada e no local errado, causando o bug de posicionamento.
-    # RECT_BOTAO_VOLTAR_MENU.midbottom = (RECT_PAUSE_FUNDO.centerx, RECT_TEXTO_VOLTAR.top - 10)
-    # <--- FIM DA REMOÇÃO ---
    
     # Botão Reiniciar (Game Over - Centralizado)
     RECT_BOTAO_REINICIAR.center = (w // 2, h // 2 + 50)
@@ -102,8 +110,6 @@ def recalculate_ui_positions(w, h):
     hud_y_spacing = FONT_HUD.get_height() + 10
     RECT_BOTAO_UPGRADE_HUD.topleft = (10, 35 + hud_y_spacing)
     
-    # Posiciona o novo botão no meio, abaixo dos controles de bot
-  
     # --
 
     # Botões do Menu Principal (Centralizados)
@@ -125,8 +131,6 @@ def recalculate_ui_positions(w, h):
 
     # 2. Posição dos Botões (baseado na logo)
     # Posição Y inicial = centro_logo_y + metade_altura_logo + espaçamento
-    
-    # --- INÍCIO DA REVERSÃO (Menu Principal) ---
     menu_btn_y_start = logo_y_pos + (logo_height // 2) + 50 # 50px de espaço
     
     menu_btn_x = w // 2 - BTN_MENU_W // 2
@@ -134,10 +138,8 @@ def recalculate_ui_positions(w, h):
     RECT_BOTAO_JOGAR_OFF.topleft = (menu_btn_x, menu_btn_y_start)
     RECT_BOTAO_MULTIPLAYER.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing)
     RECT_BOTAO_SAIR.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing * 2)
-    # --- FIM DA REVERSÃO ---
 
     # --- Posições do Menu de Pausa (Centralizado) ---
-    # --- INÍCIO DA MODIFICAÇÃO (Correção de Layout) ---
     RECT_PAUSE_FUNDO.center = (w // 2, h // 2)
     
     # Y inicial para o primeiro item
@@ -160,25 +162,38 @@ def recalculate_ui_positions(w, h):
     
     # 3. Texto "ESC para Voltar" (Último item)
     RECT_TEXTO_VOLTAR.midbottom = (RECT_PAUSE_FUNDO.centerx, RECT_PAUSE_FUNDO.bottom - 20)
-    # --- FIM DA MODIFICAÇÃO ---
-
-    # --- ADICIONE ESTE NOVO BLOCO ---
+    
     # --- Posições da Tela de Nome (Login) ---
     RECT_LOGIN_PAINEL.center = (w // 2, h // 2)
     
-    # Posição Y do Input (um pouco abaixo do título, que será desenhado em +40)
+    # Posição Y do Input (um pouco abaixo do título, que será desenhado em + 40)
     input_y_pos = RECT_LOGIN_PAINEL.top + 100
     RECT_LOGIN_INPUT.center = (RECT_LOGIN_PAINEL.centerx, input_y_pos)
     
     # Posição Y do Botão (abaixo do input)
     btn_y_pos = RECT_LOGIN_INPUT.bottom + 30
     RECT_LOGIN_BOTAO.center = (RECT_LOGIN_PAINEL.centerx, btn_y_pos)
-    # --- FIM DO NOVO BLOCO ---
+
+    # --- INÍCIO DA MODIFICAÇÃO (Posições da Tela de Conexão) ---
+    # --- Posições da Tela de Conexão ---
+    RECT_CONNECT_PAINEL.center = (w // 2, h // 2)
+    
+    # Posição Y do Input de Nome (abaixo do título)
+    nome_y_pos = RECT_CONNECT_PAINEL.top + 100
+    RECT_CONNECT_NOME.center = (RECT_CONNECT_PAINEL.centerx, nome_y_pos)
+    
+    # Posição Y do Input de IP (abaixo do nome)
+    ip_y_pos = RECT_CONNECT_NOME.bottom + 50 # Mais espaço para o label
+    RECT_CONNECT_IP.center = (RECT_CONNECT_PAINEL.centerx, ip_y_pos)
+
+    # Posição Y do Botão (abaixo do IP)
+    btn_connect_y_pos = RECT_CONNECT_IP.bottom + 30
+    RECT_CONNECT_BOTAO.center = (RECT_CONNECT_PAINEL.centerx, btn_connect_y_pos)
+    # --- FIM DA MODIFICAÇÃO ---
 
 
 # --- Funções de Desenho ---
 
-# --- REVERTA A ASSINATURA E CORPO DESTA FUNÇÃO ---
 def desenhar_menu(surface, largura_tela, altura_tela):
     """ Desenha a tela do menu principal. """
     surface.fill(PRETO) # Fundo preto simples
@@ -207,21 +222,25 @@ def desenhar_menu(surface, largura_tela, altura_tela):
 
     # Desenha os Botões
     draw_menu_button(RECT_BOTAO_JOGAR_OFF, "Jogar Offline")
-    draw_menu_button(RECT_BOTAO_MULTIPLAYER, "Multijogador", CINZA_BOTAO_DESLIGADO, CINZA_OBSTACULO) # Desabilitado
+    
+    # --- INÍCIO DA MODIFICAÇÃO (Ativar Botão) ---
+    draw_menu_button(RECT_BOTAO_MULTIPLAYER, "Multijogador") # Botão agora está ativo (cores padrão)
+    # --- FIM DA MODIFICAÇÃO ---
+    
     draw_menu_button(RECT_BOTAO_SAIR, "Sair")
-# --- FIM DA REVERSÃO ---
 
-# --- ADICIONE ESTA NOVA FUNÇÃO (Pode ser logo após desenhar_menu) ---
 def desenhar_tela_nome(surface, nome_jogador_atual, input_nome_ativo):
     """ Desenha a tela de entrada de nome. """
     
-    # 1. Fundo (Vamos desenhar o logo e o fundo preto para consistência)
+    # 1. Fundo (Pode desenhar o menu atrás, ou apenas um fundo preto)
+    # Vamos desenhar o logo e o fundo preto para consistência
     surface.fill(PRETO)
     if LOGO_JOGO:
         logo_rect = LOGO_JOGO.get_rect(center=(surface.get_width() // 2, surface.get_height() // 3))
         surface.blit(LOGO_JOGO, logo_rect)
         
-    # 2. Painel de fundo (Opcional, mas ajuda a destacar. Vamos pular por enquanto)
+    # 2. Painel de fundo
+    # (Opcional, mas ajuda a destacar. Vamos pular por enquanto e desenhar direto)
     # pygame.draw.rect(surface, CINZA_LOJA_FUNDO, RECT_LOGIN_PAINEL, border_radius=10)
     
     # 3. Título
@@ -251,8 +270,6 @@ def desenhar_tela_nome(surface, nome_jogador_atual, input_nome_ativo):
     texto_botao = FONT_PADRAO.render("Respawn", True, PRETO)
     texto_botao_rect = texto_botao.get_rect(center=RECT_LOGIN_BOTAO.center)
     surface.blit(texto_botao, texto_botao_rect)
-# --- FIM DA NOVA FUNÇÃO ---
-
 
 # --- Função Desenhar Pausa ---
 def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos):
@@ -301,8 +318,6 @@ def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos):
     voltar_rect = texto_voltar.get_rect(center=RECT_TEXTO_VOLTAR.center)
     surface.blit(texto_voltar, voltar_rect)
 # --- FIM Função Desenhar Pausa ---
-
-# ui.py
 
 def desenhar_loja(surface, nave, largura_tela, altura_tela):
     # Fundo semi-transparente
@@ -392,9 +407,6 @@ def desenhar_loja(surface, nave, largura_tela, altura_tela):
     texto_fechar = FONT_PADRAO.render("Aperte 'V' para fechar a loja", True, BRANCO)
     surface.blit(texto_fechar, (largura_tela // 2 - texto_fechar.get_width() // 2, altura_tela - 60))
 
-# ---
-# --- MODIFICAÇÃO PRINCIPAL AQUI ---
-# ---
 def desenhar_hud(surface, nave, estado_jogo):
     # Posição Y inicial para os detalhes (abaixo do botão Upgrade)
     pos_x_detalhes = 10
@@ -451,11 +463,8 @@ def desenhar_hud(surface, nave, estado_jogo):
         surface.blit(texto_aux, (pos_x_detalhes, pos_y_atual_detalhes))
         pos_y_atual_detalhes += line_spacing_detalhes
         # --- FIM DA MODIFICAÇÃO ---
-# ---
-# --- FIM DA MODIFICAÇÃO PRINCIPAL ---
-# ---
 
-def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height):
+def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height, online_players, meu_nome_rede):
     # Fundo semi-transparente
     fundo_mini = pygame.Surface((MINIMAP_WIDTH, MINIMAP_HEIGHT), pygame.SRCALPHA)
     fundo_mini.fill(MINIMAP_FUNDO)
@@ -468,22 +477,33 @@ def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height)
     ratio_y = MINIMAP_HEIGHT / map_height
 
     # Função auxiliar para converter posição do mundo para minimapa
-    def get_pos_minimapa(pos_mundo):
-        map_x = int((pos_mundo.x * ratio_x) + MINIMAP_POS_X)
-        map_y = int((pos_mundo.y * ratio_y) + MINIMAP_POS_Y)
+    def get_pos_minimapa(pos_mundo_vec):
+        map_x = int((pos_mundo_vec.x * ratio_x) + MINIMAP_POS_X)
+        map_y = int((pos_mundo_vec.y * ratio_y) + MINIMAP_POS_Y)
         # Garante que os pontos fiquem dentro da borda do minimapa
         map_x = max(MINIMAP_POS_X + 1, min(map_x, MINIMAP_POS_X + MINIMAP_WIDTH - 2))
         map_y = max(MINIMAP_POS_Y + 1, min(map_y, MINIMAP_POS_Y + MINIMAP_HEIGHT - 2))
         return (map_x, map_y)
 
-    # Desenha Bots
-    for bot in bots:
-        pygame.draw.circle(surface, LARANJA_BOT, get_pos_minimapa(bot.posicao), 2)
+    # --- Lógica de Desenho Atualizada ---
+    if online_players:
+        # Modo Online: Desenha jogadores do dicionário 'online_players'
+        for nome, state in online_players.items():
+            if nome == meu_nome_rede:
+                continue # Não desenha o "outro" eu, o jogador principal trata disso
+            
+            # (Usamos a mesma cor dos bots por enquanto)
+            pos_vec = pygame.math.Vector2(state['x'], state['y'])
+            pygame.draw.circle(surface, LARANJA_BOT, get_pos_minimapa(pos_vec), 2)
+    else:
+        # Modo Offline: Desenha Bots
+        for bot in bots:
+            pygame.draw.circle(surface, LARANJA_BOT, get_pos_minimapa(bot.posicao), 2)
 
-    # Desenha Jogador (se não estiver em Game Over)
+    # Desenha Jogador (sempre)
     if estado_jogo != "GAME_OVER":
         pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(player.posicao), 3)
-
+# --- FIM DA MODIFICAÇÃO (desenhar_minimapa) ---
 
 def desenhar_ranking(surface, lista_top_5, nave_player):
     # Posição inicial (abaixo do minimapa)
@@ -551,3 +571,49 @@ def desenhar_game_over(surface, largura_tela, altura_tela):
     pygame.draw.rect(surface, BRANCO, RECT_BOTAO_REINICIAR, border_radius=5)
     texto_botao = FONT_PADRAO.render("Reiniciar", True, PRETO)
     surface.blit(texto_botao, (RECT_BOTAO_REINICIAR.centerx - texto_botao.get_width() // 2, RECT_BOTAO_REINICIAR.centery - texto_botao.get_height() // 2))
+
+# --- INÍCIO DA MODIFICAÇÃO (Adicionar Tela de Conexão) ---
+def desenhar_tela_conexao(surface, nome_str, ip_str, input_ativo_key):
+    """ Desenha a tela de conexão multiplayer. """
+    
+    # 1. Fundo (Mesmo do menu/login)
+    surface.fill(PRETO)
+    if LOGO_JOGO:
+        logo_rect = LOGO_JOGO.get_rect(center=(surface.get_width() // 2, surface.get_height() // 3))
+        surface.blit(LOGO_JOGO, logo_rect)
+    
+    # 2. Título do Painel
+    texto_titulo = FONT_TITULO.render("Conectar ao Servidor", True, BRANCO)
+    titulo_rect = texto_titulo.get_rect(center=(RECT_CONNECT_PAINEL.centerx, RECT_CONNECT_PAINEL.top + 40))
+    surface.blit(texto_titulo, titulo_rect)
+
+    # --- Helper para desenhar input (label + caixa) ---
+    def draw_input_box(rect, label_text, text_str, is_active):
+        # Label
+        label_surf = FONT_PADRAO.render(label_text, True, BRANCO)
+        label_rect = label_surf.get_rect(midbottom=(rect.centerx, rect.top - 5))
+        surface.blit(label_surf, label_rect)
+        
+        # Caixa
+        cor_borda = BRANCO if is_active else CINZA_BOTAO_DESLIGADO
+        pygame.draw.rect(surface, PRETO, rect, border_radius=5)
+        pygame.draw.rect(surface, cor_borda, rect, 2, border_radius=5)
+
+        # Texto e Cursor
+        cursor = "_" if is_active and pygame.time.get_ticks() % 1000 < 500 else ""
+        texto_renderizado = FONT_PADRAO.render(f"{text_str}{cursor}", True, BRANCO)
+        texto_rect = texto_renderizado.get_rect(midleft=(rect.x + 15, rect.centery))
+        surface.blit(texto_renderizado, texto_rect)
+
+    # 3. Desenha Input "Seu Nome"
+    draw_input_box(RECT_CONNECT_NOME, "Seu Nome:", nome_str, input_ativo_key == "nome")
+    
+    # 4. Desenha Input "IP do Servidor"
+    draw_input_box(RECT_CONNECT_IP, "IP do Servidor:", ip_str, input_ativo_key == "ip")
+
+    # 5. Botão "Conectar"
+    pygame.draw.rect(surface, BRANCO, RECT_CONNECT_BOTAO, border_radius=5)
+    texto_botao = FONT_PADRAO.render("Conectar", True, PRETO)
+    texto_botao_rect = texto_botao.get_rect(center=RECT_CONNECT_BOTAO.center)
+    surface.blit(texto_botao, texto_botao_rect)
+# --- FIM DA MODIFICAÇÃO ---
