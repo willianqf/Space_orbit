@@ -14,10 +14,16 @@ TERMINAL_H = 35
 PAUSE_PANEL_W, PAUSE_PANEL_H = 350, 250
 BTN_PAUSE_CTRL_W, BTN_PAUSE_CTRL_H = 40, 40
 
+# --- ADICIONE ESTE BLOCO ---
+LOGIN_PANEL_W, LOGIN_PANEL_H = 350, 250
+LOGIN_INPUT_W, LOGIN_INPUT_H = 300, 40
+LOGIN_BTN_W, LOGIN_BTN_H = 200, 50
+# --- FIM DO BLOCO ---
+
 MINIMAP_WIDTH = 150 # Definido localmente aqui, mas poderia vir de settings
 MINIMAP_HEIGHT = 150 # Definido localmente aqui, mas poderia vir de settings
-BTN_LOJA_W, BTN_LOJA_H = 300, 50
-BTN_MENU_W, BTN_MENU_H = 250, 50
+# BTN_LOJA_W, BTN_LOJA_H = 300, 50 # <-- Duplicado do original, removido
+# BTN_MENU_W, BTN_MENU_H = 250, 50 # <-- Duplicado do original, removido
 
 # Rects (inicializados com tamanho, posição será definida depois)
 RECT_TERMINAL_INPUT = pygame.Rect(0, 0, 0, TERMINAL_H)
@@ -42,6 +48,12 @@ RECT_BOTAO_VOLTAR_MENU = pygame.Rect(0, 0, 200, 40)
 RECT_TEXTO_VOLTAR = pygame.Rect(0, 0, 200, 30)
 RECT_BOTAO_VOLTAR_MENU = pygame.Rect(0, 0, BTN_REINICIAR_W, BTN_REINICIAR_H)
 
+# --- ADICIONE ESTE BLOCO ---
+RECT_LOGIN_PAINEL = pygame.Rect(0, 0, LOGIN_PANEL_W, LOGIN_PANEL_H)
+RECT_LOGIN_INPUT = pygame.Rect(0, 0, LOGIN_INPUT_W, LOGIN_INPUT_H)
+RECT_LOGIN_BOTAO = pygame.Rect(0, 0, LOGIN_BTN_W, LOGIN_BTN_H)
+# --- FIM DO BLOCO ---
+
 
 # Variáveis para guardar posições calculadas
 MINIMAP_POS_X = 0
@@ -55,6 +67,10 @@ def recalculate_ui_positions(w, h):
     # Adiciona os novos Rects de Pausa
     global RECT_PAUSE_FUNDO, RECT_TEXTO_BOTS, RECT_BOTAO_BOT_MENOS, RECT_BOTAO_BOT_MAIS, RECT_TEXTO_VOLTAR, RECT_BOTAO_VOLTAR_MENU
     global RECT_BOTAO_VOLTAR_MENU, RECT_TEXTO_VOLTAR # <-- MODIFIQUE ESTA LINHA
+    
+    # --- ADICIONE OS NOVOS RECTS DE LOGIN ---
+    global RECT_LOGIN_PAINEL, RECT_LOGIN_INPUT, RECT_LOGIN_BOTAO
+
     # Minimapa
     MINIMAP_POS_X = w - MINIMAP_WIDTH - 10
     MINIMAP_POS_Y = 10
@@ -91,7 +107,7 @@ def recalculate_ui_positions(w, h):
     # --
 
     # Botões do Menu Principal (Centralizados)
-# 1. Posição da Logo
+    # 1. Posição da Logo
     logo_y_pos = h // 3 # Posição Y do centro da logo (igual em desenhar_menu)
     logo_height = 0
     # Declara que vamos modificar o RECT_LOGO_MENU global
@@ -109,6 +125,8 @@ def recalculate_ui_positions(w, h):
 
     # 2. Posição dos Botões (baseado na logo)
     # Posição Y inicial = centro_logo_y + metade_altura_logo + espaçamento
+    
+    # --- INÍCIO DA REVERSÃO (Menu Principal) ---
     menu_btn_y_start = logo_y_pos + (logo_height // 2) + 50 # 50px de espaço
     
     menu_btn_x = w // 2 - BTN_MENU_W // 2
@@ -116,8 +134,10 @@ def recalculate_ui_positions(w, h):
     RECT_BOTAO_JOGAR_OFF.topleft = (menu_btn_x, menu_btn_y_start)
     RECT_BOTAO_MULTIPLAYER.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing)
     RECT_BOTAO_SAIR.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing * 2)
+    # --- FIM DA REVERSÃO ---
+
     # --- Posições do Menu de Pausa (Centralizado) ---
-# --- INÍCIO DA MODIFICAÇÃO (Correção de Layout) ---
+    # --- INÍCIO DA MODIFICAÇÃO (Correção de Layout) ---
     RECT_PAUSE_FUNDO.center = (w // 2, h // 2)
     
     # Y inicial para o primeiro item
@@ -142,9 +162,23 @@ def recalculate_ui_positions(w, h):
     RECT_TEXTO_VOLTAR.midbottom = (RECT_PAUSE_FUNDO.centerx, RECT_PAUSE_FUNDO.bottom - 20)
     # --- FIM DA MODIFICAÇÃO ---
 
+    # --- ADICIONE ESTE NOVO BLOCO ---
+    # --- Posições da Tela de Nome (Login) ---
+    RECT_LOGIN_PAINEL.center = (w // 2, h // 2)
+    
+    # Posição Y do Input (um pouco abaixo do título, que será desenhado em +40)
+    input_y_pos = RECT_LOGIN_PAINEL.top + 100
+    RECT_LOGIN_INPUT.center = (RECT_LOGIN_PAINEL.centerx, input_y_pos)
+    
+    # Posição Y do Botão (abaixo do input)
+    btn_y_pos = RECT_LOGIN_INPUT.bottom + 30
+    RECT_LOGIN_BOTAO.center = (RECT_LOGIN_PAINEL.centerx, btn_y_pos)
+    # --- FIM DO NOVO BLOCO ---
+
 
 # --- Funções de Desenho ---
 
+# --- REVERTA A ASSINATURA E CORPO DESTA FUNÇÃO ---
 def desenhar_menu(surface, largura_tela, altura_tela):
     """ Desenha a tela do menu principal. """
     surface.fill(PRETO) # Fundo preto simples
@@ -175,6 +209,51 @@ def desenhar_menu(surface, largura_tela, altura_tela):
     draw_menu_button(RECT_BOTAO_JOGAR_OFF, "Jogar Offline")
     draw_menu_button(RECT_BOTAO_MULTIPLAYER, "Multijogador", CINZA_BOTAO_DESLIGADO, CINZA_OBSTACULO) # Desabilitado
     draw_menu_button(RECT_BOTAO_SAIR, "Sair")
+# --- FIM DA REVERSÃO ---
+
+# --- ADICIONE ESTA NOVA FUNÇÃO (Pode ser logo após desenhar_menu) ---
+def desenhar_tela_nome(surface, nome_jogador_atual, input_nome_ativo):
+    """ Desenha a tela de entrada de nome. """
+    
+    # 1. Fundo (Vamos desenhar o logo e o fundo preto para consistência)
+    surface.fill(PRETO)
+    if LOGO_JOGO:
+        logo_rect = LOGO_JOGO.get_rect(center=(surface.get_width() // 2, surface.get_height() // 3))
+        surface.blit(LOGO_JOGO, logo_rect)
+        
+    # 2. Painel de fundo (Opcional, mas ajuda a destacar. Vamos pular por enquanto)
+    # pygame.draw.rect(surface, CINZA_LOJA_FUNDO, RECT_LOGIN_PAINEL, border_radius=10)
+    
+    # 3. Título
+    texto_titulo = FONT_TITULO.render("Digite seu nome", True, BRANCO)
+    titulo_rect = texto_titulo.get_rect(center=(RECT_LOGIN_PAINEL.centerx, RECT_LOGIN_PAINEL.top + 40))
+    surface.blit(texto_titulo, titulo_rect)
+
+    # 4. Caixa de Input de Nome
+    cor_borda_input = BRANCO if input_nome_ativo else CINZA_BOTAO_DESLIGADO
+    pygame.draw.rect(surface, PRETO, RECT_LOGIN_INPUT, border_radius=5)
+    pygame.draw.rect(surface, cor_borda_input, RECT_LOGIN_INPUT, 2, border_radius=5)
+
+    # Texto e Cursor
+    cursor = "_" if input_nome_ativo and pygame.time.get_ticks() % 1000 < 500 else ""
+    texto_renderizado = FONT_PADRAO.render(f"{nome_jogador_atual}{cursor}", True, BRANCO)
+    texto_rect = texto_renderizado.get_rect(midleft=(RECT_LOGIN_INPUT.x + 15, RECT_LOGIN_INPUT.centery))
+    surface.blit(texto_renderizado, texto_rect)
+
+    # Placeholder
+    if not input_nome_ativo and not nome_jogador_atual:
+        placeholder_surf = FONT_PADRAO.render("Nome...", True, CINZA_BOTAO_DESLIGADO)
+        placeholder_rect = placeholder_surf.get_rect(midleft=(RECT_LOGIN_INPUT.x + 15, RECT_LOGIN_INPUT.centery))
+        surface.blit(placeholder_surf, placeholder_rect)
+        
+    # 5. Botão "Respawn"
+    pygame.draw.rect(surface, BRANCO, RECT_LOGIN_BOTAO, border_radius=5)
+    texto_botao = FONT_PADRAO.render("Respawn", True, PRETO)
+    texto_botao_rect = texto_botao.get_rect(center=RECT_LOGIN_BOTAO.center)
+    surface.blit(texto_botao, texto_botao_rect)
+# --- FIM DA NOVA FUNÇÃO ---
+
+
 # --- Função Desenhar Pausa ---
 def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos):
     """ Desenha o menu de pausa sobre a tela do jogo. """

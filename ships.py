@@ -11,7 +11,7 @@ from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, MAP_WI
                       RASTRO_MAX_PARTICULAS, RASTRO_DURACAO, RASTRO_TAMANHO_INICIAL, COR_RASTRO_MOTOR,
                       VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAX_TOTAL_UPGRADES, MAX_DISTANCIA_SOM_AUDIVEL, PANNING_RANGE_SOM, VOLUME_BASE_TIRO_PLAYER,
                       # --- INÍCIO: NOVAS IMPORTAÇÕES ---
-                      PONTOS_LIMIARES_PARA_UPGRADE, PONTOS_SCORE_PARA_MUDAR_LIMIAR, CUSTOS_AUXILIARES
+                      PONTOS_LIMIARES_PARA_UPGRADE, PONTOS_SCORE_PARA_MUDAR_LIMIAR, CUSTOS_AUXILIARES, FONT_NOME_JOGADOR, BRANCO
                       # --- FIM: NOVAS IMPORTAÇÕES ---
                       ) 
 # ... (resto das importações e código) ...
@@ -478,10 +478,44 @@ class Nave(pygame.sprite.Sprite):
             rect_fundo_mundo = pygame.Rect(pos_x_mundo, pos_y_mundo, LARGURA_BARRA, ALTURA_BARRA); rect_vida_mundo = pygame.Rect(pos_x_mundo, pos_y_mundo, largura_vida_atual, ALTURA_BARRA)
             pygame.draw.rect(surface, VERMELHO_VIDA_FUNDO, camera.apply(rect_fundo_mundo)); pygame.draw.rect(surface, VERDE_VIDA, camera.apply(rect_vida_mundo))
 
+    def desenhar_nome(self, surface, camera):
+        """ Desenha o nome da nave acima da barra de vida. """
+        try:
+            # --- INÍCIO DA CORREÇÃO ---
+            
+            # O topo da barra de vida é desenhado em: self.posicao.y - 30
+            OFFSET_Y_VIDA_TOPO = 30
+            
+            # Espaçamento que queremos entre o nome e a barra
+            PADDING_ACIMA_VIDA = 3 
+            
+            # O Y da base (bottom) do texto do nome deve ser:
+            # (Posição Y do topo da vida) - (Espaçamento)
+            pos_y_bottom_mundo = (self.posicao.y - OFFSET_Y_VIDA_TOPO) - PADDING_ACIMA_VIDA
+            
+            # O X do centro do texto
+            pos_x_center_mundo = self.posicao.x
+            
+            # Renderiza o texto
+            texto_surf = FONT_NOME_JOGADOR.render(self.nome, True, BRANCO)
+            
+            # Pega o Rect e aplica a câmera, alinhando pelo 'midbottom' (centro-base)
+            texto_rect_mundo = texto_surf.get_rect(midbottom=(pos_x_center_mundo, pos_y_bottom_mundo))
+            surface.blit(texto_surf, camera.apply(texto_rect_mundo))
+            
+            # --- FIM DA CORREÇÃO ---
+            
+        except pygame.error as e:
+            print(f"[ERRO] Falha ao renderizar nome '{self.nome}': {e}")
+        except AttributeError:
+            # Pode acontecer se a fonte não foi carregada
+            pass
 # --- Classe do Jogador ---
 class Player(Nave):
-    def __init__(self, x, y):
-        super().__init__(x, y, cor=AZUL_NAVE, nome="Jogador")
+    # --- MODIFIQUE AQUI ---
+    def __init__(self, x, y, nome="Jogador"):
+        # E AQUI ---
+        super().__init__(x, y, cor=AZUL_NAVE, nome=nome)
         self.invencivel = False
 
     def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):

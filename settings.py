@@ -124,6 +124,7 @@ FONT_TERMINAL = pygame.font.SysFont('Consolas', 22)
 FONT_BOTAO_LOJA = pygame.font.SysFont('Arial', 18, bold=True)
 FONT_RANKING = pygame.font.SysFont('Arial', 16)
 FONT_HUD_DETALHES = pygame.font.SysFont('Arial', 16)
+FONT_NOME_JOGADOR = pygame.font.SysFont('Arial', 16, bold=True) # <-- ADICIONE ESTA LINHA
 
 # 6.5. Constantes de Áudio 
 MAX_DISTANCIA_SOM_AUDIVEL = 1200 # Distância máxima (em pixels) que um som pode ser ouvido

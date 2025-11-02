@@ -102,6 +102,12 @@ variavel_texto_terminal = ""
 rodando = True
 max_bots_atual = s.MAX_BOTS # Controla o limite de bots dinamicamente
 
+# --- INÍCIO DA MODIFICAÇÃO (Variáveis de Nome) ---
+nome_jogador_input = "" # Começa vazio
+input_nome_ativo = False # A caixa de nome começa inativa
+LIMITE_MAX_NOME = 16 # Limite de 16 caracteres
+# --- FIM DA MODIFICAÇÃO ---
+
 # 4. Criação da Câmera
 camera = Camera(LARGURA_TELA, ALTURA_TELA)
 
@@ -120,7 +126,10 @@ grupo_player = pygame.sprite.GroupSingle()
 # grupo_todos_sprites = pygame.sprite.Group() # Opcional
 
 # 6. Criação do Jogador
-nave_player = Player(s.MAP_WIDTH // 2, s.MAP_HEIGHT // 2)
+# --- MODIFICAÇÃO ---
+# O nome real será definido em reiniciar_jogo()
+nave_player = Player(s.MAP_WIDTH // 2, s.MAP_HEIGHT // 2, nome=nome_jogador_input)
+# --- FIM DA MODIFICAÇÃO ---
 grupo_player.add(nave_player)
 # grupo_todos_sprites.add(nave_player)
 
@@ -143,6 +152,12 @@ def resetar_jogador():
     global estado_jogo, nave_player
 
     print("Resetando Jogador...")
+
+    # --- INÍCIO DA MODIFICAÇÃO (Define o nome do jogador) ---
+    # Garante que o nome do jogador seja o que foi digitado
+    nome_final = nome_jogador_input.strip() if nome_jogador_input.strip() else "Jogador"
+    nave_player.nome = nome_final
+    # --- FIM DA MODIFICAÇÃO ---
 
     # Define posição inicial (pode ser aleatória ou fixa)
     margem_spawn = 100
@@ -323,7 +338,7 @@ def spawnar_obstaculo(pos_referencia):
 def spawnar_boss_congelante_perto(pos_referencia):
     """ Spawna um Boss Congelante perto da posição de referência (para cheats). """
     # Usa a distância MÍNIMA de spawn, para que ele apareça na tela ou perto dela
-    x, y = calcular_posicao_spawn(pos_referencia, dist_min_do_jogador=s.SPAWN_DIST_MIN) 
+    x, y = calcular_posicao_spawn(pos_referencia, dist_min_do_jogador=s.SPAWN_DIST_MIN)
     novo_boss = BossCongelante(x, y)
     grupo_inimigos.add(novo_boss)
     grupo_boss_congelante.add(novo_boss)
@@ -365,6 +380,12 @@ def reiniciar_jogo():
     global estado_jogo, nave_player, max_bots_atual
 
     print("Reiniciando o Jogo...")
+
+    # --- INÍCIO DA MODIFICAÇÃO (Define o nome do jogador) ---
+    # Garante que o nome do jogador seja o que foi digitado no menu
+    nome_final = nome_jogador_input.strip() if nome_jogador_input.strip() else "Jogador"
+    nave_player.nome = nome_final
+    # --- FIM DA MODIFICAÇÃO ---
 
     # Limpa grupos
     grupo_projeteis_player.empty()
@@ -442,12 +463,49 @@ while rodando:
         if estado_jogo == "MENU":
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
+                
+                # --- INÍCIO DA MODIFICAÇÃO (Eventos do Menu) ---
                 if ui.RECT_BOTAO_JOGAR_OFF.collidepoint(mouse_pos):
-                    reiniciar_jogo()
+                    # Em vez de reiniciar, vai para a tela de nome
+                    estado_jogo = "GET_NAME"
+                    input_nome_ativo = True # Ativa a caixa de input por padrão
                 elif ui.RECT_BOTAO_MULTIPLAYER.collidepoint(mouse_pos):
                     print("Modo Multijogador ainda não implementado.")
                 elif ui.RECT_BOTAO_SAIR.collidepoint(mouse_pos):
                     rodando = False
+                # --- FIM DA MODIFICAÇÃO ---
+
+        # --- ADICIONE ESTE NOVO BLOCO ---
+        elif estado_jogo == "GET_NAME":
+            if event.type == pygame.KEYDOWN:
+                if input_nome_ativo:
+                    if event.key == pygame.K_RETURN:
+                        # Pressionar Enter na caixa de nome também inicia o jogo
+                        reiniciar_jogo()
+                        estado_jogo = "JOGANDO"
+                    elif event.key == pygame.K_BACKSPACE:
+                        nome_jogador_input = nome_jogador_input[:-1]
+                    else:
+                        # Adiciona o caractere digitado se não ultrapassar o limite
+                        if len(nome_jogador_input) < LIMITE_MAX_NOME:
+                            nome_jogador_input += event.unicode
+            
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mouse_pos = pygame.mouse.get_pos()
+                
+                # 1. Verifica clique no botão "Respawn"
+                if ui.RECT_LOGIN_BOTAO.collidepoint(mouse_pos):
+                    reiniciar_jogo()
+                    estado_jogo = "JOGANDO"
+                
+                # 2. Verifica clique na caixa de input
+                elif ui.RECT_LOGIN_INPUT.collidepoint(mouse_pos):
+                    input_nome_ativo = True
+                
+                # 3. Clique fora de ambos desativa a caixa
+                else:
+                    input_nome_ativo = False
+        # --- FIM DO NOVO BLOCO ---
 
         elif estado_jogo == "JOGANDO":
             if event.type == pygame.KEYDOWN:
@@ -457,16 +515,6 @@ while rodando:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos_tela = pygame.mouse.get_pos()
                 
-                # <--- BLOCO REMOVIDO ---
-                # O bloco de código abaixo estava aqui por engano. Ele pertence ao estado "PAUSE".
-                # if ui.RECT_BOTAO_VOLTAR_MENU.collidepoint(mouse_pos_tela): # <-- (Também usava 'mouse_pos' indefinido)
-                #     grupo_bots.empty()
-                #     grupo_inimigos.empty()
-                #     ...
-                #     estado_jogo = "MENU"
-                #     print("Voltando ao Menu Principal.")
-                # <--- FIM DO BLOCO REMOVIDO ---
-
                 if event.button == 1: # Esquerdo
                     if ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela):
                          estado_jogo = "LOJA"; print("Abrindo loja via clique no botão HUD...")
@@ -500,8 +548,8 @@ while rodando:
                     grupo_boss_congelante.empty() 
                     grupo_projeteis_bots.empty()
                     grupo_projeteis_inimigos.empty()
-                    grupo_projeteis_player.empty() 
-                    grupo_obstaculos.empty() 
+                    grupo_projeteis_player.empty()
+                    grupo_obstaculos.empty()
                     grupo_vidas_coletaveis.empty()
                     
                     estado_jogo = "MENU"
@@ -552,7 +600,9 @@ while rodando:
 
     # 12. Lógica de Atualização
     # --- Atualizações que rodam exceto no Menu e Pausa ---
-    if estado_jogo not in ["MENU", "PAUSE"]:
+    # --- MODIFICAÇÃO: Adicionado "GET_NAME" ---
+    if estado_jogo not in ["MENU", "PAUSE", "GET_NAME"]:
+    # --- FIM DA MODIFICAÇÃO ---
         # Atualiza Câmera
         camera.update(nave_player)
 
@@ -607,7 +657,7 @@ while rodando:
                     nave_player.ganhar_pontos(inimigo.pontos_por_morte);
                     # --- MODIFICAÇÃO DE SOM DE MORTE ---
                     if isinstance(inimigo, (InimigoMothership, BossCongelante)):
-                        if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty() 
+                        if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
                         if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
                             tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
                     else:
@@ -621,7 +671,7 @@ while rodando:
         for proj, bot_list in colisoes.items():
             for bot in bot_list:
                 # O jogador (dono dos projéteis) causa dano ao bot
-                bot.foi_atingido(nave_player.nivel_dano, estado_jogo, proj.posicao) 
+                bot.foi_atingido(nave_player.nivel_dano, estado_jogo, proj.posicao)
         # --- FIM DA CORREÇÃO ---
 
         # Projéteis Bots vs ...
@@ -653,7 +703,7 @@ while rodando:
                         bot_que_acertou.ganhar_pontos(inimigo.pontos_por_morte);
                         # --- MODIFICAÇÃO DE SOM DE MORTE ---
                         if isinstance(inimigo, (InimigoMothership, BossCongelante)):
-                            if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty() 
+                            if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
                             if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
                                 tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
                         else:
@@ -769,7 +819,15 @@ while rodando:
 
     # 13. Desenho
     if estado_jogo == "MENU":
+        # --- REVERTIDO ---
         ui.desenhar_menu(tela, LARGURA_TELA, ALTURA_TELA)
+        # --- FIM DA REVERSÃO ---
+
+    # --- ADICIONE ESTE NOVO BLOCO ---
+    elif estado_jogo == "GET_NAME":
+        ui.desenhar_tela_nome(tela, nome_jogador_input, input_nome_ativo)
+    # --- FIM DO NOVO BLOCO ---
+    
     else: # Desenha o jogo e as UIs sobrepostas
         # Fundo estrelado
         tela.fill(s.PRETO)
@@ -785,12 +843,14 @@ while rodando:
         for inimigo in grupo_inimigos: inimigo.desenhar_vida(tela, camera); tela.blit(inimigo.image, camera.apply(inimigo.rect)) # Desenha vida primeiro
         for bot in grupo_bots:
             bot.desenhar(tela, camera); bot.desenhar_vida(tela, camera)
+            bot.desenhar_nome(tela, camera)
             for aux in bot.grupo_auxiliares_ativos: aux.desenhar(tela, camera)
         for proj in grupo_projeteis_player: tela.blit(proj.image, camera.apply(proj.rect))
         for proj in grupo_projeteis_bots: tela.blit(proj.image, camera.apply(proj.rect))
         for proj in grupo_projeteis_inimigos: tela.blit(proj.image, camera.apply(proj.rect))
         if estado_jogo != "GAME_OVER": # Só desenha jogador se não morreu
             nave_player.desenhar(tela, camera); nave_player.desenhar_vida(tela, camera)
+            nave_player.desenhar_nome(tela, camera)
             for aux in nave_player.grupo_auxiliares_ativos: aux.desenhar(tela, camera)
         for explosao in grupo_explosoes: explosao.draw(tela, camera)
 
