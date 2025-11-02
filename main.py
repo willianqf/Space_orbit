@@ -200,18 +200,22 @@ def network_listener_thread(sock):
                         if not player_data: continue 
                         
                         parts_player = player_data.split(':')
-                        if len(parts_player) == 4:
+                        # --- INÍCIO DA MODIFICAÇÃO (Ler HP do Jogador) ---
+                        if len(parts_player) == 6: # NOME:X:Y:ANGULO:HP:MAX_HP
                             try:
                                 nome = parts_player[0]
                                 new_player_states[nome] = {
                                     'x': float(parts_player[1]),
                                     'y': float(parts_player[2]),
-                                    'angulo': float(parts_player[3])
+                                    'angulo': float(parts_player[3]),
+                                    'hp': int(parts_player[4]),
+                                    'max_hp': int(parts_player[5])
                                 }
+                            # --- FIM DA MODIFICAÇÃO ---
                             except ValueError:
                                 pass # Ignora dados mal formatados
                         
-                    # --- 3. Processa os Projéteis ---
+                    # --- 3. Processa os Projéteis (Sem alterações) ---
                     new_projectiles_list = []
                     proj_data_list = payload_proj.split(';')
                     
@@ -234,17 +238,22 @@ def network_listener_thread(sock):
                     for npc_data in npc_data_list:
                         if not npc_data: continue
                         
-                        # Formato: ID:TIPO:X:Y:ANGULO
+                        # --- INÍCIO DA MODIFICAÇÃO (Ler HP, MaxHP, Tamanho) ---
+                        # Formato: ID:TIPO:X:Y:ANGULO:HP:MAX_HP:TAMANHO (8 campos)
                         parts_npc = npc_data.split(':')
-                        if len(parts_npc) == 5:
+                        if len(parts_npc) == 8: 
                             try:
                                 npc_id = parts_npc[0]
                                 new_npc_states[npc_id] = {
                                     'tipo': parts_npc[1],
                                     'x': float(parts_npc[2]),
                                     'y': float(parts_npc[3]),
-                                    'angulo': float(parts_npc[4])
+                                    'angulo': float(parts_npc[4]),
+                                    'hp': int(parts_npc[5]),
+                                    'max_hp': int(parts_npc[6]),
+                                    'tamanho': int(parts_npc[7])
                                 }
+                            # --- FIM DA MODIFICAÇÃO ---
                             except ValueError:
                                 pass # Ignora dados mal formatados
 
@@ -425,9 +434,11 @@ def reiniciar_jogo(pos_spawn=None):
             online_players_states.clear()
             online_projectiles.clear()
             online_npcs.clear() # <-- ADICIONADO
+            # --- INÍCIO DA MODIFICAÇÃO (Adiciona HP) ---
             online_players_states[MEU_NOME_REDE] = {
-                'x': spawn_x, 'y': spawn_y, 'angulo': 0
+                'x': spawn_x, 'y': spawn_y, 'angulo': 0, 'hp': 5, 'max_hp': 5
             }
+            # --- FIM DA MODIFICAÇÃO ---
     else:
         # Modo Offline: Escolhe posição aleatória
         print("Spawnando em posição aleatória (Modo Offline)...")
@@ -931,9 +942,38 @@ while rodando:
                 my_state = online_players_states.get(MEU_NOME_REDE)
                 if my_state:
                     nova_pos = pygame.math.Vector2(my_state['x'], my_state['y'])
-                    nave_player.posicao = nave_player.posicao.lerp(nova_pos, 0.4) 
+                    # Só faz lerp se o jogador estiver vivo
+                    if nave_player.vida_atual > 0:
+                        nave_player.posicao = nave_player.posicao.lerp(nova_pos, 0.4) 
+                    
                     nave_player.angulo = my_state['angulo']
-                
+                    
+                    # --- INÍCIO DA MODIFICAÇÃO (Atualiza HP e verifica Morte) ---
+                    nova_vida = my_state.get('hp', nave_player.vida_atual)
+                    
+                    # Se o jogador tomou dano, atualiza a barra de vida
+                    if nova_vida < nave_player.vida_atual:
+                         nave_player.ultimo_hit_tempo = pygame.time.get_ticks()
+                         
+                    nave_player.vida_atual = nova_vida
+                    nave_player.max_vida = my_state.get('max_hp', nave_player.max_vida)
+
+                    # Verifica se o jogador morreu *neste* update
+                    if nave_player.vida_atual <= 0 and estado_jogo != "GAME_OVER":
+                        estado_jogo = "GAME_OVER"
+                        print("[CLIENTE] Você morreu!")
+                        # (Limpa inputs para não enviar inputs pós-morte)
+                        enviar_input_servidor("W_UP")
+                        enviar_input_servidor("A_UP")
+                        enviar_input_servidor("S_UP")
+                        enviar_input_servidor("D_UP")
+                        enviar_input_servidor("SPACE_UP")
+                    # --- FIM DA MODIFICAÇÃO ---
+            
+            # --- INÍCIO DA CORREÇÃO: REMOVER BLOCO DUPLICADO ---
+            # (O bloco de desenho dos NPCs que estava aqui foi removido)
+            # --- FIM DA CORREÇÃO ---
+            
             nave_player.rect.center = nave_player.posicao
             nave_player.update(grupo_projeteis_player, camera, client_socket)
         else:
@@ -1011,14 +1051,14 @@ while rodando:
         # --- INÍCIO DA MODIFICAÇÃO (Desenhar Online) ---
         online_players_copy = {}
         online_projectiles_copy = []
-        online_npcs_copy = {} # <-- ADICIONADO
+        online_npcs_copy = {} 
         
         if client_socket:
             # Modo Online: Copia os estados
             with network_state_lock:
                 online_players_copy = online_players_states.copy() 
                 online_projectiles_copy = list(online_projectiles) 
-                online_npcs_copy = online_npcs.copy() # <-- ADICIONADO
+                online_npcs_copy = online_npcs.copy() 
                 
             for nome, state in online_players_copy.items():
                 if nome == MEU_NOME_REDE:
@@ -1047,18 +1087,61 @@ while rodando:
             
             # --- ADICIONADO: Desenhar NPCs ---
             for npc_id, state in online_npcs_copy.items():
-                cor = s.CINZA_OBSTACULO # Cor padrão
-                tamanho = (30, 30)
                 
-                if state['tipo'] == 'perseguidor':
-                    cor = s.VERMELHO_PERSEGUIDOR
-                    tamanho = (30, 30) # Tamanho do InimigoPerseguidor
+                # --- INÍCIO DA CORREÇÃO (NPCs Minúsculos e Crash) ---
                 
-                # (Não podemos rodar o rect, então desenhamos um rect simples)
-                # (No futuro, podemos usar a mesma lógica de rotação do 'player')
-                npc_rect_mundo = pygame.Rect(0, 0, tamanho[0], tamanho[1])
-                npc_rect_mundo.center = (state['x'], state['y'])
-                pygame.draw.rect(tela, cor, camera.apply(npc_rect_mundo))
+                # 1. Define cor e tamanho padrão
+                cor = s.VERMELHO_PERSEGUIDOR # Cor padrão
+                tamanho = state.get('tamanho', 30) # Pega o 'tamanho' do servidor (int)
+                
+                # 2. Define a cor baseada no tipo (como no offline)
+                tipo = state.get('tipo')
+                if tipo == 'bomba':
+                    cor = s.AMARELO_BOMBA
+                elif tipo == 'tiro_rapido':
+                    cor = s.AZUL_TIRO_RAPIDO
+                elif tipo == 'atordoador':
+                    cor = s.ROXO_ATORDOADOR
+                elif tipo == 'atirador_rapido':
+                    cor = s.ROXO_ATIRADOR_RAPIDO
+                elif tipo == 'rapido':
+                    cor = s.LARANJA_RAPIDO
+                # else: usa VERMELHO_PERSEGUIDOR
+                
+                # 3. Cria uma Surface (imagem) para este NPC
+                # (Não usamos mais a 'imagem_original' do jogador)
+                # Esta é a lógica do 'InimigoBase' offline
+                base_img = pygame.Surface((tamanho, tamanho))
+                base_img.fill(cor)
+                
+                # 4. Roda e desenha a imagem
+                img_rotacionada = pygame.transform.rotate(base_img, state['angulo'])
+                pos_rect = img_rotacionada.get_rect(center=(state['x'], state['y']))
+                
+                tela.blit(img_rotacionada, camera.apply(pos_rect))
+                
+                # --- (Desenhar Barra de Vida Online) ---
+                npc_hp = state.get('hp', 0)
+                npc_max_hp = state.get('max_hp', npc_hp if npc_hp > 0 else 3) # Pega o max_hp
+                
+                if npc_hp < npc_max_hp: # Só desenha se não estiver com HP cheio
+                    LARGURA_BARRA = tamanho # 'tamanho' agora é um INT
+                    ALTURA_BARRA = 4
+                    OFFSET_Y = (tamanho / 2) + 10 # Barra abaixo
+                    
+                    pos_x_mundo = state['x'] - LARGURA_BARRA / 2
+                    pos_y_mundo = state['y'] + OFFSET_Y 
+                    
+                    percentual = max(0, npc_hp / npc_max_hp)
+                    largura_vida_atual = LARGURA_BARRA * percentual
+                    
+                    rect_fundo_mundo = pygame.Rect(pos_x_mundo, pos_y_mundo, LARGURA_BARRA, ALTURA_BARRA)
+                    rect_vida_mundo = pygame.Rect(pos_x_mundo, pos_y_mundo, largura_vida_atual, ALTURA_BARRA)
+                    
+                    pygame.draw.rect(tela, s.VERMELHO_VIDA_FUNDO, camera.apply(rect_fundo_mundo))
+                    pygame.draw.rect(tela, s.VERDE_VIDA, camera.apply(rect_vida_mundo))
+                # --- FIM DA CORREÇÃO ---
+                
             # --- FIM DO BLOCO ADICIONADO ---
 
         else:

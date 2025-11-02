@@ -13,6 +13,9 @@ PORT = 5555         # Porta para escutar
 MAX_JOGADORES = 16
 TICK_RATE = 60 # 60 atualizações por segundo
 
+COLISAO_JOGADOR_PROJ_DIST_SQ = (15 + 5)**2
+# COLISAO_NPC_PROJ_DIST_SQ = (15 + 5)**2 # Removido, pois agora usamos o tamanho do NPC
+
 # --- (Estado de Jogo Unificado - Sem alterações) ---
 player_states = {}
 network_projectiles = []
@@ -22,7 +25,7 @@ game_state_lock = threading.Lock()
 # --- FIM ---
 
 
-# --- (Constantes de Jogo e IA - COM ADIÇÕES) ---
+# --- (Constantes de Jogo e IA - Sem alterações) ---
 COOLDOWN_TIRO = 250 # ms
 VELOCIDADE_PROJETIL = 10
 OFFSET_PONTA_TIRO = 25 
@@ -34,13 +37,9 @@ SPAWN_DIST_MIN = s.SPAWN_DIST_MIN
 COOLDOWN_TIRO_PERSEGUIDOR = 2000 
 DISTANCIA_TIRO_PERSEGUIDOR_SQ = 500**2 
 VELOCIDADE_PROJETIL_NPC = 7 
-
-# --- INÍCIO DA MODIFICAÇÃO (Problemas 1 e 2: Constantes de Mira) ---
-# (Valor de settings.py)
-MAX_TARGET_LOCK_DISTANCE_SQ = s.MAX_TARGET_LOCK_DISTANCE**2 # 1000 * 1000
-# (Valor de settings.py)
-TARGET_CLICK_SIZE_SQ = (s.TARGET_CLICK_SIZE / 2)**2 # (150/2)^2 = 75^2
-# --- FIM DA MODIFICAÇÃO ---
+MAX_TARGET_LOCK_DISTANCE_SQ = s.MAX_TARGET_LOCK_DISTANCE**2 
+TARGET_CLICK_SIZE_SQ = (s.TARGET_CLICK_SIZE / 2)**2 
+# --- FIM ---
 
 
 # --- (Função server_calcular_posicao_spawn - Sem alterações) ---
@@ -62,48 +61,39 @@ def server_calcular_posicao_spawn(pos_referencia_lista):
             return (float(x), float(y)) 
 # --- FIM ---
 
-# --- INÍCIO DA MODIFICAÇÃO (Problemas 1 e 3: Lógica de Rotação) ---
+# --- (Função update_player_logic - Sem alterações) ---
 def update_player_logic(player_state):
     """ Calcula a nova posição, ângulo E processa o tiro de UM jogador. """
     
-    # --- 1. Lógica de Rotação (REESCRITA para usar ID) ---
+    # --- 1. Lógica de Rotação ---
     angulo_alvo = None
     
-    # Se o jogador tem um alvo travado (agora é um ID, ex: "npc_1")
     if player_state['alvo_lock']:
         target_id = player_state['alvo_lock']
         alvo_coords = None
         alvo_encontrado = False
 
-        # Procura o alvo na lista de NPCs
-        # (Esta função corre DENTRO do game_loop lock, por isso é seguro ler network_npcs)
         for npc in network_npcs: 
             if npc['id'] == target_id:
                 alvo_coords = (npc['x'], npc['y'])
                 alvo_encontrado = True
                 break
         
-        # (No futuro, procurar também em 'player_states' para PvP)
-        
-        # Se o alvo não foi encontrado (morreu ou desconectou)
         if not alvo_encontrado:
-            player_state['alvo_lock'] = None # Cancela a trava
+            player_state['alvo_lock'] = None 
         else:
             target_x, target_y = alvo_coords
             
-            # Problema 1: Verifica a distância (como no offline)
             dist_sq = (target_x - player_state['x'])**2 + (target_y - player_state['y'])**2
             if dist_sq > MAX_TARGET_LOCK_DISTANCE_SQ:
-                player_state['alvo_lock'] = None # Cancela (muito longe)
+                player_state['alvo_lock'] = None 
             else:
-                # Se passou em tudo, mira no alvo
                 vec_x = target_x - player_state['x']
                 vec_y = target_y - player_state['y']
                 if (vec_x**2 + vec_y**2) > 0: 
                      radianos = math.atan2(vec_y, vec_x)
                      angulo_alvo = -math.degrees(radianos) - 90 
 
-    # Se NÃO tem trava, usa o mouse de movimento (clique direito) para mirar
     elif player_state['alvo_mouse']:
         target_x, target_y = player_state['alvo_mouse']
         vec_x = target_x - player_state['x']
@@ -114,14 +104,13 @@ def update_player_logic(player_state):
              
     if angulo_alvo is not None:
         player_state['angulo'] = angulo_alvo
-    # Se não houver mira (nem trava, nem mouse), usa as teclas A/D
     elif player_state['teclas']['a']:
         player_state['angulo'] += s.VELOCIDADE_ROTACAO_NAVE
     elif player_state['teclas']['d']:
         player_state['angulo'] -= s.VELOCIDADE_ROTACAO_NAVE
     player_state['angulo'] %= 360
 
-    # --- 2. Lógica de Movimento (Sem alterações, já está correta) ---
+    # --- 2. Lógica de Movimento ---
     velocidade_atual = VELOCIDADE_MOVIMENTO_NAVE
     nova_pos_x = player_state['x']
     nova_pos_y = player_state['y']
@@ -156,7 +145,7 @@ def update_player_logic(player_state):
         else:
             player_state['alvo_mouse'] = None 
 
-    # --- 3. Limitar ao Mapa (Clamping) (Sem alterações) ---
+    # --- 3. Limitar ao Mapa (Clamping) ---
     meia_largura = 15 
     meia_altura = 15
     nova_pos_x = max(meia_largura, min(nova_pos_x, s.MAP_WIDTH - meia_largura))
@@ -165,7 +154,7 @@ def update_player_logic(player_state):
     player_state['x'] = nova_pos_x
     player_state['y'] = nova_pos_y
 
-    # --- 4. Lógica de Tiro (Sem alterações) ---
+    # --- 4. Lógica de Tiro ---
     if player_state['teclas']['space'] or player_state['alvo_lock']:
         agora_ms = int(time.time() * 1000) 
         if agora_ms - player_state['ultimo_tiro_tempo'] > player_state['cooldown_tiro']:
@@ -184,9 +173,9 @@ def update_player_logic(player_state):
             }
             return novo_projetil
     return None
-# --- FIM DA MODIFICAÇÃO ---
+# --- FIM ---
 
-# --- (Função update_npc_logic - COM TIROS - Sem alterações) ---
+# --- (Função update_npc_logic - Sem alterações) ---
 def update_npc_logic(npc, players_pos_lista):
     """ Atualiza a lógica de IA para um NPC e retorna um projétil se atirar. """
     
@@ -211,19 +200,35 @@ def update_npc_logic(npc, players_pos_lista):
     vec_y = alvo_pos[1] - npc['y']
     dist = math.sqrt(dist_min_sq)
 
+    # --- INÍCIO DA MODIFICAÇÃO (Usa a velocidade do tipo de NPC) ---
+    # (Por enquanto, todos usam a mesma velocidade, exceto 'bomba')
+    velocidade = VELOCIDADE_PERSEGUIDOR
+    if npc['tipo'] == 'rapido':
+        velocidade = 4.0 # (Valor de InimigoRapido)
+    elif npc['tipo'] == 'bomba':
+        velocidade = 3.0 # (Valor de InimigoBomba)
+    elif npc['tipo'] == 'tiro_rapido':
+        velocidade = 1.5
+    elif npc['tipo'] == 'atordoador':
+        velocidade = 1.0
+        
     if dist_min_sq > DISTANCIA_PARAR_PERSEGUIDOR_SQ:
         dir_x = vec_x / dist
         dir_y = vec_y / dist
-        npc['x'] += dir_x * VELOCIDADE_PERSEGUIDOR
-        npc['y'] += dir_y * VELOCIDADE_PERSEGUIDOR
+        npc['x'] += dir_x * velocidade
+        npc['y'] += dir_y * velocidade
+    # --- FIM DA MODIFICAÇÃO ---
         
     # Atualiza o ângulo (sempre mira no alvo)
     radianos = math.atan2(vec_y, vec_x)
     npc['angulo'] = -math.degrees(radianos) - 90
     npc['angulo'] %= 360
     
-    # 3. Lógica de Tiro
-    if dist_min_sq < DISTANCIA_TIRO_PERSEGUIDOR_SQ:
+    # 3. Lógica de Tiro (Ignora 'bomba')
+    if npc['tipo'] == 'bomba':
+        return None # Bombas não atiram
+        
+    if dist_min_sq < DISTANCIA_TIRO_PERSEGUIDOR_SQ: # (Pode-se usar distâncias diferentes por tipo)
         agora_ms = int(time.time() * 1000)
         if agora_ms - npc['ultimo_tiro_tempo'] > npc['cooldown_tiro']:
             npc['ultimo_tiro_tempo'] = agora_ms
@@ -232,13 +237,21 @@ def update_npc_logic(npc, players_pos_lista):
             dir_y = vec_y / dist
             angulo_rad_proj = radianos 
             
+            # --- INÍCIO DA MODIFICAÇÃO (Velocidade do Projétil) ---
+            velocidade_proj = VELOCIDADE_PROJETIL_NPC
+            if npc['tipo'] == 'tiro_rapido':
+                velocidade_proj = 22 # (Valor de ProjetilInimigoRapido)
+            elif npc['tipo'] == 'rapido':
+                velocidade_proj = 12 # (Valor de ProjetilInimigoRapidoCurto)
+            # --- FIM DA MODIFICAÇÃO ---
+
             novo_projetil = {
                 'id': f"{npc['id']}_{agora_ms}", 
                 'owner_nome': npc['id'],
                 'x': npc['x'], 'y': npc['y'], 
                 'pos_inicial_x': npc['x'], 'pos_inicial_y': npc['y'],
                 'angulo_rad': angulo_rad_proj, 
-                'velocidade': VELOCIDADE_PROJETIL_NPC,
+                'velocidade': velocidade_proj,
                 'dano': 1, 
                 'tipo': 'npc' 
             }
@@ -246,14 +259,67 @@ def update_npc_logic(npc, players_pos_lista):
             
     return None 
 # --- FIM ---
-        
 
-# --- (Função game_loop - COM TIROS - Sem alterações) ---
+# --- INÍCIO DA MODIFICAÇÃO (Spawn Aleatório) ---
+def server_spawnar_inimigo_aleatorio(x, y, npc_id):
+    """
+    Cria um dicionário de estado para um novo NPC aleatório.
+    Baseado na lógica offline de 'spawnar_inimigo_aleatorio'.
+    """
+    chance = random.random()
+    tipo = "perseguidor" # Padrão
+    hp = 3
+    max_hp = 3
+    tamanho = 30
+    cooldown_tiro = COOLDOWN_TIRO_PERSEGUIDOR # Padrão
+    
+    # (Valores baseados em 'enemies.py')
+    if chance < 0.05: 
+        tipo = "bomba"
+        hp, max_hp = 1, 1
+        tamanho = 25
+        cooldown_tiro = 999999 # Não atira
+    elif chance < 0.10: 
+        tipo = "tiro_rapido"
+        hp, max_hp = 10, 10
+        tamanho = 30
+        cooldown_tiro = 1500
+    elif chance < 0.15: 
+        tipo = "atordoador"
+        hp, max_hp = 5, 5
+        tamanho = 30
+        cooldown_tiro = 5000
+    elif chance < 0.35: 
+        tipo = "atirador_rapido"
+        hp, max_hp = 1, 1
+        tamanho = 30
+        cooldown_tiro = 500
+    elif chance < 0.55: 
+        tipo = "rapido"
+        hp, max_hp = 5, 5
+        tamanho = 30
+        cooldown_tiro = 800
+    # else: usa o padrão 'perseguidor' (hp=3, max_hp=3, tamanho=30, cooldown=2000)
+
+    return {
+        'id': npc_id,
+        'tipo': tipo,
+        'x': float(x), 'y': float(y),
+        'angulo': 0.0,
+        'hp': hp,
+        'max_hp': max_hp, # <-- ADICIONADO
+        'tamanho': tamanho, # <-- ADICIONADO
+        'cooldown_tiro': cooldown_tiro, 
+        'ultimo_tiro_tempo': 0 
+    }
+# --- FIM DA MODIFICAÇÃO ---
+
+
 def game_loop():
     """
     O loop principal do servidor.
     """
-    global next_npc_id
+    global next_npc_id, network_npcs, network_projectiles 
     
     print("[GAME LOOP INICIADO] O servidor está agora a calcular e a enviar o estado.")
     
@@ -265,10 +331,14 @@ def game_loop():
         novos_projeteis = []
         
         with game_state_lock:
+            agora_ms = int(time.time() * 1000) 
+            projeteis_para_remover = [] 
+            npcs_para_remover = [] 
+
             # --- Parte 1: Atualizar Jogadores (Mover e Disparar) ---
             posicoes_jogadores = [] 
             for state in player_states.values():
-                if state.get('handshake_completo', False):
+                if state.get('handshake_completo', False) and state.get('hp', 0) > 0:
                     posicoes_jogadores.append( (state['x'], state['y']) )
                     
                     novo_proj = update_player_logic(state)
@@ -279,9 +349,7 @@ def game_loop():
             novos_projeteis.clear() 
 
             # --- Parte 2: Atualizar Projéteis (Mover) ---
-            projeteis_para_remover = []
             for proj in network_projectiles:
-                
                 if proj['tipo'] == 'player':
                     proj['x'] += -math.sin(proj['angulo_rad']) * proj['velocidade']
                     proj['y'] += -math.cos(proj['angulo_rad']) * proj['velocidade']
@@ -295,37 +363,92 @@ def game_loop():
                 elif not s.MAP_RECT.collidepoint((proj['x'], proj['y'])):
                     projeteis_para_remover.append(proj)
             
-            for proj in projeteis_para_remover:
-                network_projectiles.remove(proj)
-            
             # --- Parte 3: Spawns e Atualização de NPCs ---
             if posicoes_jogadores: 
                 # Spawna novos NPCs
                 if len(network_npcs) < s.MAX_INIMIGOS:
                     spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_jogadores)
                     
-                    novo_npc = {
-                        'id': f"npc_{next_npc_id}",
-                        'tipo': "perseguidor",
-                        'x': spawn_x,
-                        'y': spawn_y,
-                        'angulo': 0.0,
-                        'hp': 3,
-                        'cooldown_tiro': COOLDOWN_TIRO_PERSEGUIDOR, 
-                        'ultimo_tiro_tempo': 0 
-                    }
+                    # --- INÍCIO DA MODIFICAÇÃO (Spawn Aleatório) ---
+                    novo_npc = server_spawnar_inimigo_aleatorio(spawn_x, spawn_y, f"npc_{next_npc_id}")
+                    # --- FIM DA MODIFICAÇÃO ---
+                    
                     network_npcs.append(novo_npc)
                     next_npc_id += 1
                 
+                # --- INÍCIO DA MODIFICAÇÃO (IA para todos os tipos) ---
                 # Atualiza IA dos NPCs
                 for npc in network_npcs:
-                    novo_proj_npc = update_npc_logic(npc, posicoes_jogadores)
+                    # (Apenas jogadores vivos são alvos)
+                    # Executa a lógica para todos
+                    novo_proj_npc = update_npc_logic(npc, posicoes_jogadores) 
                     if novo_proj_npc:
                         novos_projeteis.append(novo_proj_npc)
+                # --- FIM DA MODIFICAÇÃO ---
                 
                 network_projectiles.extend(novos_projeteis)
 
-            # --- Parte 4: Lógica de Colisão (Futuro) ---
+            # --- Parte 4: Lógica de Colisão ---
+            projeteis_ativos = network_projectiles[:] 
+
+            for proj in projeteis_ativos:
+                if proj in projeteis_para_remover:
+                    continue
+
+                if proj['tipo'] == 'player':
+                    # Projéteis de Jogador vs NPCs
+                    for npc in network_npcs:
+                        if npc in npcs_para_remover: 
+                            continue
+                        
+                        # --- INÍCIO DA MODIFICAÇÃO (Hitbox Dinâmica) ---
+                        # (Raio_NPC/2 + Raio_Proj_5)^2
+                        dist_colisao_sq = ( (npc['tamanho']/2 + 5)**2 ) 
+                        dist_sq = (npc['x'] - proj['x'])**2 + (npc['y'] - proj['y'])**2
+                        
+                        if dist_sq < dist_colisao_sq:
+                        # --- FIM DA MODIFICAÇÃO ---
+                            npc['hp'] -= proj['dano']
+                            projeteis_para_remover.append(proj) 
+                            
+                            if npc['hp'] <= 0:
+                                npcs_para_remover.append(npc) 
+                            
+                            break 
+                
+                elif proj['tipo'] == 'npc':
+                    # Projéteis de NPC vs Jogadores
+                    for player_state in player_states.values():
+                        if player_state['hp'] <= 0 or not player_state.get('handshake_completo', False):
+                            continue
+
+                        dist_sq = (player_state['x'] - proj['x'])**2 + (player_state['y'] - proj['y'])**2
+                        
+                        if dist_sq < COLISAO_JOGADOR_PROJ_DIST_SQ:
+                            if agora_ms - player_state.get('ultimo_hit_tempo', 0) > 150:
+                                player_state['hp'] -= proj['dano']
+                                player_state['ultimo_hit_tempo'] = agora_ms
+                                projeteis_para_remover.append(proj) 
+                                
+                                if player_state['hp'] <= 0:
+                                    print(f"[SERVIDOR] Jogador {player_state['nome']} morreu!")
+                                
+                                break 
+
+            # --- Limpeza ---
+            if projeteis_para_remover:
+                projeteis_a_manter = []
+                for p in network_projectiles:
+                    if p not in projeteis_para_remover:
+                        projeteis_a_manter.append(p)
+                network_projectiles = projeteis_a_manter
+            
+            if npcs_para_remover:
+                network_npcs = [n for n in network_npcs if n not in npcs_para_remover]
+                for state in player_states.values():
+                    if state.get('alvo_lock') in [npc['id'] for npc in npcs_para_remover]:
+                        state['alvo_lock'] = None
+            
             
             # --- Parte 5: Construir a string de estado global ---
             if not player_states: 
@@ -336,7 +459,7 @@ def game_loop():
             for state in player_states.values():
                 if state.get('handshake_completo', False):
                     estado_str = (
-                        f"{state['nome']}:{state['x']:.1f}:{state['y']:.1f}:{state['angulo']:.0f}"
+                        f"{state['nome']}:{state['x']:.1f}:{state['y']:.1f}:{state['angulo']:.0f}:{state['hp']}:{state['max_hp']}"
                     )
                     lista_de_estados.append(estado_str)
             payload_players = ";".join(lista_de_estados)
@@ -349,15 +472,17 @@ def game_loop():
 
             lista_de_npcs = []
             for npc in network_npcs:
+                # --- INÍCIO DA MODIFICAÇÃO (Enviar HP, MaxHP e Tamanho) ---
+                # Formato: ID:TIPO:X:Y:ANGULO:HP:MAX_HP:TAMANHO (8 campos)
                 npc_str = (
-                    f"{npc['id']}:{npc['tipo']}:{npc['x']:.1f}:{npc['y']:.1f}:{npc['angulo']:.0f}"
+                    f"{npc['id']}:{npc['tipo']}:{npc['x']:.1f}:{npc['y']:.1f}:{npc['angulo']:.0f}:{npc['hp']}:{npc['max_hp']}:{npc['tamanho']}"
                 )
+                # --- FIM DA MODIFICAÇÃO ---
                 lista_de_npcs.append(npc_str)
             payload_npcs = ";".join(lista_de_npcs)
             
             full_message = f"STATE|{payload_players}|PROJ|{payload_proj}|NPC|{payload_npcs}\n"
             full_message_bytes = full_message.encode('utf-8')
-            
             # --- Parte 6: Enviar a string global para TODOS os jogadores ---
             clientes_mortos = []
             for conn, state in player_states.items():
@@ -401,17 +526,7 @@ def handle_client(conn, addr):
     
     try:
         # --- ETAPA 1: Receber o nome do jogador ---
-        data = conn.recv(2048)
-        if not data:
-            raise ConnectionError("Cliente desconectou antes de enviar o nome.")
-            
-        nome_jogador = data.decode('utf-8')
-        
-        with game_state_lock:
-            for state in player_states.values():
-                if state['nome'] == nome_jogador:
-                    nome_jogador = f"{nome_jogador}_{random.randint(1, 99)}"
-                    break
+        # ... (código existente sem alterações) ...
         
         print(f"[{addr}] Jogador '{nome_jogador}' juntou-se.")
 
@@ -432,11 +547,18 @@ def handle_client(conn, addr):
             'ultimo_tiro_tempo': 0, 
             'cooldown_tiro': COOLDOWN_TIRO, 
             'nivel_dano': 1,
-            'handshake_completo': False 
+            'handshake_completo': False,
+            
+            # --- INÍCIO DA MODIFICAÇÃO (Adicionar HP) ---
+            'max_hp': 5, # (Baseado no 4 + nivel_max_vida 1 do 'ships.py')
+            'hp': 5,
+            'ultimo_hit_tempo': 0 # Para cooldown de dano (invencibilidade momentânea)
+            # --- FIM DA MODIFICAÇÃO ---
         }
         with game_state_lock:
             player_states[conn] = player_state
         
+        # ... (resto da função 'handle_client' sem alterações) ...
         response_string = f"BEMVINDO|{nome_jogador}|{int(spawn_x)}|{int(spawn_y)}"
         
         print(f"[{addr}] Enviando dados de spawn para '{nome_jogador}': {response_string}")
@@ -455,12 +577,15 @@ def handle_client(conn, addr):
             
             inputs = data.decode('utf-8').splitlines()
             
-            # --- INÍCIO DA MODIFICAÇÃO (Problema 2: Lógica de Clique) ---
-            # (Precisamos do lock aqui para ler 'network_npcs' em segurança)
             with game_state_lock: 
-            # --- FIM DA MODIFICAÇÃO ---
                 if conn not in player_states:
                     break 
+                
+                # --- INÍCIO DA MODIFICAÇÃO (Processar input apenas se vivo) ---
+                # Se o jogador está morto, ignora os inputs de movimento/mira
+                if player_state.get('hp', 0) <= 0:
+                    continue
+                # --- FIM DA MODIFICAÇÃO ---
                 
                 for input_str in inputs:
                     if not input_str: continue 
@@ -497,11 +622,9 @@ def handle_client(conn, addr):
                     elif input_str.startswith("CLICK_MOVE|"):
                         parts = input_str.split('|')
                         player_state['alvo_mouse'] = (int(parts[1]), int(parts[2]))
-                        # NÃO limpa alvo_lock
                         player_state['teclas']['w'] = False 
                         player_state['teclas']['s'] = False
                     
-                    # --- INÍCIO DA MODIFICAÇÃO (Problema 2: Lógica de Clique Vazio) ---
                     elif input_str.startswith("CLICK_TARGET|"):
                         parts = input_str.split('|')
                         click_x = int(parts[1])
@@ -510,26 +633,20 @@ def handle_client(conn, addr):
                         alvo_encontrado_id = None
                         dist_min_sq = float('inf')
 
-                        # Verifica se o clique acertou um NPC
-                        # (Como estamos dentro do lock, é seguro ler 'network_npcs')
                         for npc in network_npcs:
-                            # (Usamos 75*75, que é o raio do TARGET_CLICK_SIZE)
                             dist_sq = (npc['x'] - click_x)**2 + (npc['y'] - click_y)**2
                             if dist_sq < TARGET_CLICK_SIZE_SQ and dist_sq < dist_min_sq:
                                 dist_min_sq = dist_sq
                                 alvo_encontrado_id = npc['id']
                         
-                        # (No futuro, adicionar verificação de outros jogadores aqui)
-
                         if alvo_encontrado_id:
-                            player_state['alvo_lock'] = alvo_encontrado_id # Trava no ID
+                            player_state['alvo_lock'] = alvo_encontrado_id 
                             print(f"[{addr}] Travou mira no NPC {alvo_encontrado_id}")
                         else:
-                            player_state['alvo_lock'] = None # Clique no vazio
+                            player_state['alvo_lock'] = None 
                             print(f"[{addr}] Mira limpa (clique no vazio)")
                         
-                        player_state['alvo_mouse'] = None # Trava cancela mouse
-                    # --- FIM DA MODIFICAÇÃO ---
+                        player_state['alvo_mouse'] = None 
 
 
     except ConnectionResetError:
@@ -538,7 +655,6 @@ def handle_client(conn, addr):
         print(f"[{addr}] Erro de conexão: {e}")
     except Exception as e:
         print(f"[{addr} - {nome_jogador}] Erro: {e}")
-
     # Quando o loop 'while' termina (cliente desconectou)
     print(f"[CONEXÃO TERMINADA] {addr} ({nome_jogador}) desconetou.")
     
