@@ -103,19 +103,18 @@ client_socket = None
 
 # --- INÍCIO DA MODIFICAÇÃO (Estado de Rede Global) ---
 listener_thread_running = False 
-listener_thread_object = None # <-- RENOMEADO (era 'network_listener_thread')
+listener_thread_object = None # Variável que guarda a thread
 
 MEU_NOME_REDE = "" # O nosso nome confirmado pelo servidor
 
-# Dicionário para guardar o estado dos jogadores (incluindo nós)
+# Dicionário para guardar o estado dos jogadores
 online_players_states = {}
 # Lista para guardar os projéteis
-online_projectiles = [] # Lista de tuplos: [(x, y, tipo), ...]
+online_projectiles = [] 
+# Dicionário para guardar os NPCs
+online_npcs = {} # Formato: { "npc_id_1": {"x": 0, "y": 0, "angulo": 0, "tipo": "..."} }
 
-# Um único 'lock' para proteger ambos os estados,
-# já que eles são atualizados pela mesma mensagem
 network_state_lock = threading.Lock() 
-
 network_buffer = "" 
 # --- FIM DA MODIFICAÇÃO ---
 
@@ -123,6 +122,7 @@ network_buffer = ""
 camera = Camera(LARGURA_TELA, ALTURA_TELA)
 
 # 5. Grupos de Sprites
+# (Usados apenas para o modo OFFLINE e efeitos visuais locais)
 grupo_projeteis_player = pygame.sprite.Group()
 grupo_projeteis_bots = pygame.sprite.Group()
 grupo_projeteis_inimigos = pygame.sprite.Group()
@@ -157,10 +157,10 @@ for _ in range(s.NUM_ESTRELAS):
 def network_listener_thread(sock):
     """
     Corre numa thread separada. Escuta por dados do servidor
-    e atualiza os estados globais (jogadores e projéteis).
+    e atualiza os estados globais (jogadores, projéteis e NPCs).
     """
     global listener_thread_running, network_buffer, estado_jogo
-    global online_players_states, online_projectiles
+    global online_players_states, online_projectiles, online_npcs
     
     print("[Thread de Rede] Iniciada.")
     listener_thread_running = True
@@ -176,21 +176,21 @@ def network_listener_thread(sock):
                 
             network_buffer += data.decode('utf-8')
             
-            # Processa todas as mensagens completas (terminadas em \n) no buffer
             while '\n' in network_buffer:
                 message, network_buffer = network_buffer.split('\n', 1)
                 
-                # --- Processa a nova mensagem STATE|...|PROJ|... ---
+                # --- Processa a nova mensagem STATE|...|PROJ|...|NPC|... ---
                 if message.startswith("STATE|"):
                     
-                    # 1. Divide a mensagem em parte dos Jogadores e parte dos Projéteis
-                    parts = message.split("|PROJ|")
-                    if len(parts) != 2:
-                        print(f"[Thread de Rede] Recebeu mensagem 'STATE' mal formatada (sem |PROJ|): {message}")
+                    # 1. Divide a mensagem
+                    parts = message.split('|')
+                    if len(parts) < 6 or parts[0] != 'STATE' or parts[2] != 'PROJ' or parts[4] != 'NPC':
+                        print(f"[Thread de Rede] Recebeu mensagem 'STATE' mal formatada: {message}")
                         continue
                     
-                    payload_players = parts[0][6:] # Remove "STATE|"
-                    payload_proj = parts[1]
+                    payload_players = parts[1]
+                    payload_proj = parts[3]
+                    payload_npcs = parts[5]
                     
                     # --- 2. Processa os Jogadores ---
                     new_player_states = {}
@@ -209,7 +209,7 @@ def network_listener_thread(sock):
                                     'angulo': float(parts_player[3])
                                 }
                             except ValueError:
-                                print(f"[Thread de Rede] Recebeu dados 'PLAYER' mal formatados: {player_data}")
+                                pass # Ignora dados mal formatados
                         
                     # --- 3. Processa os Projéteis ---
                     new_projectiles_list = []
@@ -221,20 +221,43 @@ def network_listener_thread(sock):
                         parts_proj = proj_data.split(':')
                         if len(parts_proj) == 3: # X:Y:TIPO
                             try:
-                                # Guarda como um tuplo (x, y, tipo)
                                 new_projectiles_list.append(
                                     (float(parts_proj[0]), float(parts_proj[1]), parts_proj[2])
                                 )
                             except ValueError:
-                                print(f"[Thread de Rede] Recebeu dados 'PROJ' mal formatados: {proj_data}")
+                                pass # Ignora dados mal formatados
 
-                    # --- 4. Atualiza os dicionários globais de forma segura ---
+                    # --- 4. Processa os NPCs ---
+                    new_npc_states = {}
+                    npc_data_list = payload_npcs.split(';')
+                    
+                    for npc_data in npc_data_list:
+                        if not npc_data: continue
+                        
+                        # Formato: ID:TIPO:X:Y:ANGULO
+                        parts_npc = npc_data.split(':')
+                        if len(parts_npc) == 5:
+                            try:
+                                npc_id = parts_npc[0]
+                                new_npc_states[npc_id] = {
+                                    'tipo': parts_npc[1],
+                                    'x': float(parts_npc[2]),
+                                    'y': float(parts_npc[3]),
+                                    'angulo': float(parts_npc[4])
+                                }
+                            except ValueError:
+                                pass # Ignora dados mal formatados
+
+                    # --- 5. Atualiza os dicionários globais de forma segura ---
                     with network_state_lock:
                         online_players_states.clear()
                         online_players_states.update(new_player_states)
                         
                         online_projectiles.clear()
                         online_projectiles.extend(new_projectiles_list)
+                        
+                        online_npcs.clear()
+                        online_npcs.update(new_npc_states)
             
         except socket.timeout:
             continue 
@@ -257,7 +280,6 @@ def network_listener_thread(sock):
 
 def tentar_conectar(ip, porta, nome):
     """ Tenta conectar ao servidor, enviar o nome e iniciar a thread de escuta. """
-    # --- MODIFICAÇÃO (Bug 3: Usar 'listener_thread_object') ---
     global client_socket, estado_jogo, nome_jogador_input, listener_thread_object, MEU_NOME_REDE
     
     nome_final = nome.strip() if nome.strip() else "Jogador"
@@ -277,6 +299,7 @@ def tentar_conectar(ip, porta, nome):
         data = client_socket.recv(2048) 
         resposta_servidor = data.decode('utf-8')
         
+        # Lê o novo formato "BEMVINDO|NOME_FINAL|X|Y"
         if resposta_servidor.startswith("BEMVINDO|"):
             parts = resposta_servidor.split('|')
             
@@ -289,7 +312,6 @@ def tentar_conectar(ip, porta, nome):
                     print(f"Servidor aceitou! Nome: '{MEU_NOME_REDE}'. Spawn: ({spawn_x}, {spawn_y}).")
                     
                     client_socket.settimeout(None) 
-                    # --- USA A VARIÁVEL RENOMEADA ---
                     listener_thread_object = threading.Thread(target=network_listener_thread, args=(client_socket,), daemon=True)
                     listener_thread_object.start()
 
@@ -323,7 +345,7 @@ def tentar_conectar(ip, porta, nome):
         client_socket = None
         estado_jogo = "MENU" 
         return False
-    
+
 def enviar_input_servidor(input_data):
     """ Envia uma string de input para o servidor, se conectado. """
     global listener_thread_running, estado_jogo
@@ -338,7 +360,6 @@ def enviar_input_servidor(input_data):
 
 def fechar_conexao():
     """ Função auxiliar para fechar o socket e parar a thread de escuta. """
-    # --- MODIFICAÇÃO (Bug 3: Usar 'listener_thread_object') ---
     global client_socket, listener_thread_running, listener_thread_object, MEU_NOME_REDE
     
     if listener_thread_running:
@@ -354,23 +375,26 @@ def fechar_conexao():
             pass 
         client_socket = None
     
-    # --- USA A VARIÁVEL RENOMEADA ---
     if listener_thread_object:
-        listener_thread_object.join(timeout=1.0) # <-- Esta linha causava o crash
+        listener_thread_object.join(timeout=1.0) 
         if listener_thread_object.is_alive():
             print("[AVISO] A thread de escuta não parou.")
         listener_thread_object = None
         
+    # Limpa os dados de rede
     MEU_NOME_REDE = ""
     with network_state_lock:
         online_players_states.clear()
         online_projectiles.clear()
+        online_npcs.clear() # <-- ADICIONADO
+
+# --- FIM DA MODIFICAÇÃO (Funções de Rede) ---
 
 
 def reiniciar_jogo(pos_spawn=None): 
     """ Prepara o jogo, limpando grupos e resetando o jogador. """
     global estado_jogo, nave_player, max_bots_atual
-    
+
     print("Reiniciando o Jogo...")
 
     if client_socket and MEU_NOME_REDE:
@@ -379,14 +403,12 @@ def reiniciar_jogo(pos_spawn=None):
         nave_player.nome = nome_jogador_input.strip() if nome_jogador_input.strip() else "Jogador"
 
     # Limpa grupos
-    # (Grupos de entidades do mundo)
     grupo_obstaculos.empty() 
     grupo_vidas_coletaveis.empty() 
     grupo_inimigos.empty() 
     grupo_motherships.empty() 
     grupo_boss_congelante.empty() 
     grupo_bots.empty() 
-    # (Grupos de efeitos)
     grupo_projeteis_player.empty() 
     grupo_projeteis_bots.empty() 
     grupo_projeteis_inimigos.empty() 
@@ -401,7 +423,8 @@ def reiniciar_jogo(pos_spawn=None):
         # Atualiza o estado local
         with network_state_lock:
             online_players_states.clear()
-            online_projectiles.clear() # <-- ADICIONADO
+            online_projectiles.clear()
+            online_npcs.clear() # <-- ADICIONADO
             online_players_states[MEU_NOME_REDE] = {
                 'x': spawn_x, 'y': spawn_y, 'angulo': 0
             }
@@ -784,26 +807,23 @@ while rodando:
 
 
     # 12. Lógica de Atualização
-# 12. Lógica de Atualização
     if estado_jogo not in ["MENU", "PAUSE", "GET_NAME", "GET_SERVER_INFO"]:
         camera.update(nave_player)
+
+        # Define listas de alvos (apenas para auxiliares)
         lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + [nave_player] + list(grupo_bots)
 
-        # --- INÍCIO DA MODIFICAÇÃO (Bugs 1 e 2: Lógica Offline) ---
+        # --- LÓGICA DE JOGO OFFLINE ---
         if client_socket is None: 
-            # --- LÓGICA DE JOGO OFFLINE ---
-            
-            # 1. Atualizar IA
             lista_alvos_naves = [nave_player] + list(grupo_bots)
             grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos)
             grupo_inimigos.update(lista_alvos_naves, grupo_projeteis_inimigos, s.DESPAWN_DIST)
             
-            # 2. Atualizar Projéteis Locais
             grupo_projeteis_player.update()
             grupo_projeteis_bots.update()
             grupo_projeteis_inimigos.update()
             
-            # 3. Spawns Locais
+            # Spawns locais
             if len(grupo_vidas_coletaveis) < s.MAX_VIDAS_COLETAVEIS: spawnar_vida(nave_player.posicao)
             if len(grupo_obstaculos) < s.MAX_OBSTACULOS: spawnar_obstaculo(nave_player.posicao)
             contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership)))
@@ -812,7 +832,7 @@ while rodando:
             if estado_jogo == "JOGANDO" and len(grupo_bots) < max_bots_atual: spawnar_bot(nave_player.posicao)
             if len(grupo_boss_congelante) < s.MAX_BOSS_CONGELANTE: spawnar_boss_congelante(nave_player.posicao)
             
-            # 4. Colisões Locais (Gerais) <-- ESTE BLOCO ESTAVA A FALTAR
+            # Colisões locais
             colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_obstaculos, True, True)
             for _, obst_list in colisoes.items():
                 for obst in obst_list: 
@@ -922,11 +942,10 @@ while rodando:
 
         # Colisões QUE AFETAM O JOGADOR (Apenas Offline)
         if client_socket is None:
-            # (Este bloco continha a colisão Projétil-Inimigo vs Jogador)
             colisoes_proj_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_inimigos, False)
             for proj in colisoes_proj_inimigo_player:
                 if isinstance(proj, ProjetilCongelante):
-                    nave_player.aplicar_congelamento(s.DURACAO_CONGELAMENTO)
+                    nave_player.aplicar_lentidao(s.DURACAO_CONGELAMENTO)
                 elif isinstance(proj, ProjetilTeleguiadoLento):
                     nave_player.aplicar_lentidao(6000)
                 else:
@@ -935,7 +954,6 @@ while rodando:
                 proj.kill()
             
             # --- ADICIONADO (Bugs 1 e 2: Colisões de RAM vs Jogador) ---
-            # (Esta secção também estava em falta)
             colisoes_proj_bot_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_bots, True)
             for proj in colisoes_proj_bot_player:
                 if nave_player.foi_atingido(1, estado_jogo, proj.posicao):
@@ -993,16 +1011,18 @@ while rodando:
         # --- INÍCIO DA MODIFICAÇÃO (Desenhar Online) ---
         online_players_copy = {}
         online_projectiles_copy = []
+        online_npcs_copy = {} # <-- ADICIONADO
         
         if client_socket:
             # Modo Online: Copia os estados
             with network_state_lock:
                 online_players_copy = online_players_states.copy() 
-                online_projectiles_copy = list(online_projectiles) # Cria uma cópia da lista
+                online_projectiles_copy = list(online_projectiles) 
+                online_npcs_copy = online_npcs.copy() # <-- ADICIONADO
                 
             for nome, state in online_players_copy.items():
                 if nome == MEU_NOME_REDE:
-                    continue # O jogador principal é desenhado abaixo
+                    continue 
                 
                 # Desenha a nave (triângulo) e nome
                 img_rotacionada = pygame.transform.rotate(nave_player.imagem_original, state['angulo'])
@@ -1016,15 +1036,31 @@ while rodando:
             
             # Desenha os projéteis da rede
             for (x, y, tipo) in online_projectiles_copy:
-                # (Podemos diferenciar as cores no futuro)
                 cor = s.VERMELHO_TIRO
-                if tipo == 'npc': # (Se o servidor enviar 'npc')
+                if tipo == 'npc': 
                     cor = s.LARANJA_TIRO_INIMIGO
+                elif tipo == 'player':
+                    cor = s.VERMELHO_TIRO
                 
-                # Desenha um círculo simples
                 pos_tela = camera.apply(pygame.Rect(x, y, 0, 0)).topleft
                 pygame.draw.circle(tela, cor, pos_tela, 5) # Raio 5
+            
+            # --- ADICIONADO: Desenhar NPCs ---
+            for npc_id, state in online_npcs_copy.items():
+                cor = s.CINZA_OBSTACULO # Cor padrão
+                tamanho = (30, 30)
                 
+                if state['tipo'] == 'perseguidor':
+                    cor = s.VERMELHO_PERSEGUIDOR
+                    tamanho = (30, 30) # Tamanho do InimigoPerseguidor
+                
+                # (Não podemos rodar o rect, então desenhamos um rect simples)
+                # (No futuro, podemos usar a mesma lógica de rotação do 'player')
+                npc_rect_mundo = pygame.Rect(0, 0, tamanho[0], tamanho[1])
+                npc_rect_mundo.center = (state['x'], state['y'])
+                pygame.draw.rect(tela, cor, camera.apply(npc_rect_mundo))
+            # --- FIM DO BLOCO ADICIONADO ---
+
         else:
             # Modo Offline: Desenha os bots e inimigos locais
             for inimigo in grupo_inimigos: inimigo.desenhar_vida(tela, camera); tela.blit(inimigo.image, camera.apply(inimigo.rect))
@@ -1057,9 +1093,6 @@ while rodando:
                  online_players_copy = online_players_states.copy()
         
         ui.desenhar_minimapa(tela, nave_player, grupo_bots, estado_jogo, s.MAP_WIDTH, s.MAP_HEIGHT, online_players_copy, MEU_NOME_REDE)
-        # --- FIM DA MODIFICAÇÃO ---
-
-        # --- MODIFICAÇÃO (Ranking) ---
         if client_socket:
             # (Futuramente, o servidor deve enviar os pontos também)
             lista_ordenada = sorted([nave_player], key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
@@ -1083,6 +1116,7 @@ while rodando:
             ui.desenhar_terminal(tela, variavel_texto_terminal, LARGURA_TELA, ALTURA_TELA)
         elif estado_jogo == "GAME_OVER":
             ui.desenhar_game_over(tela, LARGURA_TELA, ALTURA_TELA)
+        # --- FIM DO CÓDIGO QUE ESTAVA EM FALTA ---
 
     # 14. Atualiza a Tela e Controla FPS
     pygame.display.flip()
