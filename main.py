@@ -6,12 +6,20 @@ import math
 import socket
 import threading 
 from settings import (MAX_TOTAL_UPGRADES, VOLUME_BASE_EXPLOSAO_BOSS, VOLUME_BASE_EXPLOSAO_NPC, 
-                      VOLUME_BASE_TIRO_LASER_LONGO, VOLUME_BASE_TIRO_CONGELANTE)
+                      VOLUME_BASE_TIRO_LASER_LONGO, VOLUME_BASE_TIRO_CONGELANTE,
+                      # --- ADIÇÃO PARA SONS ONLINE ---
+                      VOLUME_BASE_TIRO_INIMIGO, VOLUME_BASE_TIRO_PLAYER
+                      # --- FIM DA ADIÇÃO ---
+                      )
 # 1. Importações dos Módulos
 import settings as s 
 from camera import Camera
 from projectiles import Projetil, ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento
 from entities import Obstaculo, VidaColetavel
+
+# --- ADIÇÃO PARA EXPLOSÃO ONLINE ---
+from effects import Explosao 
+# --- FIM DA ADIÇÃO ---
 
 from projectiles import Projetil, ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento, ProjetilCongelante 
 
@@ -109,7 +117,7 @@ MEU_NOME_REDE = "" # O nosso nome confirmado pelo servidor
 
 # Dicionário para guardar o estado dos jogadores
 online_players_states = {}
-# Lista para guardar os projéteis
+# Lista para guardar os projéteis (agora dicts)
 online_projectiles = [] 
 # Dicionário para guardar os NPCs
 online_npcs = {} # Formato: { "npc_id_1": {"x": 0, "y": 0, "angulo": 0, "tipo": "..."} }
@@ -138,6 +146,12 @@ grupo_player = pygame.sprite.GroupSingle()
 # 6. Criação do Jogador
 nave_player = Player(s.MAP_WIDTH // 2, s.MAP_HEIGHT // 2, nome=nome_jogador_input)
 grupo_player.add(nave_player)
+
+# --- INÍCIO: Globais para rastreamento de estado online ---
+online_projectile_ids_last_frame = set()
+online_npcs_last_frame = {}
+online_players_last_frame = {}
+# --- FIM ---
 
 # 7. Define Referências Globais para Módulos
 set_global_enemy_references(grupo_explosoes, grupo_inimigos)
@@ -200,8 +214,8 @@ def network_listener_thread(sock):
                         if not player_data: continue 
                         
                         parts_player = player_data.split(':')
-                        # --- INÍCIO DA MODIFICAÇÃO (Ler HP do Jogador) ---
-                        if len(parts_player) == 6: # NOME:X:Y:ANGULO:HP:MAX_HP
+                        # --- MODIFICAÇÃO 1: Ler 7 campos (com pontos) ---
+                        if len(parts_player) == 7: # NOME:X:Y:ANGULO:HP:MAX_HP:PONTOS
                             try:
                                 nome = parts_player[0]
                                 new_player_states[nome] = {
@@ -209,13 +223,14 @@ def network_listener_thread(sock):
                                     'y': float(parts_player[2]),
                                     'angulo': float(parts_player[3]),
                                     'hp': int(parts_player[4]),
-                                    'max_hp': int(parts_player[5])
+                                    'max_hp': int(parts_player[5]),
+                                    'pontos': int(parts_player[6]) # <-- ADICIONADO
                                 }
-                            # --- FIM DA MODIFICAÇÃO ---
+                            # --- FIM MODIFICAÇÃO 1 ---
                             except ValueError:
                                 pass # Ignora dados mal formatados
                         
-                    # --- 3. Processa os Projéteis (Sem alterações) ---
+                    # --- 3. Processa os Projéteis (Agora com ID) ---
                     new_projectiles_list = []
                     proj_data_list = payload_proj.split(';')
                     
@@ -223,11 +238,17 @@ def network_listener_thread(sock):
                         if not proj_data: continue
                         
                         parts_proj = proj_data.split(':')
-                        if len(parts_proj) == 3: # X:Y:TIPO
+                        # --- MODIFICAÇÃO AQUI ---
+                        if len(parts_proj) == 4: # ID:X:Y:TIPO
                             try:
+                                # Armazena como um dicionário
                                 new_projectiles_list.append(
-                                    (float(parts_proj[0]), float(parts_proj[1]), parts_proj[2])
+                                    {'id': parts_proj[0], 
+                                     'x': float(parts_proj[1]), 
+                                     'y': float(parts_proj[2]), 
+                                     'tipo': parts_proj[3]}
                                 )
+                            # --- FIM DA MODIFICAÇÃO ---
                             except ValueError:
                                 pass # Ignora dados mal formatados
 
@@ -434,11 +455,11 @@ def reiniciar_jogo(pos_spawn=None):
             online_players_states.clear()
             online_projectiles.clear()
             online_npcs.clear() # <-- ADICIONADO
-            # --- INÍCIO DA MODIFICAÇÃO (Adiciona HP) ---
+            # --- MODIFICAÇÃO 2: Adicionar pontos ao estado inicial ---
             online_players_states[MEU_NOME_REDE] = {
-                'x': spawn_x, 'y': spawn_y, 'angulo': 0, 'hp': 5, 'max_hp': 5
+                'x': spawn_x, 'y': spawn_y, 'angulo': 0, 'hp': 5, 'max_hp': 5, 'pontos': 0
             }
-            # --- FIM DA MODIFICAÇÃO ---
+            # --- FIM DA MODIFICAÇÃO 2 ---
     else:
         # Modo Offline: Escolhe posição aleatória
         print("Spawnando em posição aleatória (Modo Offline)...")
@@ -811,15 +832,70 @@ while rodando:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
                 if ui.RECT_BOTAO_REINICIAR.collidepoint(mouse_pos):
+                    # --- MODIFICAÇÃO AQUI ---
                     if client_socket:
-                        resetar_para_menu()
+                        # Modo Online: Apenas pede para respawnar
+                        enviar_input_servidor("RESPAWN_ME")
+                        # (O estado de jogo mudará sozinho quando o listener receber o novo HP)
                     else:
-                        reiniciar_jogo() # Modo offline, reinicia
+                        # Modo Offline: Reinicia o jogo localmente
+                        reiniciar_jogo()
+                    # --- FIM DA MODIFICAÇÃO ---
 
 
     # 12. Lógica de Atualização
     if estado_jogo not in ["MENU", "PAUSE", "GET_NAME", "GET_SERVER_INFO"]:
         camera.update(nave_player)
+
+        # --- INÍCIO DA CORREÇÃO DO BUG DE RESPAWN ---
+        if client_socket:
+            # Online: Atualiza a posição do jogador com base nos dados da rede
+            # ESTE BLOCO AGORA RODA MESMO EM "GAME_OVER"
+            with network_state_lock:
+                my_state = online_players_states.get(MEU_NOME_REDE)
+                if my_state:
+                    nova_pos = pygame.math.Vector2(my_state['x'], my_state['y'])
+                    # Só faz lerp se o jogador estiver vivo
+                    if nave_player.vida_atual > 0:
+                        nave_player.posicao = nave_player.posicao.lerp(nova_pos, 0.4) 
+                    
+                    nave_player.angulo = my_state['angulo']
+                    
+                    # --- INÍCIO DA MODIFICAÇÃO (Atualiza HP e verifica Morte/Respawn) ---
+                    nova_vida = my_state.get('hp', nave_player.vida_atual)
+                    
+                    # Detecta Respawn
+                    if nave_player.vida_atual <= 0 and nova_vida > 0 and estado_jogo == "GAME_OVER":
+                        print("[CLIENTE] Respawn detectado! Voltando ao jogo.")
+                        estado_jogo = "JOGANDO"
+
+                    # Se o jogador tomou dano, atualiza a barra de vida
+                    if nova_vida < nave_player.vida_atual:
+                         nave_player.ultimo_hit_tempo = pygame.time.get_ticks()
+                         
+                    nave_player.vida_atual = nova_vida
+                    nave_player.max_vida = my_state.get('max_hp', nave_player.max_vida)
+                    
+                    # --- CORREÇÃO PONTOS: Atualiza pontos do servidor ---
+                    nave_player.pontos = my_state.get('pontos', nave_player.pontos)
+                    # --- FIM DA CORREÇÃO PONTOS ---
+
+                    # Verifica se o jogador morreu *neste* update
+                    if nave_player.vida_atual <= 0 and estado_jogo != "GAME_OVER":
+                        estado_jogo = "GAME_OVER"
+                        print("[CLIENTE] Você morreu!")
+                        # (Limpa inputs para não enviar inputs pós-morte)
+                        enviar_input_servidor("W_UP")
+                        enviar_input_servidor("A_UP")
+                        enviar_input_servidor("S_UP")
+                        enviar_input_servidor("D_UP")
+                        enviar_input_servidor("SPACE_UP")
+                    # --- FIM DA MODIFICAÇÃO ---
+            
+            nave_player.rect.center = nave_player.posicao
+            # Chama o update do player (para estado de rede)
+            nave_player.update(grupo_projeteis_player, camera, client_socket)
+        # --- FIM DA CORREÇÃO DO BUG DE RESPAWN ---
 
         # Define listas de alvos (apenas para auxiliares)
         lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + [nave_player] + list(grupo_bots)
@@ -937,45 +1013,8 @@ while rodando:
     if estado_jogo == "JOGANDO":
         
         if client_socket:
-            # Online: Atualiza a posição do jogador com base nos dados da rede
-            with network_state_lock:
-                my_state = online_players_states.get(MEU_NOME_REDE)
-                if my_state:
-                    nova_pos = pygame.math.Vector2(my_state['x'], my_state['y'])
-                    # Só faz lerp se o jogador estiver vivo
-                    if nave_player.vida_atual > 0:
-                        nave_player.posicao = nave_player.posicao.lerp(nova_pos, 0.4) 
-                    
-                    nave_player.angulo = my_state['angulo']
-                    
-                    # --- INÍCIO DA MODIFICAÇÃO (Atualiza HP e verifica Morte) ---
-                    nova_vida = my_state.get('hp', nave_player.vida_atual)
-                    
-                    # Se o jogador tomou dano, atualiza a barra de vida
-                    if nova_vida < nave_player.vida_atual:
-                         nave_player.ultimo_hit_tempo = pygame.time.get_ticks()
-                         
-                    nave_player.vida_atual = nova_vida
-                    nave_player.max_vida = my_state.get('max_hp', nave_player.max_vida)
-
-                    # Verifica se o jogador morreu *neste* update
-                    if nave_player.vida_atual <= 0 and estado_jogo != "GAME_OVER":
-                        estado_jogo = "GAME_OVER"
-                        print("[CLIENTE] Você morreu!")
-                        # (Limpa inputs para não enviar inputs pós-morte)
-                        enviar_input_servidor("W_UP")
-                        enviar_input_servidor("A_UP")
-                        enviar_input_servidor("S_UP")
-                        enviar_input_servidor("D_UP")
-                        enviar_input_servidor("SPACE_UP")
-                    # --- FIM DA MODIFICAÇÃO ---
-            
-            # --- INÍCIO DA CORREÇÃO: REMOVER BLOCO DUPLICADO ---
-            # (O bloco de desenho dos NPCs que estava aqui foi removido)
-            # --- FIM DA CORREÇÃO ---
-            
-            nave_player.rect.center = nave_player.posicao
-            nave_player.update(grupo_projeteis_player, camera, client_socket)
+            # O bloco de atualização do jogador online foi MOVIDO PARA CIMA
+            pass
         else:
             # Offline: O update processa o input e calcula o movimento
             nave_player.update(grupo_projeteis_player, camera, None)
@@ -1059,10 +1098,51 @@ while rodando:
                 online_players_copy = online_players_states.copy() 
                 online_projectiles_copy = list(online_projectiles) 
                 online_npcs_copy = online_npcs.copy() 
-                
+            
+            # --- INÍCIO DA LÓGICA DE EFEITOS ONLINE ---
+            
+            # 1. EFEITOS DE TIRO (Sons)
+            current_projectile_ids = {proj['id'] for proj in online_projectiles_copy}
+            new_projectiles = [proj for proj in online_projectiles_copy if proj['id'] not in online_projectile_ids_last_frame]
+            
+            for proj in new_projectiles:
+                pos_som = pygame.math.Vector2(proj['x'], proj['y'])
+                if proj['tipo'] == 'npc':
+                    tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, pos_som, nave_player.posicao, VOLUME_BASE_TIRO_INIMIGO)
+                else: # 'player'
+                    tocar_som_posicional(s.SOM_TIRO_PLAYER, pos_som, nave_player.posicao, VOLUME_BASE_TIRO_PLAYER)
+
+            # 2. EFEITOS DE EXPLOSÃO (NPCs)
+            current_npc_ids = set(online_npcs_copy.keys())
+            dead_npc_states = [npc for npc_id, npc in online_npcs_last_frame.items() if npc_id not in current_npc_ids]
+            
+            for npc in dead_npc_states:
+                pos_npc = pygame.math.Vector2(npc['x'], npc['y'])
+                # (Não sabemos se é boss, usamos explosão padrão)
+                explosao = Explosao(pos_npc, npc['tamanho'] // 2 + 5)
+                grupo_explosoes.add(explosao)
+                tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+
+            # 3. EFEITOS DE EXPLOSÃO (Jogadores)
+            current_player_names = set(online_players_copy.keys())
+            dead_player_states = [player for name, player in online_players_last_frame.items() if name not in current_player_names]
+            
+            for player in dead_player_states:
+                 pos_player = pygame.math.Vector2(player['x'], player['y'])
+                 explosao = Explosao(pos_player, 30 // 2 + 10) # Tamanho padrão da nave
+                 grupo_explosoes.add(explosao)
+                 tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_player, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+
+            # --- FIM DA LÓGICA DE EFEITOS ---
+
             for nome, state in online_players_copy.items():
                 if nome == MEU_NOME_REDE:
                     continue 
+                
+                # --- INÍCIO DA MODIFICAÇÃO (Esconder Mortos) ---
+                if state.get('hp', 0) <= 0:
+                    continue # Pula o desenho de jogadores mortos
+                # --- FIM DA MODIFICAÇÃO ---
                 
                 # Desenha a nave (triângulo) e nome
                 img_rotacionada = pygame.transform.rotate(nave_player.imagem_original, state['angulo'])
@@ -1075,7 +1155,8 @@ while rodando:
                 tela.blit(nome_surf, camera.apply(nome_rect))
             
             # Desenha os projéteis da rede
-            for (x, y, tipo) in online_projectiles_copy:
+            for proj_dict in online_projectiles_copy: # Mudou para proj_dict
+                x, y, tipo = proj_dict['x'], proj_dict['y'], proj_dict['tipo'] # Desempacota
                 cor = s.VERMELHO_TIRO
                 if tipo == 'npc': 
                     cor = s.LARANJA_TIRO_INIMIGO
@@ -1176,9 +1257,25 @@ while rodando:
                  online_players_copy = online_players_states.copy()
         
         ui.desenhar_minimapa(tela, nave_player, grupo_bots, estado_jogo, s.MAP_WIDTH, s.MAP_HEIGHT, online_players_copy, MEU_NOME_REDE)
+        
+        # --- MODIFICAÇÃO 3: Lógica do Ranking Online ---
         if client_socket:
-            # (Futuramente, o servidor deve enviar os pontos também)
-            lista_ordenada = sorted([nave_player], key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
+            # 1. Cria uma classe simples para o ranking
+            class RankingEntry:
+                def __init__(self, nome, pontos):
+                    self.nome = nome
+                    self.pontos = pontos
+            
+            # 2. Constrói a lista a partir dos dados da rede
+            lista_ranking = []
+            for nome, state in online_players_copy.items():
+                lista_ranking.append(RankingEntry(nome, state.get('pontos', 0)))
+                # (A linha que atualizava nave_player.pontos foi MOVIDA para a seção 12)
+
+            # 3. Ordena a lista
+            lista_ordenada = sorted(lista_ranking, key=lambda entry: entry.pontos, reverse=True)
+            top_5 = lista_ordenada[:5]
+            # --- FIM MODIFICAÇÃO 3 ---
         else:
             # Modo Offline (como estava antes)
             if estado_jogo != "GAME_OVER":
@@ -1187,6 +1284,7 @@ while rodando:
                 todos_os_jogadores = list(grupo_bots.sprites()) 
             lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
         
+        # A chamada para desenhar_ranking agora funciona para ambos os modos
         ui.desenhar_ranking(tela, top_5, nave_player)
         # --- FIM DA MODIFICAÇÃO (Ranking) ---
 
@@ -1202,6 +1300,22 @@ while rodando:
         # --- FIM DO CÓDIGO QUE ESTAVA EM FALTA ---
 
     # 14. Atualiza a Tela e Controla FPS
+    
+    # --- INÍCIO: Atualiza os rastreadores de estado ---
+    # Atualiza os rastreadores de estado para o próximo frame
+    if client_socket:
+        with network_state_lock:
+            # Recalcula os IDs/dicionários aqui para garantir que estão sincronizados
+            online_projectile_ids_last_frame = {p['id'] for p in online_projectiles}
+            online_npcs_last_frame = online_npcs.copy()
+            online_players_last_frame = online_players_states.copy()
+    else:
+        # Limpa se estiver offline para não reter dados
+        online_projectile_ids_last_frame.clear()
+        online_npcs_last_frame.clear()
+        online_players_last_frame.clear()
+    # --- FIM DO BLOCO ADICIONADO ---
+    
     pygame.display.flip()
     clock.tick(60)
 

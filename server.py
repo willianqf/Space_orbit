@@ -260,7 +260,7 @@ def update_npc_logic(npc, players_pos_lista):
     return None 
 # --- FIM ---
 
-# --- INÍCIO DA MODIFICAÇÃO (Spawn Aleatório) ---
+# --- MODIFICAÇÃO 1: Adicionar pontos_por_morte ---
 def server_spawnar_inimigo_aleatorio(x, y, npc_id):
     """
     Cria um dicionário de estado para um novo NPC aleatório.
@@ -272,6 +272,7 @@ def server_spawnar_inimigo_aleatorio(x, y, npc_id):
     max_hp = 3
     tamanho = 30
     cooldown_tiro = COOLDOWN_TIRO_PERSEGUIDOR # Padrão
+    pontos = 5 # Padrão
     
     # (Valores baseados em 'enemies.py')
     if chance < 0.05: 
@@ -279,27 +280,32 @@ def server_spawnar_inimigo_aleatorio(x, y, npc_id):
         hp, max_hp = 1, 1
         tamanho = 25
         cooldown_tiro = 999999 # Não atira
+        pontos = 3
     elif chance < 0.10: 
         tipo = "tiro_rapido"
         hp, max_hp = 10, 10
         tamanho = 30
         cooldown_tiro = 1500
+        pontos = 20
     elif chance < 0.15: 
         tipo = "atordoador"
         hp, max_hp = 5, 5
         tamanho = 30
         cooldown_tiro = 5000
+        pontos = 25
     elif chance < 0.35: 
         tipo = "atirador_rapido"
         hp, max_hp = 1, 1
         tamanho = 30
         cooldown_tiro = 500
+        pontos = 10
     elif chance < 0.55: 
         tipo = "rapido"
         hp, max_hp = 5, 5
         tamanho = 30
         cooldown_tiro = 800
-    # else: usa o padrão 'perseguidor' (hp=3, max_hp=3, tamanho=30, cooldown=2000)
+        pontos = 9
+    # else: usa o padrão 'perseguidor' (hp=3, max_hp=3, tamanho=30, cooldown=2000, pontos=5)
 
     return {
         'id': npc_id,
@@ -307,12 +313,13 @@ def server_spawnar_inimigo_aleatorio(x, y, npc_id):
         'x': float(x), 'y': float(y),
         'angulo': 0.0,
         'hp': hp,
-        'max_hp': max_hp, # <-- ADICIONADO
-        'tamanho': tamanho, # <-- ADICIONADO
+        'max_hp': max_hp,
+        'tamanho': tamanho,
         'cooldown_tiro': cooldown_tiro, 
-        'ultimo_tiro_tempo': 0 
+        'ultimo_tiro_tempo': 0,
+        'pontos_por_morte': pontos # <-- ADICIONADO
     }
-# --- FIM DA MODIFICAÇÃO ---
+# --- FIM DA MODIFICAÇÃO 1 ---
 
 
 def game_loop():
@@ -413,6 +420,16 @@ def game_loop():
                             
                             if npc['hp'] <= 0:
                                 npcs_para_remover.append(npc) 
+                                
+                                # --- MODIFICAÇÃO 3: Adicionar pontos ao jogador ---
+                                owner_nome = proj['owner_nome']
+                                # Encontra o estado do jogador que deu o tiro
+                                for p_conn, p_state in player_states.items():
+                                    if p_state['nome'] == owner_nome:
+                                        p_state['pontos'] += npc.get('pontos_por_morte', 5) # Dá 5 pts se não encontrar
+                                        print(f"Jogador {owner_nome} ganhou {npc.get('pontos_por_morte', 5)} pontos. Total: {p_state['pontos']}") # Log
+                                        break
+                                # --- FIM MODIFICAÇÃO 3 ---
                             
                             break 
                 
@@ -458,15 +475,19 @@ def game_loop():
             lista_de_estados = []
             for state in player_states.values():
                 if state.get('handshake_completo', False):
+                    # --- MODIFICAÇÃO 4: Adicionar pontos ao estado ---
                     estado_str = (
-                        f"{state['nome']}:{state['x']:.1f}:{state['y']:.1f}:{state['angulo']:.0f}:{state['hp']}:{state['max_hp']}"
+                        f"{state['nome']}:{state['x']:.1f}:{state['y']:.1f}:{state['angulo']:.0f}:{state['hp']}:{state['max_hp']}:{state['pontos']}"
                     )
+                    # --- FIM MODIFICAÇÃO 4 ---
                     lista_de_estados.append(estado_str)
             payload_players = ";".join(lista_de_estados)
 
             lista_de_projeteis = []
             for proj in network_projectiles:
-                proj_str = f"{proj['x']:.1f}:{proj['y']:.1f}:{proj['tipo']}"
+                # --- MODIFICAÇÃO: Enviar ID do Projétil ---
+                proj_str = f"{proj['id']}:{proj['x']:.1f}:{proj['y']:.1f}:{proj['tipo']}"
+                # --- FIM DA MODIFICAÇÃO ---
                 lista_de_projeteis.append(proj_str)
             payload_proj = ";".join(lista_de_projeteis)
 
@@ -526,9 +547,31 @@ def handle_client(conn, addr):
     
     try:
         # --- ETAPA 1: Receber o nome do jogador ---
-        # ... (código existente sem alterações) ...
         
-        print(f"[{addr}] Jogador '{nome_jogador}' juntou-se.")
+        # --- INÍCIO DA MODIFICAÇÃO: Garantir Nome Único ---
+        data = conn.recv(1024)
+        nome_jogador_original = data.decode('utf-8')
+        
+        if not nome_jogador_original:
+            print(f"[{addr}] Desconectado (sem nome enviado).")
+            conn.close()
+            return
+        
+        nome_jogador = nome_jogador_original
+        with game_state_lock:
+            current_names = [p['nome'] for p in player_states.values()]
+            
+            i = 1
+            # Enquanto o nome já existir na lista, tenta um novo
+            while nome_jogador in current_names:
+                nome_jogador = f"{nome_jogador_original}_{i}"
+                i += 1
+        
+        if nome_jogador != nome_jogador_original:
+             print(f"[{addr}] Nome '{nome_jogador_original}' já estava em uso. Renomeado para '{nome_jogador}'.")
+        else:
+             print(f"[{addr}] Jogador '{nome_jogador}' juntou-se.")
+        # --- FIM DA MODIFICAÇÃO ---
 
         # --- ETAPA 2: Gerar Posição e Criar Estado ---
         with game_state_lock:
@@ -549,11 +592,12 @@ def handle_client(conn, addr):
             'nivel_dano': 1,
             'handshake_completo': False,
             
-            # --- INÍCIO DA MODIFICAÇÃO (Adicionar HP) ---
+            # --- MODIFICAÇÃO 2: Adicionar Pontos ---
             'max_hp': 5, # (Baseado no 4 + nivel_max_vida 1 do 'ships.py')
             'hp': 5,
-            'ultimo_hit_tempo': 0 # Para cooldown de dano (invencibilidade momentânea)
-            # --- FIM DA MODIFICAÇÃO ---
+            'ultimo_hit_tempo': 0,
+            'pontos': 0 # <-- ADICIONADO
+            # --- FIM MODIFICAÇÃO 2 ---
         }
         with game_state_lock:
             player_states[conn] = player_state
@@ -584,7 +628,26 @@ def handle_client(conn, addr):
                 # --- INÍCIO DA MODIFICAÇÃO (Processar input apenas se vivo) ---
                 # Se o jogador está morto, ignora os inputs de movimento/mira
                 if player_state.get('hp', 0) <= 0:
-                    continue
+                    # --- INÍCIO MODIFICAÇÃO: Checar Respawn ---
+                    for input_str in inputs:
+                        if input_str == "RESPAWN_ME":
+                            # Pega a posição de todos, exceto deste jogador
+                            posicoes_atuais = [(p['x'], p['y']) for p in player_states.values() if p['conn'] != conn]
+                            spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_atuais)
+                            
+                            player_state['x'] = spawn_x
+                            player_state['y'] = spawn_y
+                            player_state['hp'] = player_state['max_hp'] # Respawn com vida cheia
+                            player_state['alvo_lock'] = None
+                            player_state['alvo_mouse'] = None
+                            
+                            # --- CORREÇÃO: Zerar os pontos ---
+                            player_state['pontos'] = 0 
+                            # --- FIM DA CORREÇÃO ---
+                            
+                            print(f"[{addr}] Jogador {player_state['nome']} respawnou.")
+                    continue # Ignora todos os outros inputs se estiver morto
+                    # --- FIM MODIFICAÇÃO: Checar Respawn ---
                 # --- FIM DA MODIFICAÇÃO ---
                 
                 for input_str in inputs:
@@ -647,6 +710,8 @@ def handle_client(conn, addr):
                             print(f"[{addr}] Mira limpa (clique no vazio)")
                         
                         player_state['alvo_mouse'] = None 
+                    
+                    # (Input de RESPAWN_ME é tratado acima, quando o jogador está morto)
 
 
     except ConnectionResetError:
