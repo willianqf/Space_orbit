@@ -2,6 +2,7 @@
 import pygame
 import math
 import random
+import ui
 import settings as s # <--- ADICIONE AQUI
 from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, MAP_WIDTH, MAP_HEIGHT,
                       MAX_TARGET_LOCK_DISTANCE, MAX_NIVEL_MOTOR, # <-- CUSTO_BASE_MOTOR removido
@@ -555,10 +556,18 @@ class Player(Nave):
         self.quer_virar_esquerda = teclas[pygame.K_a] or teclas[pygame.K_LEFT]; self.quer_virar_direita = teclas[pygame.K_d] or teclas[pygame.K_RIGHT]
         self.quer_mover_frente = teclas[pygame.K_w] or teclas[pygame.K_UP]; self.quer_mover_tras = teclas[pygame.K_s] or teclas[pygame.K_DOWN]; self.quer_atirar = teclas[pygame.K_SPACE]
         mouse_buttons = pygame.mouse.get_pressed()
-        if mouse_buttons[2]:
-            mouse_pos_tela = pygame.mouse.get_pos(); camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
-            mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0], mouse_pos_tela[1] + camera_world_topleft[1])
-            self.posicao_alvo_mouse = mouse_pos_mundo; self.quer_mover_frente = False; self.quer_mover_tras = False
+        
+        # --- INÍCIO DA MODIFICAÇÃO (Mover para Botão Esquerdo) ---
+        # Alterado de mouse_buttons[2] (direito) para mouse_buttons[0] (esquerdo)
+        if mouse_buttons[0]:
+            mouse_pos_tela = pygame.mouse.get_pos()
+            # Verifica se o clique NÃO está sobre o botão de UI (para não mover ao clicar no HUD)
+            if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela):
+                camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
+                mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0], mouse_pos_tela[1] + camera_world_topleft[1])
+                self.posicao_alvo_mouse = mouse_pos_mundo; self.quer_mover_frente = False; self.quer_mover_tras = False
+        # --- FIM DA MODIFICAÇÃO ---
+                
         if self.quer_mover_frente or self.quer_mover_tras: self.posicao_alvo_mouse = None
 
 

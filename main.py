@@ -507,6 +507,58 @@ def reiniciar_jogo(pos_spawn=None):
     
     estado_jogo = "JOGANDO"
 
+# --- INÍCIO DA MODIFICAÇÃO (Bug #2) ---
+# Nova função para respawnar apenas o jogador no modo offline
+def respawn_player_offline(nave):
+    global estado_jogo
+    print("Respawnando jogador (Offline)...")
+
+    # 1. Encontra nova posição de spawn (longe de bots e inimigos)
+    pos_referencia_bots = [bot.posicao for bot in grupo_bots]
+    pos_referencia_inimigos = [inimigo.posicao for inimigo in grupo_inimigos]
+    pos_referencias_todas = pos_referencia_bots + pos_referencia_inimigos
+    
+    pos_referencia_spawn = pygame.math.Vector2(s.MAP_WIDTH // 2, s.MAP_HEIGHT // 2)
+    if pos_referencias_todas:
+         # Pega uma referência aleatória para calcular o spawn
+         pos_referencia_spawn = random.choice(pos_referencias_todas)
+
+    spawn_x, spawn_y = calcular_posicao_spawn(pos_referencia_spawn)
+    
+    nave.posicao = pygame.math.Vector2(spawn_x, spawn_y)
+    nave.rect.center = nave.posicao
+    print(f"Jogador respawnou em ({int(spawn_x)}, {int(spawn_y)})")
+
+    # 2. Reseta o estado do jogador (copiado de reiniciar_jogo)
+    nave.grupo_auxiliares_ativos.empty()
+    nave.lista_todas_auxiliares = [] 
+    for pos in Nave.POSICOES_AUXILIARES:
+        nova_aux = NaveAuxiliar(nave, pos)
+        nave.lista_todas_auxiliares.append(nova_aux)
+    
+    nave.pontos = 0 # Reinicia os pontos do jogador
+    nave.nivel_motor = 1
+    nave.nivel_dano = 1
+    nave.nivel_max_vida = 1
+    nave.nivel_escudo = 0
+    nave.velocidade_movimento_base = 4 + nave.nivel_motor
+    nave.max_vida = 4 + nave.nivel_max_vida
+    nave.vida_atual = nave.max_vida # Vida cheia
+    nave.pontos_upgrade_disponiveis = 0
+    nave.total_upgrades_feitos = 0
+    nave._pontos_acumulados_para_upgrade = 0
+    nave._indice_limiar = 0
+    nave._limiar_pontos_atual = nave._limiares[0]
+    nave.alvo_selecionado = None
+    nave.posicao_alvo_mouse = None
+    nave.ultimo_hit_tempo = 0
+    nave.tempo_fim_lentidao = 0
+    nave.rastro_particulas = []
+    
+    # 3. Define o estado de volta para JOGANDO
+    estado_jogo = "JOGANDO"
+# --- FIM DA MODIFICAÇÃO (Bug #2) ---
+
 def resetar_para_menu():
     """ Reseta o jogo de volta ao menu, fechando conexões. """
     global estado_jogo
@@ -628,14 +680,19 @@ ui.recalculate_ui_positions(LARGURA_TELA, ALTURA_TELA)
 while rodando:
     # 11. Tratamento de Eventos
     
+    # --- INÍCIO DA MODIFICAÇÃO (Mover para Botão Esquerdo) ---
     if estado_jogo == "JOGANDO" and client_socket:
         mouse_buttons = pygame.mouse.get_pressed()
-        if mouse_buttons[2]: # Botão direito está seguro
+        # Alterado de mouse_buttons[2] (direito) para mouse_buttons[0] (esquerdo)
+        if mouse_buttons[0]: 
             mouse_pos_tela = pygame.mouse.get_pos()
-            camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
-            mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0],
-                                                  mouse_pos_tela[1] + camera_world_topleft[1])
-            enviar_input_servidor(f"CLICK_MOVE|{int(mouse_pos_mundo.x)}|{int(mouse_pos_mundo.y)}")
+            # Verifica se o clique NÃO está sobre o botão de UI (para não mover ao clicar no HUD)
+            if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela):
+                camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
+                mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0],
+                                                      mouse_pos_tela[1] + camera_world_topleft[1])
+                enviar_input_servidor(f"CLICK_MOVE|{int(mouse_pos_mundo.x)}|{int(mouse_pos_mundo.y)}")
+    # --- FIM DA MODIFICAÇÃO ---
             
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -760,26 +817,32 @@ while rodando:
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos_tela = pygame.mouse.get_pos()
                 
-                if event.button == 1: # Esquerdo (Target Lock)
+                # --- INÍCIO DA MODIFICAÇÃO (Troca de Botões) ---
+                if event.button == 1: # Esquerdo (LMB)
+                    # O clique esquerdo agora só serve para a UI (botão Upgrade)
+                    # O movimento é tratado pelo check contínuo (mouse_buttons[0])
                     if ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela):
                          estado_jogo = "LOJA"; print("Abrindo loja via clique no botão HUD...")
-                    else: # Clique no mapa (Target Lock)
-                        camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
-                        mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0],
-                                                              mouse_pos_tela[1] + camera_world_topleft[1])
-                        if client_socket:
-                            enviar_input_servidor(f"CLICK_TARGET|{int(mouse_pos_mundo.x)}|{int(mouse_pos_mundo.y)}")
-                        else:
-                            # Lógica offline normal
-                            alvo_clicado = None
-                            todos_alvos_clicaveis = list(grupo_inimigos) + list(grupo_bots) + list(grupo_obstaculos)
-                            for alvo in todos_alvos_clicaveis:
-                                target_click_rect = pygame.Rect(0, 0, s.TARGET_CLICK_SIZE, s.TARGET_CLICK_SIZE)
-                                target_click_rect.center = alvo.posicao
-                                if target_click_rect.collidepoint(mouse_pos_mundo):
-                                    alvo_clicado = alvo
-                                    break
-                            nave_player.alvo_selecionado = alvo_clicado
+                
+                elif event.button == 3: # Direito (RMB)
+                    # O clique direito agora faz o Target Lock
+                    camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
+                    mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0],
+                                                          mouse_pos_tela[1] + camera_world_topleft[1])
+                    if client_socket:
+                        enviar_input_servidor(f"CLICK_TARGET|{int(mouse_pos_mundo.x)}|{int(mouse_pos_mundo.y)}")
+                    else:
+                        # Lógica offline normal de target
+                        alvo_clicado = None
+                        todos_alvos_clicaveis = list(grupo_inimigos) + list(grupo_bots) + list(grupo_obstaculos)
+                        for alvo in todos_alvos_clicaveis:
+                            target_click_rect = pygame.Rect(0, 0, s.TARGET_CLICK_SIZE, s.TARGET_CLICK_SIZE)
+                            target_click_rect.center = alvo.posicao
+                            if target_click_rect.collidepoint(mouse_pos_mundo):
+                                alvo_clicado = alvo
+                                break
+                        nave_player.alvo_selecionado = alvo_clicado
+                # --- FIM DA MODIFICAÇÃO ---
                 
         elif estado_jogo == "PAUSE":
             if event.type == pygame.KEYDOWN:
@@ -838,9 +901,10 @@ while rodando:
                         enviar_input_servidor("RESPAWN_ME")
                         # (O estado de jogo mudará sozinho quando o listener receber o novo HP)
                     else:
-                        # Modo Offline: Reinicia o jogo localmente
-                        reiniciar_jogo()
-                    # --- FIM DA MODIFICAÇÃO ---
+                        # --- INÍCIO DA MODIFICAÇÃO (Bug #2) ---
+                        # Modo Offline: Reinicia APENAS o jogador
+                        respawn_player_offline(nave_player)
+                        # --- FIM DA MODIFICAÇÃO (Bug #2) ---
 
 
     # 12. Lógica de Atualização
@@ -897,12 +961,27 @@ while rodando:
             nave_player.update(grupo_projeteis_player, camera, client_socket)
         # --- FIM DA CORREÇÃO DO BUG DE RESPAWN ---
 
+        # --- INÍCIO DA MODIFICAÇÃO (Bug #1) ---
         # Define listas de alvos (apenas para auxiliares)
-        lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + [nave_player] + list(grupo_bots)
+        # Se o jogo acabou, não inclua o jogador como um alvo válido
+        if estado_jogo == "JOGANDO":
+            lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + [nave_player] + list(grupo_bots)
+        else:
+            lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + list(grupo_bots)
+        # --- FIM DA MODIFICAÇÃO (Bug #1) ---
+
 
         # --- LÓGICA DE JOGO OFFLINE ---
         if client_socket is None: 
-            lista_alvos_naves = [nave_player] + list(grupo_bots)
+            
+            # --- INÍCIO DA MODIFICAÇÃO (Bug #1) ---
+            # Se o jogo acabou, não inclua o jogador como um alvo válido
+            if estado_jogo == "JOGANDO":
+                lista_alvos_naves = [nave_player] + list(grupo_bots)
+            else:
+                lista_alvos_naves = list(grupo_bots)
+            # --- FIM DA MODIFICAÇÃO (Bug #1) ---
+
             grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos)
             grupo_inimigos.update(lista_alvos_naves, grupo_projeteis_inimigos, s.DESPAWN_DIST)
             
@@ -1006,8 +1085,10 @@ while rodando:
         grupo_explosoes.update()
 
         # (Spawns de Vidas e Obstáculos também correm sempre)
-        if len(grupo_vidas_coletaveis) < s.MAX_VIDAS_COLETAVEIS: spawnar_vida(nave_player.posicao)
-        if len(grupo_obstaculos) < s.MAX_OBSTACULOS: spawnar_obstaculo(nave_player.posicao)
+        # --- MODIFICAÇÃO (Bug #2): Não spawna entidades se o jogador estiver morto ---
+        if estado_jogo == "JOGANDO":
+            if len(grupo_vidas_coletaveis) < s.MAX_VIDAS_COLETAVEIS: spawnar_vida(nave_player.posicao)
+            if len(grupo_obstaculos) < s.MAX_OBSTACULOS: spawnar_obstaculo(nave_player.posicao)
 
     # --- Atualizações e Colisões Específicas do Jogador (Só quando JOGANDO) ---
     if estado_jogo == "JOGANDO":
@@ -1278,7 +1359,8 @@ while rodando:
             # --- FIM MODIFICAÇÃO 3 ---
         else:
             # Modo Offline (como estava antes)
-            if estado_jogo != "GAME_OVER":
+            # --- MODIFICAÇÃO (Bug #1): Ranking não deve incluir jogador morto ---
+            if estado_jogo == "JOGANDO":
                 todos_os_jogadores = [nave_player] + list(grupo_bots.sprites())
             else:
                 todos_os_jogadores = list(grupo_bots.sprites()) 
