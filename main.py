@@ -1250,31 +1250,47 @@ while rodando:
             # --- ADICIONADO: Desenhar NPCs ---
             for npc_id, state in online_npcs_copy.items():
                 
-                # --- INÍCIO DA CORREÇÃO (NPCs Minúsculos e Crash) ---
+                # --- INÍCIO DA MODIFICAÇÃO (Desenho de Bosses Online) ---
                 
-                # 1. Define cor e tamanho padrão
-                cor = s.VERMELHO_PERSEGUIDOR # Cor padrão
-                tamanho = state.get('tamanho', 30) # Pega o 'tamanho' do servidor (int)
-                
-                # 2. Define a cor baseada no tipo (como no offline)
+                # 1. Pega tamanho e tipo
+                tamanho = state.get('tamanho', 30) # Pega o 'tamanho' do servidor
                 tipo = state.get('tipo')
-                if tipo == 'bomba':
+
+                # 2. Cria a Surface (imagem) base para este NPC
+                #    (Tornamos a Surface transparente (SRCALPHA) para o círculo)
+                base_img = pygame.Surface((tamanho, tamanho), pygame.SRCALPHA)
+                cor = s.VERMELHO_PERSEGUIDOR # Cor padrão
+
+                # 3. Define a cor E A FORMA baseada no tipo
+                if tipo == 'boss_congelante':
+                    cor = s.AZUL_CONGELANTE
+                    # Desenha um círculo (como no enemies.py)
+                    centro = tamanho // 2
+                    pygame.draw.circle(base_img, cor, (centro, centro), centro)
+                    pygame.draw.circle(base_img, s.BRANCO, (centro, centro), centro, 2) # Borda
+                
+                elif tipo == 'mothership':
+                    cor = s.CIANO_MOTHERSHIP
+                    base_img.fill(cor) # Desenha um quadrado
+
+                elif tipo == 'bomba':
                     cor = s.AMARELO_BOMBA
+                    base_img.fill(cor)
                 elif tipo == 'tiro_rapido':
                     cor = s.AZUL_TIRO_RAPIDO
+                    base_img.fill(cor)
                 elif tipo == 'atordoador':
                     cor = s.ROXO_ATORDOADOR
+                    base_img.fill(cor)
                 elif tipo == 'atirador_rapido':
                     cor = s.ROXO_ATIRADOR_RAPIDO
+                    base_img.fill(cor)
                 elif tipo == 'rapido':
                     cor = s.LARANJA_RAPIDO
-                # else: usa VERMELHO_PERSEGUIDOR
-                
-                # 3. Cria uma Surface (imagem) para este NPC
-                # (Não usamos mais a 'imagem_original' do jogador)
-                # Esta é a lógica do 'InimigoBase' offline
-                base_img = pygame.Surface((tamanho, tamanho))
-                base_img.fill(cor)
+                    base_img.fill(cor)
+                else: 
+                    # Padrão (perseguidor, etc.)
+                    base_img.fill(cor)
                 
                 # 4. Roda e desenha a imagem
                 img_rotacionada = pygame.transform.rotate(base_img, state['angulo'])
@@ -1302,7 +1318,7 @@ while rodando:
                     
                     pygame.draw.rect(tela, s.VERMELHO_VIDA_FUNDO, camera.apply(rect_fundo_mundo))
                     pygame.draw.rect(tela, s.VERDE_VIDA, camera.apply(rect_vida_mundo))
-                # --- FIM DA CORREÇÃO ---
+                # --- FIM DA MODIFICAÇÃO (Desenho de Bosses Online) ---
                 
             # --- FIM DO BLOCO ADICIONADO ---
 

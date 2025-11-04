@@ -175,7 +175,7 @@ def update_player_logic(player_state):
     return None
 # --- FIM ---
 
-# --- (Função update_npc_logic - Sem alterações) ---
+# --- (Função update_npc_logic - MODIFICADA) ---
 def update_npc_logic(npc, players_pos_lista):
     """ Atualiza a lógica de IA para um NPC e retorna um projétil se atirar. """
     
@@ -201,8 +201,8 @@ def update_npc_logic(npc, players_pos_lista):
     dist = math.sqrt(dist_min_sq)
 
     # --- INÍCIO DA MODIFICAÇÃO (Usa a velocidade do tipo de NPC) ---
-    # (Por enquanto, todos usam a mesma velocidade, exceto 'bomba')
-    velocidade = VELOCIDADE_PERSEGUIDOR
+    velocidade = VELOCIDADE_PERSEGUIDOR # Padrão
+    
     if npc['tipo'] == 'rapido':
         velocidade = 4.0 # (Valor de InimigoRapido)
     elif npc['tipo'] == 'bomba':
@@ -211,6 +211,12 @@ def update_npc_logic(npc, players_pos_lista):
         velocidade = 1.5
     elif npc['tipo'] == 'atordoador':
         velocidade = 1.0
+    # --- INÍCIO: MODIFICAÇÃO BOSSES ---
+    elif npc['tipo'] == 'mothership':
+        velocidade = 1.0 # Velocidade offline
+    elif npc['tipo'] == 'boss_congelante':
+        velocidade = 1.0 # Velocidade offline
+    # --- FIM: MODIFICAÇÃO BOSSES ---
         
     if dist_min_sq > DISTANCIA_PARAR_PERSEGUIDOR_SQ:
         dir_x = vec_x / dist
@@ -224,9 +230,12 @@ def update_npc_logic(npc, players_pos_lista):
     npc['angulo'] = -math.degrees(radianos) - 90
     npc['angulo'] %= 360
     
-    # 3. Lógica de Tiro (Ignora 'bomba')
-    if npc['tipo'] == 'bomba':
-        return None # Bombas não atiram
+    # 3. Lógica de Tiro
+    
+    # --- INÍCIO: MODIFICAÇÃO BOSSES (Mothership não atira) ---
+    if npc['tipo'] in ['bomba', 'mothership']:
+        return None 
+    # --- FIM: MODIFICAÇÃO BOSSES ---
         
     if dist_min_sq < DISTANCIA_TIRO_PERSEGUIDOR_SQ: # (Pode-se usar distâncias diferentes por tipo)
         agora_ms = int(time.time() * 1000)
@@ -255,12 +264,13 @@ def update_npc_logic(npc, players_pos_lista):
                 'dano': 1, 
                 'tipo': 'npc' 
             }
+            # (Nota: Boss Congelante atirará um projétil normal por enquanto)
             return novo_projetil 
             
     return None 
 # --- FIM ---
 
-# --- MODIFICAÇÃO 1: Adicionar pontos_por_morte ---
+# --- (Função server_spawnar_inimigo_aleatorio - Sem alterações) ---
 def server_spawnar_inimigo_aleatorio(x, y, npc_id):
     """
     Cria um dicionário de estado para um novo NPC aleatório.
@@ -317,9 +327,44 @@ def server_spawnar_inimigo_aleatorio(x, y, npc_id):
         'tamanho': tamanho,
         'cooldown_tiro': cooldown_tiro, 
         'ultimo_tiro_tempo': 0,
-        'pontos_por_morte': pontos # <-- ADICIONADO
+        'pontos_por_morte': pontos 
     }
-# --- FIM DA MODIFICAÇÃO 1 ---
+# --- FIM ---
+
+
+# --- INÍCIO: NOVAS FUNÇÕES DE SPAWN DE BOSS ---
+def server_spawnar_mothership(x, y, npc_id):
+    """ Cria um dicionário de estado para uma Mothership. """
+    # Valores baseados em InimigoMothership (enemies.py)
+    return {
+        'id': npc_id,
+        'tipo': 'mothership',
+        'x': float(x), 'y': float(y),
+        'angulo': 0.0,
+        'hp': 200,                  # Valor de enemies.py
+        'max_hp': 200,              # Valor de enemies.py
+        'tamanho': 80,              # Valor de enemies.py
+        'cooldown_tiro': 999999,    # Mothership não atira
+        'ultimo_tiro_tempo': 0,
+        'pontos_por_morte': 100     # Valor de enemies.py
+    }
+
+def server_spawnar_boss_congelante(x, y, npc_id):
+    """ Cria um dicionário de estado para um Boss Congelante. """
+    # Valores baseados em BossCongelante (enemies.py) e settings.py
+    return {
+        'id': npc_id,
+        'tipo': 'boss_congelante',
+        'x': float(x), 'y': float(y),
+        'angulo': 0.0,
+        'hp': s.HP_BOSS_CONGELANTE,
+        'max_hp': s.HP_BOSS_CONGELANTE,
+        'tamanho': 100,             # Valor de enemies.py
+        'cooldown_tiro': s.COOLDOWN_TIRO_CONGELANTE, 
+        'ultimo_tiro_tempo': 0,
+        'pontos_por_morte': s.PONTOS_BOSS_CONGELANTE
+    }
+# --- FIM: NOVAS FUNÇÕES DE SPAWN DE BOSS ---
 
 
 def game_loop():
@@ -372,26 +417,56 @@ def game_loop():
             
             # --- Parte 3: Spawns e Atualização de NPCs ---
             if posicoes_jogadores: 
-                # Spawna novos NPCs
-                if len(network_npcs) < s.MAX_INIMIGOS:
+                
+                # --- INÍCIO DA MODIFICAÇÃO (Contagem e Spawn de Bosses) ---
+                
+                # 1. Contagem de Inimigos por Tipo
+                contagem_inimigos_normais = 0
+                contagem_motherships = 0
+                contagem_boss_congelante = 0
+                
+                for npc in network_npcs:
+                    tipo = npc.get('tipo', 'perseguidor')
+                    if tipo == 'mothership':
+                        contagem_motherships += 1
+                    elif tipo == 'boss_congelante':
+                        contagem_boss_congelante += 1
+                    elif 'minion' not in tipo: # Conta todos, exceto minions
+                        contagem_inimigos_normais += 1
+                
+                # 2. Spawna Inimigos Normais
+                if contagem_inimigos_normais < s.MAX_INIMIGOS:
                     spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_jogadores)
-                    
-                    # --- INÍCIO DA MODIFICAÇÃO (Spawn Aleatório) ---
                     novo_npc = server_spawnar_inimigo_aleatorio(spawn_x, spawn_y, f"npc_{next_npc_id}")
-                    # --- FIM DA MODIFICAÇÃO ---
-                    
                     network_npcs.append(novo_npc)
                     next_npc_id += 1
                 
-                # --- INÍCIO DA MODIFICAÇÃO (IA para todos os tipos) ---
+                # 3. Spawna Motherships
+                if contagem_motherships < s.MAX_MOTHERSHIPS:
+                    spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_jogadores)
+                    novo_boss = server_spawnar_mothership(spawn_x, spawn_y, f"ms_{next_npc_id}")
+                    network_npcs.append(novo_boss)
+                    next_npc_id += 1
+                    print(f"[SERVIDOR] Spawnow Mothership {novo_boss['id']}")
+
+                # 4. Spawna Bosses Congelantes
+                if contagem_boss_congelante < s.MAX_BOSS_CONGELANTE:
+                    spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_jogadores)
+                    novo_boss = server_spawnar_boss_congelante(spawn_x, spawn_y, f"bc_{next_npc_id}")
+                    network_npcs.append(novo_boss)
+                    next_npc_id += 1
+                    print(f"[SERVIDOR] Spawnow Boss Congelante {novo_boss['id']}")
+
+                # --- FIM DA MODIFICAÇÃO (Contagem e Spawn de Bosses) ---
+
                 # Atualiza IA dos NPCs
                 for npc in network_npcs:
                     # (Apenas jogadores vivos são alvos)
                     # Executa a lógica para todos
+                    # (Nota: A IA dos bosses será simples por enquanto)
                     novo_proj_npc = update_npc_logic(npc, posicoes_jogadores) 
                     if novo_proj_npc:
                         novos_projeteis.append(novo_proj_npc)
-                # --- FIM DA MODIFICAÇÃO ---
                 
                 network_projectiles.extend(novos_projeteis)
 
@@ -782,4 +857,22 @@ if __name__ == "__main__":
         print("[AVISO] 'VELOCIDADE_ROTACAO_NAVE' não encontrada em settings.py. A usar valor padrão 5.")
         s.VELOCIDADE_ROTACAO_NAVE = 5
     
+    # --- ADIÇÃO: Verificar se os limites de Bosses existem ---
+    if not hasattr(s, 'MAX_MOTHERSHIPS'):
+        print("[AVISO] 'MAX_MOTHERSHIPS' não encontrada em settings.py. A usar valor padrão 2.")
+        s.MAX_MOTHERSHIPS = 2
+    if not hasattr(s, 'MAX_BOSS_CONGELANTE'):
+        print("[AVISO] 'MAX_BOSS_CONGELANTE' não encontrada em settings.py. A usar valor padrão 1.")
+        s.MAX_BOSS_CONGELANTE = 1
+    if not hasattr(s, 'HP_BOSS_CONGELANTE'):
+        print("[AVISO] 'HP_BOSS_CONGELANTE' não encontrada em settings.py. A usar valor padrão 400.")
+        s.HP_BOSS_CONGELANTE = 400
+    if not hasattr(s, 'PONTOS_BOSS_CONGELANTE'):
+        print("[AVISO] 'PONTOS_BOSS_CONGELANTE' não encontrada em settings.py. A usar valor padrão 300.")
+        s.PONTOS_BOSS_CONGELANTE = 300
+    if not hasattr(s, 'COOLDOWN_TIRO_CONGELANTE'):
+        print("[AVISO] 'COOLDOWN_TIRO_CONGELANTE' não encontrada em settings.py. A usar valor padrão 10000.")
+        s.COOLDOWN_TIRO_CONGELANTE = 10000
+    # --- FIM DA ADIÇÃO ---
+
     iniciar_servidor()
