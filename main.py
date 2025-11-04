@@ -961,26 +961,27 @@ while rodando:
             nave_player.update(grupo_projeteis_player, camera, client_socket)
         # --- FIM DA CORREÇÃO DO BUG DE RESPAWN ---
 
-        # --- INÍCIO DA MODIFICAÇÃO (Bug #1) ---
-        # Define listas de alvos (apenas para auxiliares)
-        # Se o jogo acabou, não inclua o jogador como um alvo válido
-        if estado_jogo == "JOGANDO":
+        
+        # --- INÍCIO DA MODIFICAÇÃO (Bug 1: Pausa/Loja - CORREÇÃO) ---
+        # Define listas de alvos (para auxiliares)
+        # Inimigos devem ver o jogador na loja/terminal, mas não no game over/pause.
+        if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
             lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + [nave_player] + list(grupo_bots)
-        else:
+        else: # (PAUSE, GAME_OVER, etc.)
             lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + list(grupo_bots)
-        # --- FIM DA MODIFICAÇÃO (Bug #1) ---
+        # --- FIM DA MODIFICAÇÃO (Bug 1: Pausa/Loja - CORREÇÃO) ---
 
 
         # --- LÓGICA DE JOGO OFFLINE ---
         if client_socket is None: 
             
-            # --- INÍCIO DA MODIFICAÇÃO (Bug #1) ---
-            # Se o jogo acabou, não inclua o jogador como um alvo válido
-            if estado_jogo == "JOGANDO":
+            # --- INÍCIO DA MODIFICAÇÃO (Bug 1: Pausa/Loja - CORREÇÃO) ---
+            # Inimigos devem ver o jogador na loja/terminal, mas não no game over/pause.
+            if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
                 lista_alvos_naves = [nave_player] + list(grupo_bots)
-            else:
+            else: # (PAUSE, GAME_OVER, etc.)
                 lista_alvos_naves = list(grupo_bots)
-            # --- FIM DA MODIFICAÇÃO (Bug #1) ---
+            # --- FIM DA MODIFICAÇÃO (Bug 1: Pausa/Loja - CORREÇÃO) ---
 
             grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos)
             grupo_inimigos.update(lista_alvos_naves, grupo_projeteis_inimigos, s.DESPAWN_DIST)
@@ -989,37 +990,41 @@ while rodando:
             grupo_projeteis_bots.update()
             grupo_projeteis_inimigos.update()
             
-            # Spawns locais
-            if len(grupo_vidas_coletaveis) < s.MAX_VIDAS_COLETAVEIS: spawnar_vida(nave_player.posicao)
-            if len(grupo_obstaculos) < s.MAX_OBSTACULOS: spawnar_obstaculo(nave_player.posicao)
-            contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership)))
-            if contagem_inimigos_normais < s.MAX_INIMIGOS: spawnar_inimigo_aleatorio(nave_player.posicao)
-            if len(grupo_motherships) < s.MAX_MOTHERSHIPS: spawnar_mothership(nave_player.posicao)
-            if estado_jogo == "JOGANDO" and len(grupo_bots) < max_bots_atual: spawnar_bot(nave_player.posicao)
-            if len(grupo_boss_congelante) < s.MAX_BOSS_CONGELANTE: spawnar_boss_congelante(nave_player.posicao)
+            # Spawns locais (Só spawna se estiver JOGANDO)
+            if estado_jogo == "JOGANDO":
+                if len(grupo_vidas_coletaveis) < s.MAX_VIDAS_COLETAVEIS: spawnar_vida(nave_player.posicao)
+                if len(grupo_obstaculos) < s.MAX_OBSTACULOS: spawnar_obstaculo(nave_player.posicao)
+                contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership)))
+                if contagem_inimigos_normais < s.MAX_INIMIGOS: spawnar_inimigo_aleatorio(nave_player.posicao)
+                if len(grupo_motherships) < s.MAX_MOTHERSHIPS: spawnar_mothership(nave_player.posicao)
+                if estado_jogo == "JOGANDO" and len(grupo_bots) < max_bots_atual: spawnar_bot(nave_player.posicao)
+                if len(grupo_boss_congelante) < s.MAX_BOSS_CONGELANTE: spawnar_boss_congelante(nave_player.posicao)
             
-            # Colisões locais
-            colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_obstaculos, True, True)
-            for _, obst_list in colisoes.items():
-                for obst in obst_list: 
-                    nave_player.ganhar_pontos(obst.pontos_por_morte)
-            colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_inimigos, True, False)
-            for _, inim_list in colisoes.items():
-                for inimigo in inim_list:
-                    morreu = inimigo.foi_atingido(nave_player.nivel_dano)
-                    if morreu:
-                        nave_player.ganhar_pontos(inimigo.pontos_por_morte);
-                        if isinstance(inimigo, (InimigoMothership, BossCongelante)):
-                            if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
-                            if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
-                                tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
-                        else:
-                            if tocar_som_posicional and s.SOM_EXPLOSAO_NPC:
-                                tocar_som_posicional(s.SOM_EXPLOSAO_NPC, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
-            colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_bots, True, False)
-            for proj, bot_list in colisoes.items():
-                for bot in bot_list:
-                    bot.foi_atingido(nave_player.nivel_dano, estado_jogo, proj.posicao)
+            # Colisões locais (só afetam o jogador se ele estiver JOGANDO)
+            if estado_jogo == "JOGANDO":
+                colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_obstaculos, True, True)
+                for _, obst_list in colisoes.items():
+                    for obst in obst_list: 
+                        nave_player.ganhar_pontos(obst.pontos_por_morte)
+                colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_inimigos, True, False)
+                for _, inim_list in colisoes.items():
+                    for inimigo in inim_list:
+                        morreu = inimigo.foi_atingido(nave_player.nivel_dano)
+                        if morreu:
+                            nave_player.ganhar_pontos(inimigo.pontos_por_morte);
+                            if isinstance(inimigo, (InimigoMothership, BossCongelante)):
+                                if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+                                if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
+                                    tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
+                            else:
+                                if tocar_som_posicional and s.SOM_EXPLOSAO_NPC:
+                                    tocar_som_posicional(s.SOM_EXPLOSAO_NPC, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+                colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_bots, True, False)
+                for proj, bot_list in colisoes.items():
+                    for bot in bot_list:
+                        bot.foi_atingido(nave_player.nivel_dano, estado_jogo, proj.posicao)
+            
+            # Colisões que não envolvem o jogador (acontecem mesmo na loja/terminal)
             colisoes = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_obstaculos, True, True)
             for proj, obst_list in colisoes.items():
                 bot_que_acertou = None
@@ -1076,21 +1081,15 @@ while rodando:
                             if tocar_som_posicional and s.SOM_EXPLOSAO_NPC:
                                 tocar_som_posicional(s.SOM_EXPLOSAO_NPC, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
         
-        # --- FIM DA MODIFICAÇÃO (Bugs 1 e 2) ---
-
         # (Atualizações de Auxiliares e Explosões correm sempre)
         for bot in grupo_bots: 
             bot.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_bots, estado_jogo, nave_player)
         nave_player.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_player, estado_jogo, nave_player)
         grupo_explosoes.update()
 
-        # (Spawns de Vidas e Obstáculos também correm sempre)
-        # --- MODIFICAÇÃO (Bug #2): Não spawna entidades se o jogador estiver morto ---
-        if estado_jogo == "JOGANDO":
-            if len(grupo_vidas_coletaveis) < s.MAX_VIDAS_COLETAVEIS: spawnar_vida(nave_player.posicao)
-            if len(grupo_obstaculos) < s.MAX_OBSTACULOS: spawnar_obstaculo(nave_player.posicao)
 
-    # --- Atualizações e Colisões Específicas do Jogador (Só quando JOGANDO) ---
+    # --- Atualizações e Colisões Específicas do Jogador (Só quando JOGANDO ou na LOJA/TERMINAL) ---
+    # O jogador só atualiza (move/rotaciona) se estiver JOGANDO
     if estado_jogo == "JOGANDO":
         
         if client_socket:
@@ -1100,50 +1099,48 @@ while rodando:
             # Offline: O update processa o input e calcula o movimento
             nave_player.update(grupo_projeteis_player, camera, None)
 
-        # Colisões QUE AFETAM O JOGADOR (Apenas Offline)
-        if client_socket is None:
-            colisoes_proj_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_inimigos, False)
-            for proj in colisoes_proj_inimigo_player:
-                if isinstance(proj, ProjetilCongelante):
-                    nave_player.aplicar_lentidao(s.DURACAO_CONGELAMENTO)
-                elif isinstance(proj, ProjetilTeleguiadoLento):
-                    nave_player.aplicar_lentidao(6000)
-                else:
-                    if nave_player.foi_atingido(1, estado_jogo, proj.posicao):
-                         estado_jogo = "GAME_OVER"
-                proj.kill()
-            
-            # --- ADICIONADO (Bugs 1 e 2: Colisões de RAM vs Jogador) ---
-            colisoes_proj_bot_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_bots, True)
-            for proj in colisoes_proj_bot_player:
+    # Colisões QUE AFETAM O JOGADOR (Acontecem se estiver JOGANDO, na LOJA ou TERMINAL)
+    if client_socket is None and (estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL"):
+        colisoes_proj_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_inimigos, False)
+        for proj in colisoes_proj_inimigo_player:
+            if isinstance(proj, ProjetilCongelante):
+                nave_player.aplicar_lentidao(s.DURACAO_CONGELAMENTO)
+            elif isinstance(proj, ProjetilTeleguiadoLento):
+                nave_player.aplicar_lentidao(6000)
+            else:
                 if nave_player.foi_atingido(1, estado_jogo, proj.posicao):
-                     estado_jogo = "GAME_OVER" 
+                     estado_jogo = "GAME_OVER"
+            proj.kill()
+        
+        colisoes_proj_bot_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_bots, True)
+        for proj in colisoes_proj_bot_player:
+            if nave_player.foi_atingido(1, estado_jogo, proj.posicao):
+                 estado_jogo = "GAME_OVER" 
 
-            colisoes_vida_player = pygame.sprite.spritecollide(nave_player, grupo_vidas_coletaveis, True)
-            for _ in colisoes_vida_player: nave_player.coletar_vida(s.VIDA_COLETADA_CURA)
+        colisoes_vida_player = pygame.sprite.spritecollide(nave_player, grupo_vidas_coletaveis, True)
+        for _ in colisoes_vida_player: nave_player.coletar_vida(s.VIDA_COLETADA_CURA)
 
-            colisoes_ram_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_inimigos, False)
-            for inimigo in colisoes_ram_inimigo_player:
-                dano = 1 if not isinstance(inimigo, InimigoBomba) else inimigo.DANO_EXPLOSAO
-                if nave_player.foi_atingido(dano, estado_jogo, inimigo.posicao):
-                    estado_jogo = "GAME_OVER"
-                morreu = inimigo.foi_atingido(1)
-                if morreu:
-                    nave_player.ganhar_pontos(inimigo.pontos_por_morte)
-                    if isinstance(inimigo, (InimigoMothership, BossCongelante)):
-                        if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
-                        if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
-                            tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
-                    else:
-                        if tocar_som_posicional and s.SOM_EXPLOSAO_NPC:
-                            tocar_som_posicional(s.SOM_EXPLOSAO_NPC, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
-            
-            colisoes_ram_bot_player = pygame.sprite.spritecollide(nave_player, grupo_bots, False)
-            for bot in colisoes_ram_bot_player:
-                if nave_player.foi_atingido(1, estado_jogo, bot.posicao):
-                    estado_jogo = "GAME_OVER"
-                bot.foi_atingido(1, estado_jogo, nave_player.posicao)
-            # --- FIM DO BLOCO ADICIONADO ---
+        colisoes_ram_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_inimigos, False)
+        for inimigo in colisoes_ram_inimigo_player:
+            dano = 1 if not isinstance(inimigo, InimigoBomba) else inimigo.DANO_EXPLOSAO
+            if nave_player.foi_atingido(dano, estado_jogo, inimigo.posicao):
+                estado_jogo = "GAME_OVER"
+            morreu = inimigo.foi_atingido(1)
+            if morreu:
+                nave_player.ganhar_pontos(inimigo.pontos_por_morte)
+                if isinstance(inimigo, (InimigoMothership, BossCongelante)):
+                    if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+                    if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
+                        tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
+                else:
+                    if tocar_som_posicional and s.SOM_EXPLOSAO_NPC:
+                        tocar_som_posicional(s.SOM_EXPLOSAO_NPC, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+        
+        colisoes_ram_bot_player = pygame.sprite.spritecollide(nave_player, grupo_bots, False)
+        for bot in colisoes_ram_bot_player:
+            if nave_player.foi_atingido(1, estado_jogo, bot.posicao):
+                estado_jogo = "GAME_OVER"
+            bot.foi_atingido(1, estado_jogo, nave_player.posicao)
 
     # 13. Desenho
     if estado_jogo == "MENU":
@@ -1376,9 +1373,9 @@ while rodando:
         else:
             # Modo Offline (como estava antes)
             # --- MODIFICAÇÃO (Bug #1): Ranking não deve incluir jogador morto ---
-            if estado_jogo == "JOGANDO":
+            if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
                 todos_os_jogadores = [nave_player] + list(grupo_bots.sprites())
-            else:
+            else: # (PAUSE, GAME_OVER)
                 todos_os_jogadores = list(grupo_bots.sprites()) 
             lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
         

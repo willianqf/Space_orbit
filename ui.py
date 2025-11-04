@@ -418,7 +418,12 @@ def desenhar_hud(surface, nave, estado_jogo):
     surface.blit(texto_pontos, (pos_x_detalhes, pos_y_atual_detalhes))
     pos_y_atual_detalhes += hud_line_height
 
-    texto_vida = FONT_HUD.render(f"Vida: {max(0, nave.vida_atual)} / {nave.max_vida}", True, VERDE_VIDA)
+    # --- INÍCIO DA MODIFICAÇÃO (Bug do Escudo Decimal) ---
+    # Arredonda a vida atual para 1 casa decimal ANTES de desenhar
+    vida_display = round(max(0, nave.vida_atual), 1)
+    texto_vida = FONT_HUD.render(f"Vida: {vida_display} / {nave.max_vida}", True, VERDE_VIDA)
+    # --- FIM DA MODIFICAÇÃO ---
+    
     surface.blit(texto_vida, (pos_x_detalhes, pos_y_atual_detalhes))
     pos_y_atual_detalhes += hud_line_height
 

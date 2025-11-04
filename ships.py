@@ -272,26 +272,42 @@ class Nave(pygame.sprite.Sprite):
                 grupo_destino.add(self.criar_projetil())
                 ouvinte_real = pos_ouvinte if pos_ouvinte is not None else self.posicao
                 tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, ouvinte_real, VOLUME_BASE_TIRO_PLAYER)
+    
+    # --- INÍCIO DA MODIFICAÇÃO (Bug #2: Escudo) ---
     def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
-        # ... (foi_atingido code remains the same) ...
+        # ... (código de verificação de invencibilidade, game over, cooldown de hit) ...
         if self.vida_atual <= 0 and estado_jogo_atual == "GAME_OVER": return False
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_hit_tempo < 150: return False
-        reducao_percent = min(self.nivel_escudo * REDUCAO_DANO_POR_NIVEL, 75); dano_reduzido = max(1, int(dano * (1 - reducao_percent / 100.0)))
-        vida_antes = self.vida_atual; self.vida_atual -= dano_reduzido; self.ultimo_hit_tempo = agora
+        
+        reducao_percent = min(self.nivel_escudo * REDUCAO_DANO_POR_NIVEL, 75)
+        
+        # --- Alteração 1: Remove o max(1, int(...)) ---
+        # Permite dano fracionário
+        dano_reduzido = dano * (1 - reducao_percent / 100.0)
+        
+        vida_antes = self.vida_atual
+        self.vida_atual -= dano_reduzido
+        self.ultimo_hit_tempo = agora
+        
         if vida_antes > 0:
-            if self.nivel_escudo == MAX_NIVEL_ESCUDO:
-                self.mostrar_escudo_fx = True; self.tempo_escudo_fx = agora
+            # --- Alteração 2: Mostra o FX se tiver QUALQUER nível de escudo ---
+            if self.nivel_escudo > 0:
+                self.mostrar_escudo_fx = True
+                self.tempo_escudo_fx = agora
                 if proj_pos:
                      vetor_para_origem = proj_pos - self.posicao
                      if vetor_para_origem.length() > 0: self.angulo_impacto_rad_pygame = math.atan2(vetor_para_origem.y, vetor_para_origem.x)
                      else: self.angulo_impacto_rad_pygame = math.radians(90 - self.angulo)
                 else: self.angulo_impacto_rad_pygame = math.radians(90 - self.angulo)
+                
         if self.vida_atual <= 0 and vida_antes > 0:
             print(f"[{self.nome}] MORREU!")
             if grupo_explosoes_ref is not None: explosao = Explosao(self.rect.center, self.altura // 2 + 10); grupo_explosoes_ref.add(explosao)
             return True
         return False
+    # --- FIM DA MODIFICAÇÃO (Bug #2: Escudo) ---
+
     def aplicar_lentidao(self, duracao_ms):
         # ... (aplicar_lentidao code remains the same) ...
         agora = pygame.time.get_ticks(); self.tempo_fim_lentidao = max(self.tempo_fim_lentidao, agora + duracao_ms)
@@ -525,7 +541,12 @@ class Player(Nave):
             # print(f"[{self.nome}] Dano ignorado (Invencível)") # Debug opcional
             return False # Retorna False (não morreu) sem aplicar dano
         # --- FIM DA VERIFICAÇÃO ---
+        
+        # --- INÍCIO DA MODIFICAÇÃO (Bug #2: Escudo) ---
+        # (O método 'foi_atingido' da classe 'Nave' (pai) é chamado)
         return super().foi_atingido(dano, estado_jogo_atual, proj_pos)
+        # --- FIM DA MODIFICAÇÃO (Bug #2: Escudo) ---
+
     def update(self, grupo_projeteis_jogador, camera, client_socket=None):
         # Se estivermos offline (client_socket is None), processa o input local.
         if client_socket is None:
@@ -597,7 +618,13 @@ class NaveBot(Nave):
     
     def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
         # ... (foi_atingido code remains the same) ...
-        vida_antes = self.vida_atual; morreu = super().foi_atingido(dano, estado_jogo_atual, proj_pos)
+        vida_antes = self.vida_atual
+        
+        # --- INÍCIO DA MODIFICAÇÃO (Bug #2: Escudo) ---
+        # (O método 'foi_atingido' da classe 'Nave' (pai) é chamado)
+        morreu = super().foi_atingido(dano, estado_jogo_atual, proj_pos)
+        # --- FIM DA MODIFICAÇÃO (Bug #2: Escudo) ---
+
         if morreu:
             print(f"[{self.nome}] BOT MORREU! Resetando...")
             
