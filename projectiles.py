@@ -7,7 +7,7 @@ from settings import (MAP_RECT, MAX_DISTANCIA_TIRO, VERMELHO_TIRO, VERDE_TIRO_MA
 
 # Projétil do Jogador/Bots Aliados
 class Projetil(pygame.sprite.Sprite):
-    def __init__(self, x, y, angulo_radianos, nivel_dano_owner=1):
+    def __init__(self, x, y, angulo_radianos, nivel_dano_owner=1, owner_nave=None): # <-- MODIFICADO
         super().__init__()
         self.raio = 5
         # Define a cor baseada no nível de dano
@@ -23,6 +23,12 @@ class Projetil(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center = self.posicao)
         self.velocidade = 10
         self.angulo_radianos = angulo_radianos
+        
+        # --- INÍCIO DAS ADIÇÕES ---
+        # Armazena quem disparou e o dano que esse projétil causa
+        self.owner = owner_nave
+        self.dano = nivel_dano_owner
+        # --- FIM DAS ADIÇÕES ---
 
     def update(self, *args, **kwargs):
         # Movimento baseado no ângulo

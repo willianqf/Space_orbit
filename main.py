@@ -684,6 +684,10 @@ def processar_cheat(comando, nave):
 # 10. Recalcula Posições Iniciais da UI (após inicializar Pygame)
 ui.recalculate_ui_positions(LARGURA_TELA, ALTURA_TELA)
 
+# --- LOOP PRINCIPAL DO JOGO  ---
+# main.py (PARTE 2 DE 2)
+# Cole isto no final do seu arquivo, substituindo o loop 'while rodando:'
+
 # --- LOOP PRINCIPAL DO JOGO ---
 while rodando:
     # 11. Tratamento de Eventos
@@ -878,7 +882,6 @@ while rodando:
                         print(f"Máximo de Bots aumentado para: {max_bots_atual}")
 
         elif estado_jogo == "LOJA":
-            # ... (código do estado LOJA permanece o mesmo) ...
             if event.type == pygame.KEYDOWN and event.key == pygame.K_v: estado_jogo = "JOGANDO"; print("Fechando loja...")
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
@@ -889,7 +892,6 @@ while rodando:
                 elif ui.RECT_BOTAO_ESCUDO.collidepoint(mouse_pos): nave_player.comprar_upgrade("escudo")
 
         elif estado_jogo == "TERMINAL":
-            # ... (código do estado TERMINAL permanece o mesmo) ...
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN:
                     processar_cheat(variavel_texto_terminal, nave_player)
@@ -903,16 +905,12 @@ while rodando:
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
                 if ui.RECT_BOTAO_REINICIAR.collidepoint(mouse_pos):
-                    # --- MODIFICAÇÃO AQUI ---
                     if client_socket:
                         # Modo Online: Apenas pede para respawnar
                         enviar_input_servidor("RESPAWN_ME")
-                        # (O estado de jogo mudará sozinho quando o listener receber o novo HP)
                     else:
-                        # --- INÍCIO DA MODIFICAÇÃO (Bug #2) ---
                         # Modo Offline: Reinicia APENAS o jogador
                         respawn_player_offline(nave_player)
-                        # --- FIM DA MODIFICAÇÃO (Bug #2) ---
 
 
     # 12. Lógica de Atualização
@@ -948,9 +946,7 @@ while rodando:
                     nave_player.vida_atual = nova_vida
                     nave_player.max_vida = my_state.get('max_hp', nave_player.max_vida)
                     
-                    # --- CORREÇÃO PONTOS: Atualiza pontos do servidor ---
                     nave_player.pontos = my_state.get('pontos', nave_player.pontos)
-                    # --- FIM DA CORREÇÃO PONTOS ---
 
                     # Verifica se o jogador morreu *neste* update
                     if nave_player.vida_atual <= 0 and estado_jogo != "GAME_OVER":
@@ -970,26 +966,19 @@ while rodando:
         # --- FIM DA CORREÇÃO DO BUG DE RESPAWN ---
 
         
-        # --- INÍCIO DA MODIFICAÇÃO (Bug 1: Pausa/Loja - CORREÇÃO) ---
-        # Define listas de alvos (para auxiliares)
-        # Inimigos devem ver o jogador na loja/terminal, mas não no game over/pause.
         if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
             lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + [nave_player] + list(grupo_bots)
         else: # (PAUSE, GAME_OVER, etc.)
             lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + list(grupo_bots)
-        # --- FIM DA MODIFICAÇÃO (Bug 1: Pausa/Loja - CORREÇÃO) ---
 
 
         # --- LÓGICA DE JOGO OFFLINE ---
         if client_socket is None: 
             
-            # --- INÍCIO DA MODIFICAÇÃO (Bug 1: Pausa/Loja - CORREÇÃO) ---
-            # Inimigos devem ver o jogador na loja/terminal, mas não no game over/pause.
             if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
                 lista_alvos_naves = [nave_player] + list(grupo_bots)
             else: # (PAUSE, GAME_OVER, etc.)
                 lista_alvos_naves = list(grupo_bots)
-            # --- FIM DA MODIFICAÇÃO (Bug 1: Pausa/Loja - CORREÇÃO) ---
 
             grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos, grupo_vidas_coletaveis)
             grupo_inimigos.update(lista_alvos_naves, grupo_projeteis_inimigos, s.DESPAWN_DIST)
@@ -1030,29 +1019,28 @@ while rodando:
                 colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_bots, True, False)
                 for proj, bot_list in colisoes.items():
                     for bot in bot_list:
-                        bot.foi_atingido(nave_player.nivel_dano, estado_jogo, proj.posicao)
+                        # (O projétil do jogador agora tem .dano e .owner)
+                        morreu = bot.foi_atingido(proj.dano, estado_jogo, proj.posicao)
+                        if morreu:
+                            # O jogador ganha pontos por destruir um bot
+                            nave_player.ganhar_pontos(10) # Recompensa de 10 pontos
             
             # Colisões que não envolvem o jogador (acontecem mesmo na loja/terminal)
             colisoes = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_obstaculos, True, True)
             for proj, obst_list in colisoes.items():
-                bot_que_acertou = None
-                for bot_ in grupo_bots:
-                    if bot_.posicao.distance_to(proj.posicao) < bot_.cerebro.distancia_scan_geral:
-                        bot_que_acertou = bot_
-                        break
-                if bot_que_acertou:
+                owner_do_tiro = proj.owner # Sabemos quem atirou
+                if owner_do_tiro:
                     for obst in obst_list:
-                        bot_que_acertou.ganhar_pontos(obst.pontos_por_morte)
+                        owner_do_tiro.ganhar_pontos(obst.pontos_por_morte)
+
             colisoes = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_inimigos, True, False)
             for proj, inim_list in colisoes.items():
-                bot_que_acertou = None; dano_bot = 1
-                for bot_ in grupo_bots:
-                    if bot_.posicao.distance_to(proj.posicao) < bot_.cerebro.distancia_scan_geral: bot_que_acertou = bot_; dano_bot = bot_.nivel_dano; break
-                if bot_que_acertou:
+                owner_do_tiro = proj.owner # Sabemos quem atirou
+                if owner_do_tiro:
                     for inimigo in inim_list:
-                        morreu = inimigo.foi_atingido(dano_bot)
+                        morreu = inimigo.foi_atingido(proj.dano) # Usamos o dano do projétil
                         if morreu:
-                            bot_que_acertou.ganhar_pontos(inimigo.pontos_por_morte);
+                            owner_do_tiro.ganhar_pontos(inimigo.pontos_por_morte);
                             if isinstance(inimigo, (InimigoMothership, BossCongelante)):
                                 if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
                                 if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
@@ -1060,6 +1048,29 @@ while rodando:
                             else:
                                 if tocar_som_posicional and s.SOM_EXPLOSAO_NPC:
                                     tocar_som_posicional(s.SOM_EXPLOSAO_NPC, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+
+            # --- INÍCIO DA MODIFICAÇÃO: COLISÃO BOTS VS BOTS ---
+            colisoes_bot_vs_bot = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_bots, True, False)
+            for proj, bots_atingidos in colisoes_bot_vs_bot.items():
+                owner_do_tiro = proj.owner # Graças ao Passo 2a, agora sabemos quem atirou
+
+                if not owner_do_tiro: # Segurança
+                    continue
+
+                for bot_atingido in bots_atingidos:
+                    # Impede que um bot (ou sua auxiliar) cause dano a si mesmo
+                    if bot_atingido != owner_do_tiro:
+                        dano_do_tiro = proj.dano # Graças ao Passo 2a
+                        
+                        morreu = bot_atingido.foi_atingido(dano_do_tiro, estado_jogo, proj.posicao)
+                        
+                        if morreu:
+                            # Dá 10 pontos de "recompensa" ao bot que atirou
+                            if isinstance(owner_do_tiro, Nave): 
+                                owner_do_tiro.ganhar_pontos(10) 
+                                print(f"[{owner_do_tiro.nome}] destruiu [{bot_atingido.nome}]!")
+            # --- FIM DA MODIFICAÇÃO ---
+
             colisoes = pygame.sprite.groupcollide(grupo_bots, grupo_projeteis_inimigos, False, False)
             for bot, proj_list in colisoes.items():
                 for proj in proj_list:
@@ -1122,8 +1133,10 @@ while rodando:
         
         colisoes_proj_bot_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_bots, True)
         for proj in colisoes_proj_bot_player:
-            if nave_player.foi_atingido(1, estado_jogo, proj.posicao):
-                 estado_jogo = "GAME_OVER" 
+            # --- MODIFICAÇÃO: CHECA SE O TIRO É SEU ---
+            if proj.owner != nave_player: # Só toma dano se o tiro não for seu
+                if nave_player.foi_atingido(proj.dano, estado_jogo, proj.posicao):
+                     estado_jogo = "GAME_OVER" 
 
         colisoes_vida_player = pygame.sprite.spritecollide(nave_player, grupo_vidas_coletaveis, True)
         for _ in colisoes_vida_player: nave_player.coletar_vida(s.VIDA_COLETADA_CURA)

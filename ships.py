@@ -122,8 +122,15 @@ class NaveAuxiliar(pygame.sprite.Sprite):
                 agora = pygame.time.get_ticks()
                 if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
                     self.ultimo_tiro_tempo = agora
+                    
+                    # --- INÍCIO DA CORREÇÃO (BUG "radianos") ---
+                    # Esta linha estava faltando, causando o bug
                     radianos = math.radians(self.angulo)
-                    proj = Projetil(self.posicao.x, self.posicao.y, radianos, self.owner.nivel_dano)
+                    
+                    # Passa o 'owner_nave' (que é o dono da auxiliar) para o projétil
+                    proj = Projetil(self.posicao.x, self.posicao.y, radianos, self.owner.nivel_dano, owner_nave=self.owner)
+                    # --- FIM DA CORREÇÃO ---
+                    
                     grupo_projeteis_destino.add(proj)
                     tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, nave_player_ref.posicao, VOLUME_BASE_TIRO_PLAYER)
             else:
@@ -235,7 +242,11 @@ class Nave(pygame.sprite.Sprite):
     def criar_projetil(self):
         radianos = math.radians(self.angulo); offset_ponta = self.altura / 2 + 10
         pos_x = self.posicao.x + (-math.sin(radianos) * offset_ponta); pos_y = self.posicao.y + (-math.cos(radianos) * offset_ponta)
-        return Projetil(pos_x, pos_y, radianos, self.nivel_dano)
+        
+        # --- INÍCIO DA MODIFICAÇÃO ('owner_nave') ---
+        # Passa 'self' (a própria nave) como o dono do projétil
+        return Projetil(pos_x, pos_y, radianos, self.nivel_dano, owner_nave=self)
+        # --- FIM DA MODIFICAÇÃO ---
     
     def lidar_com_tiros(self, grupo_destino, pos_ouvinte=None):
         agora = pygame.time.get_ticks() 
