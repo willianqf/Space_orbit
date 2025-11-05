@@ -199,8 +199,7 @@ class Nave(pygame.sprite.Sprite):
         for pos in self.POSICOES_AUXILIARES: self.lista_todas_auxiliares.append(NaveAuxiliar(self, pos))
         
         # --- INÍCIO DA MODIFICAÇÃO (Bug do Auto-Movimento) ---
-        self.primeiro_frame_ativo = True # Adiciona a flag
-        # --- FIM DA MODIFICAÇÃO ---
+        self.tempo_spawn_protecao_input = 0 # Timer para ignorar input do mouse        # --- FIM DA MODIFICAÇÃO ---
 
     def update(self, grupo_projeteis_destino, camera=None): pass
     def rotacionar(self):
@@ -551,6 +550,7 @@ class Player(Nave):
         return super().foi_atingido(dano, estado_jogo_atual, proj_pos)
         # --- FIM DA MODIFICAÇÃO (Bug #2: Escudo) ---
 
+    # --- INÍCIO DA CORREÇÃO (BUGS DE INDENTAÇÃO/LÓGICA) ---
     def update(self, grupo_projeteis_jogador, camera, client_socket=None):
         # Se estivermos offline (client_socket is None), processa o input local.
         if client_socket is None:
@@ -558,14 +558,6 @@ class Player(Nave):
         else:
             # Se estivermos online, o servidor é que manda.
             # Apenas limpamos os inputs locais para garantir que a nave não
-            # se mova sozinha com base em inputs antigos (pré-conexão).
-            self.quer_virar_esquerda = False
-            self.quer_virar_direita = False
-            self.quer_mover_frente = False
-            self.quer_mover_tras = False
-            self.quer_atirar = False
-            # (No futuro, o servidor irá definir estas flags)
-        # A lógica de rotação, movimento e tiro continua a ser chamada,
             # se mova sozinha com base em inputs antigos (pré-conexão).
             self.quer_virar_esquerda = False
             self.quer_virar_direita = False
@@ -582,42 +574,48 @@ class Player(Nave):
         # Apenas dispara no modo offline (por enquanto)
         if client_socket is None:
             self.lidar_com_tiros(grupo_projeteis_jogador, self.posicao)
-    # --- FIM DA MODIFICAÇÃO ---
+    # --- FIM DA CORREÇÃO (BUGS DE INDENTAÇÃO/LÓGICA) ---
 
+    # --- INÍCIO DA CORREÇÃO (INDENTAÇÃO + BUG AUTO-MOVIMENTO) ---
+    # Esta função DEVE estar indentada dentro da classe Player
     def processar_input_humano(self, camera):
         
-        # --- INÍCIO DA MODIFICAÇÃO (Bug do Auto-Movimento) ---
-        # Se esta é a primeira vez que o update é chamado (após spawn/respawn),
-        # limpa o estado do clique do mouse e pula o processamento do mouse.
-        if self.primeiro_frame_ativo:
-            pygame.mouse.get_pressed() # Limpa o estado (consome o clique antigo da UI)
-            self.primeiro_frame_ativo = False # Desativa a flag
-            
-            # Processa apenas o teclado neste frame
-            teclas = pygame.key.get_pressed()
-            self.quer_virar_esquerda = teclas[pygame.K_a] or teclas[pygame.K_LEFT]; self.quer_virar_direita = teclas[pygame.K_d] or teclas[pygame.K_RIGHT]
-            self.quer_mover_frente = teclas[pygame.K_w] or teclas[pygame.K_UP]; self.quer_mover_tras = teclas[pygame.K_s] or teclas[pygame.K_DOWN]; self.quer_atirar = teclas[pygame.K_SPACE]
-            if self.quer_mover_frente or self.quer_mover_tras: self.posicao_alvo_mouse = None
-            return # Sai da função, ignorando a lógica do mouse
-        # --- FIM DA MODIFICAÇÃO ---
-        
+        # Pega o tempo atual
+        agora = pygame.time.get_ticks()
+
+        # 1. Processa o Teclado (Sempre)
         teclas = pygame.key.get_pressed()
-        self.quer_virar_esquerda = teclas[pygame.K_a] or teclas[pygame.K_LEFT]; self.quer_virar_direita = teclas[pygame.K_d] or teclas[pygame.K_RIGHT]
-        self.quer_mover_frente = teclas[pygame.K_w] or teclas[pygame.K_UP]; self.quer_mover_tras = teclas[pygame.K_s] or teclas[pygame.K_DOWN]; self.quer_atirar = teclas[pygame.K_SPACE]
-        mouse_buttons = pygame.mouse.get_pressed()
+        self.quer_virar_esquerda = teclas[pygame.K_a] or teclas[pygame.K_LEFT]
+        self.quer_virar_direita = teclas[pygame.K_d] or teclas[pygame.K_RIGHT]
+        self.quer_mover_frente = teclas[pygame.K_w] or teclas[pygame.K_UP]
+        self.quer_mover_tras = teclas[pygame.K_s] or teclas[pygame.K_DOWN]
+        self.quer_atirar = teclas[pygame.K_SPACE]
+
+        # 2. Processa o Mouse (Apenas se a proteção de spawn tiver acabado)
+        if agora > self.tempo_spawn_protecao_input:
+            mouse_buttons = pygame.mouse.get_pressed()
+            
+            # Se o botão esquerdo estiver pressionado
+            if mouse_buttons[0]:
+                mouse_pos_tela = pygame.mouse.get_pos()
+                # Verifica se o clique NÃO está sobre o botão de UI (para não mover ao clicar no HUD)
+                if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela):
+                    camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
+                    mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0], mouse_pos_tela[1] + camera_world_topleft[1])
+                    self.posicao_alvo_mouse = mouse_pos_mundo
+                    self.quer_mover_frente = False # Cancela movimento do teclado
+                    self.quer_mover_tras = False
+            
+            # Se o teclado for usado para mover, cancela o alvo do mouse
+            if self.quer_mover_frente or self.quer_mover_tras:
+                self.posicao_alvo_mouse = None
         
-        # --- INÍCIO DA MODIFICAÇÃO (Mover para Botão Esquerdo) ---
-        # Alterado de mouse_buttons[2] (direito) para mouse_buttons[0] (esquerdo)
-        if mouse_buttons[0]:
-            mouse_pos_tela = pygame.mouse.get_pos()
-            # Verifica se o clique NÃO está sobre o botão de UI (para não mover ao clicar no HUD)
-            if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela):
-                camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
-                mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0], mouse_pos_tela[1] + camera_world_topleft[1])
-                self.posicao_alvo_mouse = mouse_pos_mundo; self.quer_mover_frente = False; self.quer_mover_tras = False
-        # --- FIM DA MODIFICAÇÃO ---
-                
-        if self.quer_mover_frente or self.quer_mover_tras: self.posicao_alvo_mouse = None
+        else:
+            # Se a proteção de input ainda estiver ativa:
+            # 1. Garante que não há alvo de mouse
+            self.posicao_alvo_mouse = None
+            # 2. "Consome" o clique residual da UI para que ele não vaze
+            pygame.mouse.get_pressed()
 
 
 # --- Classe do Bot Aliado ---
@@ -668,7 +666,15 @@ class NaveBot(Nave):
             print(f"[{self.nome}] Respawn em ({int(novo_x)}, {int(novo_y)})")
             # --- FIM DA MODIFICAÇÃO ---
             
-            self.grupo_auxiliares_ativos.empty(); self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0
+            # --- INÍCIO DA CORREÇÃO (Reset de Auxiliares do Bot) ---
+            self.grupo_auxiliares_ativos.empty()
+            self.lista_todas_auxiliares = [] # 1. Recria a lista mestre
+            for pos in self.POSICOES_AUXILIARES: # 2. Repopula a lista mestre
+                nova_aux = NaveAuxiliar(self, pos)
+                self.lista_todas_auxiliares.append(nova_aux)
+            # --- FIM DA CORREÇÃO ---
+            
+            self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0
             self.velocidade_movimento_base = 4 + self.nivel_motor; self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
             self.alvo_selecionado = None; self.posicao_alvo_mouse = None; self.tempo_fim_lentidao = 0; self.rastro_particulas = []
             print(f"[{self.nome}] Resetando estado da IA para VAGANDO.")

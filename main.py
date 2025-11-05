@@ -495,8 +495,8 @@ def reiniciar_jogo(pos_spawn=None):
     nave_player.tempo_fim_lentidao = 0
     nave_player.rastro_particulas = []
     
-    # --- INÍCIO DA MODIFICAÇÃO (Bug do Auto-Movimento) ---
-    nave_player.primeiro_frame_ativo = True # Flag para ignorar input no primeiro frame
+
+    nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
     # --- FIM DA MODIFICAÇÃO ---
 
     # Apenas spawna entidades no modo offline
@@ -560,7 +560,7 @@ def respawn_player_offline(nave):
     nave.rastro_particulas = []
     
     # --- INÍCIO DA MODIFICAÇÃO (Bug do Auto-Movimento) ---
-    nave_player.primeiro_frame_ativo = True # Flag para ignorar input no primeiro frame
+    nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
     # --- FIM DA MODIFICAÇÃO ---
 
     # 3. Define o estado de volta para JOGANDO
