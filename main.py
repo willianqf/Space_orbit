@@ -991,7 +991,7 @@ while rodando:
                 lista_alvos_naves = list(grupo_bots)
             # --- FIM DA MODIFICAÇÃO (Bug 1: Pausa/Loja - CORREÇÃO) ---
 
-            grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos)
+            grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos, grupo_vidas_coletaveis)
             grupo_inimigos.update(lista_alvos_naves, grupo_projeteis_inimigos, s.DESPAWN_DIST)
             
             grupo_projeteis_player.update()
@@ -1037,7 +1037,7 @@ while rodando:
             for proj, obst_list in colisoes.items():
                 bot_que_acertou = None
                 for bot_ in grupo_bots:
-                    if bot_.posicao.distance_to(proj.posicao) < bot_.distancia_scan:
+                    if bot_.posicao.distance_to(proj.posicao) < bot_.cerebro.distancia_scan_geral:
                         bot_que_acertou = bot_
                         break
                 if bot_que_acertou:
@@ -1047,7 +1047,7 @@ while rodando:
             for proj, inim_list in colisoes.items():
                 bot_que_acertou = None; dano_bot = 1
                 for bot_ in grupo_bots:
-                    if bot_.posicao.distance_to(proj.posicao) < bot_.distancia_scan: bot_que_acertou = bot_; dano_bot = bot_.nivel_dano; break
+                    if bot_.posicao.distance_to(proj.posicao) < bot_.cerebro.distancia_scan_geral: bot_que_acertou = bot_; dano_bot = bot_.nivel_dano; break
                 if bot_que_acertou:
                     for inimigo in inim_list:
                         morreu = inimigo.foi_atingido(dano_bot)
