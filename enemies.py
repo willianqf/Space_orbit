@@ -314,13 +314,13 @@ class BossCongelante(InimigoBase):
         
         for alvo in lista_alvos_naves:
              # --- MODIFICAÇÃO: Pega a posição do player ---
-             if type(alvo).__name__ == 'Player':
+            if type(alvo).__name__ == 'Player':
                 pos_ouvinte = alvo.posicao
              # --- FIM MODIFICAÇÃO ---
 
-             is_player = type(alvo).__name__ == 'Player'
-             is_active_bot = type(alvo).__name__ == 'NaveBot' and alvo.groups()
-             if is_player or is_active_bot:
+            is_player = type(alvo).__name__ == 'Player'
+            is_active_bot = type(alvo).__name__ == 'NaveBot' and alvo.groups()
+            if is_player or is_active_bot:
                  try:
                      dist = self.posicao.distance_to(alvo.posicao)
                      if dist < dist_min_geral:
@@ -666,29 +666,27 @@ class InimigoMinion(InimigoBase):
     def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
         # Verifica se dono ou alvo ainda existem e se estão perto
         
-        # --- INÍCIO DA MODIFICAÇÃO (Lógica de Persistência e "Coleira") ---
+        # --- INÍCIO DA MODIFICAÇÃO (MOTHERSHIP MINION TARGETING) ---
         if self.owner is None or not self.owner.groups(): 
             self.kill() # Dono morreu, minion morre
             return
             
-        # Verifica se o alvo (target) ainda é válido
-        if self.target:
-            if not self.target.groups(): # Alvo morreu
+        # O minion AGORA É BURRO: ele apenas copia o alvo do dono.
+        # Verifica se o alvo do dono (Mothership) é válido
+        if self.owner.alvo_retaliacao and self.owner.alvo_retaliacao.groups():
+            # Verifica a "coleira" (leash) - O minion está perto o suficiente DO ALVO?
+            try:
+                dist_minion_alvo = self.posicao.distance_to(self.owner.alvo_retaliacao.posicao)
+                if dist_minion_alvo < self.distancia_despawn_minion: # Usa a coleira do minion (1000)
+                    self.target = self.owner.alvo_retaliacao
+                else:
+                    self.target = None # Alvo do dono está muito longe para este minion
+            except ValueError:
                 self.target = None
-            elif not (type(self.target).__name__ == 'Player' or (type(self.target).__name__ == 'NaveBot' and self.target.groups())): # Alvo não é mais um tipo válido
-                self.target = None
-            else:
-                # Lógica da "coleira" (leash) REATIVADA
-                try: 
-                    if self.owner.posicao.distance_to(self.target.posicao) > self.distancia_despawn_minion: 
-                        self.target = None # Perde o alvo se o dono ficar longe, mas não morre
-                except ValueError: 
-                    self.target = None
+        else:
+            self.target = None # Dono não tem alvo
         
-        # Se não tem alvo, tenta encontrar um novo (opcional, mas bom para IA)
-        # (Por enquanto, se perder o alvo, ele só orbita o dono)
-        
-        # --- FIM DA MODIFICAÇÃO ---
+        # --- FIM DA MODIFICAÇÃO (MOTHERSHIP MINION TARGETING) ---
 
         
         # --- MODIFICAÇÃO: Encontra o ouvinte (player) ---
@@ -838,7 +836,9 @@ class InimigoMothership(InimigoPerseguidor):
                 else:
                     # --- MODIFICAÇÃO: Lógica da "coleira" (leash) REATIVADA ---
                     try: # Verifica distância para o alvo
+                       # --- INÍCIO DA CORREÇÃO DO CRASH (Typo) ---
                        if self.posicao.distance_to(self.alvo_retaliacao.posicao) > self.distancia_despawn_minion: 
+                       # --- FIM DA CORREÇÃO DO CRASH (Typo) ---
                            perdeu_alvo = True
                     except ValueError: 
                         perdeu_alvo = True
@@ -847,7 +847,10 @@ class InimigoMothership(InimigoPerseguidor):
 
             if perdeu_alvo:
                 print(f"[{self.nome}] Alvo perdido. Voltando a vagar.")
-                self.alvo_retaliacao = None; self.estado_ia = "VAGANDO"; self.grupo_minions.empty()
+                self.alvo_retaliacao = None; self.estado_ia = "VAGANDO"
+                # --- INÍCIO DA CORREÇÃO DO BUG (MOTHERSHIP) ---
+                # self.grupo_minions.empty() # REMOVIDO: Esta linha matava os minions
+                # --- FIM DA CORREÇÃO DO BUG (MOTHERSHIP) ---
             else:
                 self.spawnar_minions() # Tenta spawnar (só funciona se o grupo estiver vazio)
                 # Foge do alvo

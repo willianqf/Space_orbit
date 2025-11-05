@@ -197,6 +197,10 @@ class Nave(pygame.sprite.Sprite):
         self.mostrar_escudo_fx = False; self.angulo_impacto_rad_pygame = 0; self.tempo_escudo_fx = 0; self.rastro_particulas = []
         self.tempo_fim_lentidao = 0; self.lista_todas_auxiliares = []; self.grupo_auxiliares_ativos = pygame.sprite.Group()
         for pos in self.POSICOES_AUXILIARES: self.lista_todas_auxiliares.append(NaveAuxiliar(self, pos))
+        
+        # --- INÍCIO DA MODIFICAÇÃO (Bug do Auto-Movimento) ---
+        self.primeiro_frame_ativo = True # Adiciona a flag
+        # --- FIM DA MODIFICAÇÃO ---
 
     def update(self, grupo_projeteis_destino, camera=None): pass
     def rotacionar(self):
@@ -561,6 +565,14 @@ class Player(Nave):
             self.quer_mover_tras = False
             self.quer_atirar = False
             # (No futuro, o servidor irá definir estas flags)
+        # A lógica de rotação, movimento e tiro continua a ser chamada,
+            # se mova sozinha com base em inputs antigos (pré-conexão).
+            self.quer_virar_esquerda = False
+            self.quer_virar_direita = False
+            self.quer_mover_frente = False
+            self.quer_mover_tras = False
+            self.quer_atirar = False
+            # (No futuro, o servidor irá definir estas flags)
         
         # A lógica de rotação, movimento e tiro continua a ser chamada,
         # mas só fará algo se as flags (quer_mover, etc.) forem True.
@@ -573,6 +585,22 @@ class Player(Nave):
     # --- FIM DA MODIFICAÇÃO ---
 
     def processar_input_humano(self, camera):
+        
+        # --- INÍCIO DA MODIFICAÇÃO (Bug do Auto-Movimento) ---
+        # Se esta é a primeira vez que o update é chamado (após spawn/respawn),
+        # limpa o estado do clique do mouse e pula o processamento do mouse.
+        if self.primeiro_frame_ativo:
+            pygame.mouse.get_pressed() # Limpa o estado (consome o clique antigo da UI)
+            self.primeiro_frame_ativo = False # Desativa a flag
+            
+            # Processa apenas o teclado neste frame
+            teclas = pygame.key.get_pressed()
+            self.quer_virar_esquerda = teclas[pygame.K_a] or teclas[pygame.K_LEFT]; self.quer_virar_direita = teclas[pygame.K_d] or teclas[pygame.K_RIGHT]
+            self.quer_mover_frente = teclas[pygame.K_w] or teclas[pygame.K_UP]; self.quer_mover_tras = teclas[pygame.K_s] or teclas[pygame.K_DOWN]; self.quer_atirar = teclas[pygame.K_SPACE]
+            if self.quer_mover_frente or self.quer_mover_tras: self.posicao_alvo_mouse = None
+            return # Sai da função, ignorando a lógica do mouse
+        # --- FIM DA MODIFICAÇÃO ---
+        
         teclas = pygame.key.get_pressed()
         self.quer_virar_esquerda = teclas[pygame.K_a] or teclas[pygame.K_LEFT]; self.quer_virar_direita = teclas[pygame.K_d] or teclas[pygame.K_RIGHT]
         self.quer_mover_frente = teclas[pygame.K_w] or teclas[pygame.K_UP]; self.quer_mover_tras = teclas[pygame.K_s] or teclas[pygame.K_DOWN]; self.quer_atirar = teclas[pygame.K_SPACE]

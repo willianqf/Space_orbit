@@ -494,6 +494,10 @@ def reiniciar_jogo(pos_spawn=None):
     nave_player.ultimo_hit_tempo = 0
     nave_player.tempo_fim_lentidao = 0
     nave_player.rastro_particulas = []
+    
+    # --- INÍCIO DA MODIFICAÇÃO (Bug do Auto-Movimento) ---
+    nave_player.primeiro_frame_ativo = True # Flag para ignorar input no primeiro frame
+    # --- FIM DA MODIFICAÇÃO ---
 
     # Apenas spawna entidades no modo offline
     if pos_spawn is None:
@@ -555,6 +559,10 @@ def respawn_player_offline(nave):
     nave.tempo_fim_lentidao = 0
     nave.rastro_particulas = []
     
+    # --- INÍCIO DA MODIFICAÇÃO (Bug do Auto-Movimento) ---
+    nave_player.primeiro_frame_ativo = True # Flag para ignorar input no primeiro frame
+    # --- FIM DA MODIFICAÇÃO ---
+
     # 3. Define o estado de volta para JOGANDO
     estado_jogo = "JOGANDO"
 # --- FIM DA MODIFICAÇÃO (Bug #2) ---
