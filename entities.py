@@ -2,7 +2,7 @@
 import pygame
 import math
 # --- INÍCIO: MODIFICAÇÃO IMPORTAÇÕES ---
-from settings import (CINZA_OBSTACULO, BRANCO, VERMELHO_VIDA_COLETAVEL,
+from settings import (CINZA_OBSTACULO, BRANCO, LILAS_REGEN, # <-- MODIFICADO
                       OBSTACULO_RAIO_MIN, OBSTACULO_RAIO_MAX,
                       OBSTACULO_PONTOS_MIN, OBSTACULO_PONTOS_MAX)
 # --- FIM: MODIFICAÇÃO IMPORTAÇÕES ---
@@ -39,34 +39,50 @@ class Obstaculo(pygame.sprite.Sprite):
         # Obstáculos são estáticos por enquanto
         pass
 
-# Vida Coletável (Estrela Vermelha)
-class VidaColetavel(pygame.sprite.Sprite):
-    def __init__(self, x, y):
+# --- CLASSE 'VidaColetavel' REMOVIDA ---
+
+
+# --- INÍCIO: ADIÇÃO DA NAVE DE REGENERAÇÃO ---
+class NaveRegeneradora(pygame.sprite.Sprite):
+    def __init__(self, owner_nave):
         super().__init__()
-        self.raio = 12
-        self.image = pygame.Surface((self.raio * 2, self.raio * 2), pygame.SRCALPHA)
-        self.posicao = pygame.math.Vector2(x, y)
-        self.rect = self.image.get_rect(center=self.posicao)
+        self.owner = owner_nave # Referência ao jogador (ou bot)
+        self.tamanho = 18
+        
+        # Cria a imagem da nave lilás (um triângulo)
+        self.imagem_original = pygame.Surface((self.tamanho, self.tamanho), pygame.SRCALPHA)
+        centro = self.tamanho / 2
+        ponto_topo = (centro, centro - self.tamanho / 2)
+        ponto_base_esq = (centro - self.tamanho / 2, centro + self.tamanho / 2)
+        ponto_base_dir = (centro + self.tamanho / 2, centro + self.tamanho / 2)
+        pygame.draw.polygon(self.imagem_original, LILAS_REGEN, [ponto_topo, ponto_base_esq, ponto_base_dir])
+        
+        # Posição e órbita
+        self.posicao = self.owner.posicao + pygame.math.Vector2(0, -50) # Começa acima do dono
+        self.rect = self.imagem_original.get_rect(center=self.posicao)
+        self.angulo_nave = 0 # Rotação da própria nave (visual)
+        self.angulo_orbita_atual = 0 # Ângulo ao redor do dono
+        self.velocidade_orbita = 3 # Quão rápido gira ao redor do dono
+        self.raio_orbita = 50 # Quão longe do dono
 
-        # Desenha uma estrela vermelha de 5 pontas
-        centro = self.raio
-        pontos_estrela = []
-        for i in range(5):
-            # Ponto externo
-            angulo_ext = math.radians(i * 72 - 90) # Começa no topo
-            x_ext = centro + self.raio * math.cos(angulo_ext)
-            y_ext = centro + self.raio * math.sin(angulo_ext)
-            pontos_estrela.append((x_ext, y_ext))
-            # Ponto interno
-            angulo_int = math.radians(i * 72 + 36 - 90) # 36 graus de offset
-            raio_interno = self.raio * 0.5
-            x_int = centro + raio_interno * math.cos(angulo_int)
-            y_int = centro + raio_interno * math.sin(angulo_int)
-            pontos_estrela.append((x_int, y_int))
+    def update(self):
+        # 1. Gira a própria nave (efeito visual)
+        self.angulo_nave = (self.angulo_nave - 5) % 360 # Gira 5 graus por frame
+        
+        # 2. Gira a órbita ao redor do dono
+        self.angulo_orbita_atual = (self.angulo_orbita_atual + self.velocidade_orbita) % 360
+        
+        # 3. Calcula a nova posição na órbita
+        rad = math.radians(self.angulo_orbita_atual)
+        pos_alvo_orbita = self.owner.posicao + pygame.math.Vector2(math.cos(rad), math.sin(rad)) * self.raio_orbita
+        
+        # 4. Move-se suavemente para a posição da órbita
+        self.posicao = self.posicao.lerp(pos_alvo_orbita, 0.2) 
+        self.rect.center = self.posicao
 
-        pygame.draw.polygon(self.image, VERMELHO_VIDA_COLETAVEL, pontos_estrela)
-        pygame.draw.polygon(self.image, BRANCO, pontos_estrela, 1) # Borda branca fina
-
-    def update(self, *args, **kwargs):
-        # Vidas são estáticas, não precisam de update
-        pass
+    def desenhar(self, surface, camera):
+        # Desenha a nave girando
+        imagem_rotacionada = pygame.transform.rotate(self.imagem_original, self.angulo_nave)
+        rect_desenho = imagem_rotacionada.get_rect(center = self.posicao)
+        surface.blit(imagem_rotacionada, camera.apply(rect_desenho))
+# --- FIM: ADIÇÃO ---

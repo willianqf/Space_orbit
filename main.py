@@ -7,17 +7,15 @@ import socket
 import threading 
 from settings import (MAX_TOTAL_UPGRADES, VOLUME_BASE_EXPLOSAO_BOSS, VOLUME_BASE_EXPLOSAO_NPC, 
                       VOLUME_BASE_TIRO_LASER_LONGO, VOLUME_BASE_TIRO_CONGELANTE,
-                      # --- ADIÇÃO PARA SONS ONLINE ---
                       VOLUME_BASE_TIRO_INIMIGO, VOLUME_BASE_TIRO_PLAYER
-                      # --- FIM DA ADIÇÃO ---
                       )
 # 1. Importações dos Módulos
 import settings as s 
 from camera import Camera
-# --- INÍCIO DA MODIFICAÇÃO (Importar projéteis corretos) ---
 from projectiles import Projetil, ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento, ProjetilCongelante, ProjetilTeleguiadoJogador
+# --- INÍCIO DA MODIFICAÇÃO (Importar NaveRegeneradora) ---
+from entities import Obstaculo, NaveRegeneradora # 'VidaColetavel' foi removida
 # --- FIM DA MODIFICAÇÃO ---
-from entities import Obstaculo, VidaColetavel
 from effects import Explosao 
 
 # Importa as classes de inimigos
@@ -93,11 +91,8 @@ estado_jogo = "MENU"
 variavel_texto_terminal = ""
 rodando = True
 max_bots_atual = s.MAX_BOTS 
-
-# --- INÍCIO DA ADIÇÃO (Dificuldade) ---
-dificuldade_selecionada = "Normal" # "Normal" ou "Dificil"
-dificuldade_jogo_atual = "Normal" # Guarda a dificuldade do jogo em andamento
-# --- FIM DA ADIÇÃO ---
+dificuldade_selecionada = "Normal"
+dificuldade_jogo_atual = "Normal"
 
 # --- Variáveis de Nome e Rede ---
 nome_jogador_input = "" 
@@ -126,13 +121,19 @@ grupo_projeteis_player = pygame.sprite.Group()
 grupo_projeteis_bots = pygame.sprite.Group()
 grupo_projeteis_inimigos = pygame.sprite.Group()
 grupo_obstaculos = pygame.sprite.Group()
-grupo_vidas_coletaveis = pygame.sprite.Group()
+# grupo_vidas_coletaveis = pygame.sprite.Group() # <-- REMOVIDO
 grupo_inimigos = pygame.sprite.Group() 
 grupo_motherships = pygame.sprite.Group() 
 grupo_boss_congelante = pygame.sprite.Group()
 grupo_bots = pygame.sprite.Group()
 grupo_explosoes = pygame.sprite.Group()
 grupo_player = pygame.sprite.GroupSingle()
+
+# --- INÍCIO DA ADIÇÃO (Grupo de Efeitos) ---
+# Usado para desenhar a nave de regeneração
+grupo_efeitos_visuais = pygame.sprite.Group()
+# --- FIM DA ADIÇÃO ---
+
 
 # 6. Criação do Jogador
 nave_player = Player(s.MAP_WIDTH // 2, s.MAP_HEIGHT // 2, nome=nome_jogador_input)
@@ -389,18 +390,14 @@ def fechar_conexao():
         online_projectiles.clear()
         online_npcs.clear() 
 
-# --- INÍCIO DA MODIFICAÇÃO (Definição de Reiniciar) ---
 def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"): 
     """ Prepara o jogo, limpando grupos e resetando o jogador. """
     global estado_jogo, nave_player, max_bots_atual, dificuldade_jogo_atual
-# --- FIM DA MODIFICAÇÃO ---
 
     print("Reiniciando o Jogo...")
     
-    # --- INÍCIO DA ADIÇÃO (Define dificuldade) ---
     dificuldade_jogo_atual = dificuldade
     print(f"Iniciando jogo na dificuldade: {dificuldade_jogo_atual}")
-    # --- FIM DA ADIÇÃO ---
 
     if client_socket and MEU_NOME_REDE:
         nave_player.nome = MEU_NOME_REDE
@@ -409,7 +406,7 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
 
     # Limpa grupos
     grupo_obstaculos.empty() 
-    grupo_vidas_coletaveis.empty() 
+    # grupo_vidas_coletaveis.empty() # <-- REMOVIDO
     grupo_inimigos.empty() 
     grupo_motherships.empty() 
     grupo_boss_congelante.empty() 
@@ -418,10 +415,10 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     grupo_projeteis_bots.empty() 
     grupo_projeteis_inimigos.empty() 
     grupo_explosoes.empty() 
+    grupo_efeitos_visuais.empty() # <-- ADICIONADO
 
     spawn_x, spawn_y = 0, 0
     if pos_spawn:
-        # Usa a posição de spawn fornecida (pelo servidor)
         spawn_x, spawn_y = pos_spawn
         print(f"Spawnando em posição definida pelo servidor: ({spawn_x}, {spawn_y})")
         
@@ -433,7 +430,6 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
                 'x': spawn_x, 'y': spawn_y, 'angulo': 0, 'hp': 5, 'max_hp': 5, 'pontos': 0
             }
     else:
-        # Modo Offline: Escolhe posição aleatória
         print("Spawnando em posição aleatória (Modo Offline)...")
         margem_spawn = 100
         spawn_x = random.randint(margem_spawn, s.MAP_WIDTH - margem_spawn)
@@ -453,9 +449,7 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     nave_player.nivel_dano = 1
     nave_player.nivel_max_vida = 1
     nave_player.nivel_escudo = 0
-    # --- INÍCIO DA MODIFICAÇÃO (Velocidade) ---
     nave_player.velocidade_movimento_base = 4 + (nave_player.nivel_motor * 0.5)
-    # --- FIM DA MODIFICAÇÃO ---
     nave_player.max_vida = 4 + nave_player.nivel_max_vida
     nave_player.vida_atual = nave_player.max_vida
     nave_player.pontos_upgrade_disponiveis = 0
@@ -469,17 +463,17 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     nave_player.tempo_fim_lentidao = 0
     nave_player.rastro_particulas = []
     
+    nave_player.parar_regeneracao() # Garante que não comece regenerando
+    
     nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
 
     # Apenas spawna entidades no modo offline
     if pos_spawn is None:
-        print("Gerando entidades (Obstáculos, Vidas, Bots)...")
+        print("Gerando entidades (Obstáculos, Bots)...")
         for _ in range(20): spawnar_obstaculo(nave_player.posicao)
-        for _ in range(5): spawnar_vida(nave_player.posicao)
+        # for _ in range(5): spawnar_vida(nave_player.posicao) # <-- REMOVIDO
         grupo_bots.empty()
-        # --- INÍCIO DA MODIFICAÇÃO (Passa dificuldade) ---
         for _ in range(max_bots_atual): spawnar_bot(nave_player.posicao, dificuldade_jogo_atual)
-        # --- FIM DA MODIFICAÇÃO ---
     else:
         print("Modo Online. Aguardando dados do servidor para spawnar entidades.")
     
@@ -489,7 +483,6 @@ def respawn_player_offline(nave):
     global estado_jogo
     print("Respawnando jogador (Offline)...")
 
-    # 1. Encontra nova posição de spawn
     pos_referencia_bots = [bot.posicao for bot in grupo_bots]
     pos_referencia_inimigos = [inimigo.posicao for inimigo in grupo_inimigos]
     pos_referencias_todas = pos_referencia_bots + pos_referencia_inimigos
@@ -503,7 +496,6 @@ def respawn_player_offline(nave):
     nave.rect.center = nave.posicao
     print(f"Jogador respawnou em ({int(spawn_x)}, {int(spawn_y)})")
 
-    # 2. Reseta o estado do jogador
     nave.grupo_auxiliares_ativos.empty()
     nave.lista_todas_auxiliares = [] 
     for pos in Nave.POSICOES_AUXILIARES:
@@ -515,9 +507,7 @@ def respawn_player_offline(nave):
     nave.nivel_dano = 1
     nave.nivel_max_vida = 1
     nave.nivel_escudo = 0
-    # --- INÍCIO DA MODIFICAÇÃO (Velocidade) ---
     nave.velocidade_movimento_base = 4 + (nave.nivel_motor * 0.5)
-    # --- FIM DA MODIFICAÇÃO ---
     nave.max_vida = 4 + nave.nivel_max_vida
     nave.vida_atual = nave.max_vida
     nave.pontos_upgrade_disponiveis = 0
@@ -531,9 +521,10 @@ def respawn_player_offline(nave):
     nave.tempo_fim_lentidao = 0
     nave.rastro_particulas = []
     
+    nave.parar_regeneracao() # Garante que não respawna regenerando
+    
     nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
 
-    # 3. Define o estado de volta para JOGANDO
     estado_jogo = "JOGANDO"
 
 def resetar_para_menu():
@@ -541,6 +532,8 @@ def resetar_para_menu():
     global estado_jogo
     
     print("Voltando ao Menu Principal...")
+    
+    nave_player.parar_regeneracao() # Parar a regeneração ao sair
     
     grupo_bots.empty()
     grupo_inimigos.empty()
@@ -550,7 +543,8 @@ def resetar_para_menu():
     grupo_projeteis_inimigos.empty()
     grupo_projeteis_player.empty() 
     grupo_obstaculos.empty() 
-    grupo_vidas_coletaveis.empty()
+    # grupo_vidas_coletaveis.empty() # <-- REMOVIDO
+    grupo_efeitos_visuais.empty() # <-- ADICIONADO
     
     fechar_conexao()
     
@@ -582,12 +576,10 @@ def spawnar_inimigo_aleatorio(pos_referencia):
     if inimigo:
         grupo_inimigos.add(inimigo)
         
-# --- INÍCIO DA MODIFICAÇÃO (Definição de spawnar_bot) ---
 def spawnar_bot(pos_referencia, dificuldade="Normal"):
     x, y = calcular_posicao_spawn(pos_referencia)
-    novo_bot = NaveBot(x, y, dificuldade) # Passa a dificuldade
+    novo_bot = NaveBot(x, y, dificuldade) 
     grupo_bots.add(novo_bot)
-# --- FIM DA MODIFICAÇÃO ---
 
 def spawnar_mothership(pos_referencia):
     max_tentativas = 10 
@@ -610,10 +602,9 @@ def spawnar_mothership(pos_referencia):
             print(f"!!! Mothership spawnou em ({int(x)}, {int(y)}) !!!") 
             return 
     print("[AVISO] Não foi possível encontrar uma posição segura para spawnar a Mothership após várias tentativas.")
-def spawnar_vida(pos_referencia):
-    x, y = calcular_posicao_spawn(pos_referencia)
-    nova_vida = VidaColetavel(x, y)
-    grupo_vidas_coletaveis.add(nova_vida)
+
+# --- FUNÇÃO 'spawnar_vida' REMOVIDA ---
+
 def spawnar_obstaculo(pos_referencia):
     x, y = calcular_posicao_spawn(pos_referencia)
     raio = random.randint(s.OBSTACULO_RAIO_MIN, s.OBSTACULO_RAIO_MAX)
@@ -665,7 +656,9 @@ while rodando:
         mouse_buttons = pygame.mouse.get_pressed()
         if mouse_buttons[0]: 
             mouse_pos_tela = pygame.mouse.get_pos()
-            if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela):
+            # --- INÍCIO DA MODIFICAÇÃO (Não mover ao clicar em REGEN) ---
+            if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela) and not ui.RECT_BOTAO_REGEN_HUD.collidepoint(mouse_pos_tela):
+            # --- FIM DA MODIFICAÇÃO ---
                 camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
                 mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0],
                                                       mouse_pos_tela[1] + camera_world_topleft[1])
@@ -700,9 +693,7 @@ while rodando:
             if event.type == pygame.KEYDOWN:
                 if input_nome_ativo:
                     if event.key == pygame.K_RETURN:
-                        # --- INÍCIO DA MODIFICAÇÃO (Passa dificuldade) ---
                         reiniciar_jogo(dificuldade=dificuldade_selecionada) # Modo Offline
-                        # --- FIM DA MODIFICAÇÃO ---
                         estado_jogo = "JOGANDO"
                     elif event.key == pygame.K_BACKSPACE:
                         nome_jogador_input = nome_jogador_input[:-1]
@@ -714,54 +705,43 @@ while rodando:
                 mouse_pos = pygame.mouse.get_pos()
                 
                 if ui.RECT_LOGIN_BOTAO.collidepoint(mouse_pos):
-                    # --- INÍCIO DA MODIFICAÇÃO (Passa dificuldade) ---
                     reiniciar_jogo(dificuldade=dificuldade_selecionada) # Modo Offline
-                    # --- FIM DA MODIFICAÇÃO ---
                     estado_jogo = "JOGANDO"
                 elif ui.RECT_LOGIN_INPUT.collidepoint(mouse_pos):
                     input_nome_ativo = True
-                
-                # --- INÍCIO DA ADIÇÃO (Eventos de Dificuldade) ---
                 elif ui.RECT_LOGIN_DIFICULDADE_LEFT.collidepoint(mouse_pos):
                     dificuldade_selecionada = "Normal"
                 elif ui.RECT_LOGIN_DIFICULDADE_RIGHT.collidepoint(mouse_pos):
                     dificuldade_selecionada = "Dificil"
-                # --- FIM DA ADIÇÃO ---
-                    
                 else:
                     input_nome_ativo = False
         
         elif estado_jogo == "GET_SERVER_INFO":
+            # (Código de rede inalterado)
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_TAB:
                     input_connect_ativo = "ip" if input_connect_ativo == "nome" else "nome"
-                
                 elif event.key == pygame.K_RETURN:
                     if input_connect_ativo == "nome":
                         input_connect_ativo = "ip"
                     elif input_connect_ativo == "ip":
                         input_connect_ativo = "none"
                         tentar_conectar(ip_servidor_input, 5555, nome_jogador_input)
-                        
                 elif input_connect_ativo == "nome":
                     if event.key == pygame.K_BACKSPACE:
                         nome_jogador_input = nome_jogador_input[:-1]
                     elif len(nome_jogador_input) < LIMITE_MAX_NOME and event.unicode.isprintable():
                         nome_jogador_input += event.unicode
-                        
                 elif input_connect_ativo == "ip":
                     if event.key == pygame.K_BACKSPACE:
                         ip_servidor_input = ip_servidor_input[:-1]
                     elif len(ip_servidor_input) < LIMITE_MAX_IP and event.unicode.isprintable():
                         ip_servidor_input += event.unicode
-
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
-                
                 if ui.RECT_CONNECT_BOTAO.collidepoint(mouse_pos):
                     input_connect_ativo = "none"
                     tentar_conectar(ip_servidor_input, 5555, nome_jogador_input)
-                
                 elif ui.RECT_CONNECT_NOME.collidepoint(mouse_pos):
                     input_connect_ativo = "nome"
                 elif ui.RECT_CONNECT_IP.collidepoint(mouse_pos):
@@ -771,10 +751,18 @@ while rodando:
         
         elif estado_jogo == "JOGANDO":
             if event.type == pygame.KEYDOWN:
+                # Eventos de Menu
                 if event.key == pygame.K_v: estado_jogo = "LOJA"; print("Abrindo loja...")
                 elif event.key == pygame.K_QUOTE: estado_jogo = "TERMINAL"; variavel_texto_terminal = ""; print("Abrindo terminal de cheats...")
                 elif event.key == pygame.K_ESCAPE: estado_jogo = "PAUSE"; print("Jogo Pausado.")
+                
+                # --- INÍCIO DA ADIÇÃO (Tecla Regenerar) ---
+                elif event.key == pygame.K_r:
+                    if client_socket is None: # Só funciona offline por enquanto
+                        nave_player.toggle_regeneracao(grupo_efeitos_visuais)
+                # --- FIM DA ADIÇÃO ---
 
+                # Eventos de Jogo (Online)
                 elif client_socket:
                     if event.key == pygame.K_w or event.key == pygame.K_UP:
                         enviar_input_servidor("W_DOWN")
@@ -788,6 +776,7 @@ while rodando:
                         enviar_input_servidor("SPACE_DOWN")
             
             elif event.type == pygame.KEYUP:
+                # Eventos de Jogo (Online)
                 if client_socket:
                     if event.key == pygame.K_w or event.key == pygame.K_UP:
                         enviar_input_servidor("W_UP")
@@ -806,6 +795,12 @@ while rodando:
                 if event.button == 1: # Esquerdo (LMB)
                     if ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela):
                          estado_jogo = "LOJA"; print("Abrindo loja via clique no botão HUD...")
+                    
+                    # --- INÍCIO DA ADIÇÃO (Clique Regenerar) ---
+                    elif ui.RECT_BOTAO_REGEN_HUD.collidepoint(mouse_pos_tela):
+                        if client_socket is None: # Só funciona offline
+                            nave_player.toggle_regeneracao(grupo_efeitos_visuais)
+                    # --- FIM DA ADIÇÃO ---
                 
                 elif event.button == 3: # Direito (RMB)
                     camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
@@ -910,10 +905,8 @@ while rodando:
                     if nave_player.vida_atual <= 0 and estado_jogo != "GAME_OVER":
                         estado_jogo = "GAME_OVER"
                         print("[CLIENTE] Você morreu!")
-                        enviar_input_servidor("W_UP")
-                        enviar_input_servidor("A_UP")
-                        enviar_input_servidor("S_UP")
-                        enviar_input_servidor("D_UP")
+                        enviar_input_servidor("W_UP"); enviar_input_servidor("A_UP")
+                        enviar_input_servidor("S_UP"); enviar_input_servidor("D_UP")
                         enviar_input_servidor("SPACE_UP")
             
             nave_player.rect.center = nave_player.posicao
@@ -934,21 +927,24 @@ while rodando:
             else: # (PAUSE, GAME_OVER, etc.)
                 lista_alvos_naves = list(grupo_bots)
 
-            # --- INÍCIO DA MODIFICAÇÃO (Passa dificuldade para spawnar bot) ---
-            # (A função 'spawnar_bot' agora precisa da dificuldade_jogo_atual)
             if estado_jogo == "JOGANDO" and len(grupo_bots) < max_bots_atual: 
                 spawnar_bot(nave_player.posicao, dificuldade_jogo_atual)
-            # --- FIM DA MODIFICAÇÃO ---
 
-            grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos, grupo_vidas_coletaveis)
+            # --- INÍCIO DA MODIFICAÇÃO (Remover grupo_vidas_coletaveis) ---
+            grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos, None) # Passa None para vidas
+            # --- FIM DA MODIFICAÇÃO ---
             grupo_inimigos.update(lista_alvos_naves, grupo_projeteis_inimigos, s.DESPAWN_DIST)
             
             grupo_projeteis_player.update()
             grupo_projeteis_bots.update()
             grupo_projeteis_inimigos.update()
             
+            # --- INÍCIO DA ADIÇÃO (Update de Efeitos) ---
+            grupo_efeitos_visuais.update()
+            # --- FIM DA ADIÇÃO ---
+            
             if estado_jogo == "JOGANDO":
-                if len(grupo_vidas_coletaveis) < s.MAX_VIDAS_COLETAVEIS: spawnar_vida(nave_player.posicao)
+                # if len(grupo_vidas_coletaveis) < s.MAX_VIDAS_COLETAVEIS: spawnar_vida(nave_player.posicao) # <-- REMOVIDO
                 if len(grupo_obstaculos) < s.MAX_OBSTACULOS: spawnar_obstaculo(nave_player.posicao)
                 contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership)))
                 if contagem_inimigos_normais < s.MAX_INIMIGOS: spawnar_inimigo_aleatorio(nave_player.posicao)
@@ -1027,9 +1023,9 @@ while rodando:
                     else: 
                         bot.foi_atingido(1, estado_jogo, proj.posicao)
                     proj.kill()
-            colisoes = pygame.sprite.groupcollide(grupo_bots, grupo_vidas_coletaveis, False, True)
-            for bot, vida_list in colisoes.items():
-                if vida_list: bot.coletar_vida(s.VIDA_COLETADA_CURA)
+            
+            # --- Bloco de colisão 'grupo_bots' vs 'grupo_vidas_coletaveis' REMOVIDO ---
+            
             for bot in grupo_bots:
                 inimigos_colididos = pygame.sprite.spritecollide(bot, grupo_inimigos, False)
                 for inimigo in inimigos_colididos:
@@ -1076,8 +1072,7 @@ while rodando:
                 if nave_player.foi_atingido(proj.dano, estado_jogo, proj.posicao):
                      estado_jogo = "GAME_OVER" 
 
-        colisoes_vida_player = pygame.sprite.spritecollide(nave_player, grupo_vidas_coletaveis, True)
-        for _ in colisoes_vida_player: nave_player.coletar_vida(s.VIDA_COLETADA_CURA)
+        # --- Bloco de colisão 'colisoes_vida_player' REMOVIDO ---
 
         colisoes_ram_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_inimigos, False)
         for inimigo in colisoes_ram_inimigo_player:
@@ -1106,9 +1101,7 @@ while rodando:
         ui.desenhar_menu(tela, LARGURA_TELA, ALTURA_TELA)
         
     elif estado_jogo == "GET_NAME":
-        # --- INÍCIO DA MODIFICAÇÃO (Passa dificuldade) ---
         ui.desenhar_tela_nome(tela, nome_jogador_input, input_nome_ativo, dificuldade_selecionada)
-        # --- FIM DA MODIFICAÇÃO ---
         
     elif estado_jogo == "GET_SERVER_INFO":
         ui.desenhar_tela_conexao(tela, nome_jogador_input, ip_servidor_input, input_connect_ativo)
@@ -1121,14 +1114,16 @@ while rodando:
             pos_tela_y = (pos_base.y - (pos_jogador.y * parallax_fator)) % ALTURA_TELA
             pygame.draw.circle(tela, s.CORES_ESTRELAS[raio - 1], (int(pos_tela_x), int(pos_tela_y)), raio)
 
+        # Sprites do Jogo
         for obst in grupo_obstaculos: tela.blit(obst.image, camera.apply(obst.rect))
-        for vida in grupo_vidas_coletaveis: tela.blit(vida.image, camera.apply(vida.rect))
+        # --- Loop de 'grupo_vidas_coletaveis' REMOVIDO ---
         
         online_players_copy = {}
         online_projectiles_copy = []
         online_npcs_copy = {} 
         
         if client_socket:
+            # (Código de rede inalterado)
             with network_state_lock:
                 online_players_copy = online_players_states.copy() 
                 online_projectiles_copy = list(online_projectiles) 
@@ -1165,15 +1160,11 @@ while rodando:
             for nome, state in online_players_copy.items():
                 if nome == MEU_NOME_REDE:
                     continue 
-                
                 if state.get('hp', 0) <= 0:
                     continue 
-                
                 img_rotacionada = pygame.transform.rotate(nave_player.imagem_original, state['angulo'])
                 pos_rect = img_rotacionada.get_rect(center=(state['x'], state['y']))
-                
                 tela.blit(img_rotacionada, camera.apply(pos_rect))
-                
                 nome_surf = s.FONT_NOME_JOGADOR.render(nome, True, s.BRANCO)
                 nome_rect = nome_surf.get_rect(midbottom=(state['x'], state['y'] - 33))
                 tela.blit(nome_surf, camera.apply(nome_rect))
@@ -1185,28 +1176,22 @@ while rodando:
                     cor = s.LARANJA_TIRO_INIMIGO
                 elif tipo == 'player':
                     cor = s.VERMELHO_TIRO
-                
                 pos_tela = camera.apply(pygame.Rect(x, y, 0, 0)).topleft
                 pygame.draw.circle(tela, cor, pos_tela, 5) 
             
             for npc_id, state in online_npcs_copy.items():
-                
                 tamanho = state.get('tamanho', 30) 
                 tipo = state.get('tipo')
-
                 base_img = pygame.Surface((tamanho, tamanho), pygame.SRCALPHA)
                 cor = s.VERMELHO_PERSEGUIDOR 
-
                 if tipo == 'boss_congelante':
                     cor = s.AZUL_CONGELANTE
                     centro = tamanho // 2
                     pygame.draw.circle(base_img, cor, (centro, centro), centro)
                     pygame.draw.circle(base_img, s.BRANCO, (centro, centro), centro, 2) 
-                
                 elif tipo == 'mothership':
                     cor = s.CIANO_MOTHERSHIP
                     base_img.fill(cor) 
-
                 elif tipo == 'bomba':
                     cor = s.AMARELO_BOMBA
                     base_img.fill(cor)
@@ -1224,32 +1209,24 @@ while rodando:
                     base_img.fill(cor)
                 else: 
                     base_img.fill(cor)
-                
                 img_rotacionada = pygame.transform.rotate(base_img, state['angulo'])
                 pos_rect = img_rotacionada.get_rect(center=(state['x'], state['y']))
-                
                 tela.blit(img_rotacionada, camera.apply(pos_rect))
                 
                 npc_hp = state.get('hp', 0)
                 npc_max_hp = state.get('max_hp', npc_hp if npc_hp > 0 else 3) 
-                
                 if npc_hp < npc_max_hp: 
                     LARGURA_BARRA = tamanho 
                     ALTURA_BARRA = 4
                     OFFSET_Y = (tamanho / 2) + 10
-                    
                     pos_x_mundo = state['x'] - LARGURA_BARRA / 2
                     pos_y_mundo = state['y'] + OFFSET_Y 
-                    
                     percentual = max(0, npc_hp / npc_max_hp)
                     largura_vida_atual = LARGURA_BARRA * percentual
-                    
                     rect_fundo_mundo = pygame.Rect(pos_x_mundo, pos_y_mundo, LARGURA_BARRA, ALTURA_BARRA)
                     rect_vida_mundo = pygame.Rect(pos_x_mundo, pos_y_mundo, largura_vida_atual, ALTURA_BARRA)
-                    
                     pygame.draw.rect(tela, s.VERMELHO_VIDA_FUNDO, camera.apply(rect_fundo_mundo))
                     pygame.draw.rect(tela, s.VERDE_VIDA, camera.apply(rect_vida_mundo))
-
         else:
             # Modo Offline: Desenha os bots e inimigos locais
             for inimigo in grupo_inimigos: inimigo.desenhar_vida(tela, camera); tela.blit(inimigo.image, camera.apply(inimigo.rect))
@@ -1262,12 +1239,23 @@ while rodando:
             for proj in grupo_projeteis_bots: tela.blit(proj.image, camera.apply(proj.rect))
             for proj in grupo_projeteis_inimigos: tela.blit(proj.image, camera.apply(proj.rect))
         
+        # Desenha o nosso jogador (Sempre)
         if estado_jogo != "GAME_OVER": 
             nave_player.desenhar(tela, camera); nave_player.desenhar_vida(tela, camera)
             nave_player.desenhar_nome(tela, camera)
             for aux in nave_player.grupo_auxiliares_ativos: aux.desenhar(tela, camera)
         
-        for explosao in grupo_explosoes: explosao.draw(tela, camera)
+        # --- INÍCIO DA ADIÇÃO (Desenhar Nave de Regeneração) ---
+        for efeito in grupo_efeitos_visuais:
+            if isinstance(efeito, NaveRegeneradora):
+                efeito.desenhar(tela, camera)
+            else: # (Mantém a lógica de explosão)
+                efeito.draw(tela, camera)
+        # --- FIM DA ADIÇÃO ---
+        
+        # (O loop de explosão separado foi removido pois agora está em grupo_efeitos_visuais)
+        # (Se a sua NaveRegeneradora não tiver o método 'draw', você pode separá-los novamente)
+        # (EDIT: Corrigi acima para usar .desenhar() para NaveRegeneradora e .draw() para o resto)
 
         ui.desenhar_hud(tela, nave_player, estado_jogo)
         
@@ -1283,11 +1271,9 @@ while rodando:
                 def __init__(self, nome, pontos):
                     self.nome = nome
                     self.pontos = pontos
-            
             lista_ranking = []
             for nome, state in online_players_copy.items():
                 lista_ranking.append(RankingEntry(nome, state.get('pontos', 0)))
-
             lista_ordenada = sorted(lista_ranking, key=lambda entry: entry.pontos, reverse=True)
             top_5 = lista_ordenada[:5]
         else:

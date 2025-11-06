@@ -11,50 +11,38 @@ from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, MAP_WI
                       REDUCAO_DANO_POR_NIVEL, DURACAO_FX_ESCUDO, COR_ESCUDO_FX,
                       RASTRO_MAX_PARTICULAS, RASTRO_DURACAO, RASTRO_TAMANHO_INICIAL, COR_RASTRO_MOTOR,
                       VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAX_TOTAL_UPGRADES, MAX_DISTANCIA_SOM_AUDIVEL, PANNING_RANGE_SOM, VOLUME_BASE_TIRO_PLAYER,
-                      PONTOS_LIMIARES_PARA_UPGRADE, PONTOS_SCORE_PARA_MUDAR_LIMIAR, CUSTOS_AUXILIARES, FONT_NOME_JOGADOR, BRANCO, VELOCIDADE_ROTACAO_NAVE
+                      PONTOS_LIMIARES_PARA_UPGRADE, PONTOS_SCORE_PARA_MUDAR_LIMIAR, CUSTOS_AUXILIARES, FONT_NOME_JOGADOR, BRANCO, VELOCIDADE_ROTACAO_NAVE,
+                      REGEN_POR_TICK, REGEN_TICK_RATE # <-- Importar novas constantes
                       ) 
 # Importa classes necessárias
 from projectiles import Projetil, ProjetilTeleguiadoJogador
 from effects import Explosao
-from entities import Obstaculo, VidaColetavel 
+# --- INÍCIO DA MODIFICAÇÃO (Importar NaveRegeneradora) ---
+from entities import Obstaculo, NaveRegeneradora # <-- 'VidaColetavel' removida
+# --- FIM DA MODIFICAÇÃO ---
 
 # --- INÍCIO DA REATORAÇÃO: Importa o cérebro do Bot ---
 from botia import BotAI
 # --- FIM DA REATORAÇÃO ---
 
 def tocar_som_posicional(som, pos_fonte, pos_ouvinte, volume_base_config):
-    """
-    Toca um som com volume e panning 2D baseados na posição da fonte
-    e do ouvinte (jogador).
-    """
     if not som or not pos_ouvinte:
         return
-
     try:
         distancia = pos_fonte.distance_to(pos_ouvinte)
     except ValueError:
-        distancia = 0 # Fonte e ouvinte estão no mesmo lugar
-
-    # 1. Verifica se está longe demais
+        distancia = 0 
     if distancia > MAX_DISTANCIA_SOM_AUDIVEL:
-        return # Muito longe para ouvir, não toca o som
-
-    # 2. Calcular Volume (Atenuação)
+        return 
     fator_distancia = 1.0 - (distancia / MAX_DISTANCIA_SOM_AUDIVEL)
     volume_base = volume_base_config * fator_distancia
-
-    # 3. Calcular Panning (Direção Esquerda/Direita)
     vetor_para_som = pos_fonte - pos_ouvinte
     dist_x = vetor_para_som.x
     fator_pan = max(-1.0, min(1.0, dist_x / PANNING_RANGE_SOM))
-
-    # 4. Calcular volumes L/R
     left_percent = (1.0 - fator_pan) / 2.0
     right_percent = (1.0 + fator_pan) / 2.0
     left_vol = volume_base * left_percent
     right_vol = volume_base * right_percent
-
-    # 5. Tocar o som
     channel = pygame.mixer.find_channel() 
     if channel:
         channel.set_volume(left_vol, right_vol)
@@ -79,9 +67,9 @@ class NaveAuxiliar(pygame.sprite.Sprite):
     def update(self, lista_alvos, grupo_projeteis_destino, estado_jogo_atual, nave_player_ref):
         parar_ataque = (self.owner == nave_player_ref and estado_jogo_atual == "GAME_OVER")
         offset_rotacionado = self.offset_pos.rotate(-self.owner.angulo); posicao_alvo_seguir = self.owner.posicao + offset_rotacionado
-        self.posicao = self.posicao.lerp(posicao_alvo_seguir, 0.1) # Movimento de seguir o dono
+        self.posicao = self.posicao.lerp(posicao_alvo_seguir, 0.1) 
         
-        self.alvo_atual = None # Reseta o alvo
+        self.alvo_atual = None 
 
         if not parar_ataque:
             alvo_do_dono = self.owner.alvo_selecionado 
@@ -162,8 +150,82 @@ class Nave(pygame.sprite.Sprite):
         for pos in self.POSICOES_AUXILIARES: self.lista_todas_auxiliares.append(NaveAuxiliar(self, pos))
         
         self.tempo_spawn_protecao_input = 0
+        
+        # --- INÍCIO DAS ADIÇÕES (Regeneração) ---
+        self.esta_regenerando = False
+        self.nave_regeneradora_sprite = pygame.sprite.GroupSingle()
+        self.ultimo_tick_regeneracao = 0
+        # --- FIM DAS ADIÇÕES ---
 
     def update(self, grupo_projeteis_destino, camera=None): pass
+    
+    # --- INÍCIO DAS NOVAS FUNÇÕES DE REGENERAÇÃO ---
+    def parar_regeneracao(self):
+        """Para a regeneração e remove a nave lilás."""
+        if self.esta_regenerando:
+            self.esta_regenerando = False
+            self.nave_regeneradora_sprite.empty() # Remove a nave
+            # print(f"[{self.nome}] Regeneração interrompida.") # Opcional: Log
+
+    def iniciar_regeneracao(self, grupo_efeitos_visuais):
+        """Inicia a regeneração se as condições forem válidas."""
+        # Não pode regenerar se a vida estiver cheia
+        if self.vida_atual >= self.max_vida:
+            # print(f"[{self.nome}] Tentou regenerar com vida cheia.") # Opcional: Log
+            return
+            
+        # Não pode regenerar se já estiver regenerando
+        if self.esta_regenerando:
+            return
+
+        # Condição de estar parado (verificado em update_regeneracao)
+        if self.quer_mover_frente or self.quer_mover_tras or self.posicao_alvo_mouse is not None:
+            # print(f"[{self.nome}] Tentou regenerar em movimento.") # Opcional: Log
+            return
+            
+        print(f"[{self.nome}] Iniciando regeneração...")
+        self.esta_regenerando = True
+        self.ultimo_tick_regeneracao = pygame.time.get_ticks()
+        
+        # Cria e adiciona a nave lilás
+        nova_nave_regen = NaveRegeneradora(self)
+        self.nave_regeneradora_sprite.add(nova_nave_regen)
+        if grupo_efeitos_visuais is not None:
+            grupo_efeitos_visuais.add(nova_nave_regen)
+
+    def toggle_regeneracao(self, grupo_efeitos_visuais):
+        """Chamado pelo clique do botão ou tecla 'R'."""
+        if self.esta_regenerando:
+            self.parar_regeneracao()
+        else:
+            self.iniciar_regeneracao(grupo_efeitos_visuais)
+
+    def update_regeneracao(self):
+        """Controla a lógica de regeneração a cada frame."""
+        if not self.esta_regenerando:
+            return
+            
+        # Condição 1: Para se o jogador se mover
+        # (Verifica as "intenções" de movimento antes que o movimento ocorra)
+        if self.quer_mover_frente or self.quer_mover_tras or self.posicao_alvo_mouse is not None:
+            self.parar_regeneracao()
+            return
+            
+        # Condição 2: Para se a vida estiver cheia
+        if self.vida_atual >= self.max_vida:
+            self.vida_atual = self.max_vida # Garante que não ultrapasse
+            self.parar_regeneracao()
+            return
+            
+        # Condição 3: Processa o "tick" de cura
+        agora = pygame.time.get_ticks()
+        if agora - self.ultimo_tick_regeneracao > REGEN_TICK_RATE:
+            self.ultimo_tick_regeneracao = agora
+            self.vida_atual = min(self.max_vida, self.vida_atual + REGEN_POR_TICK)
+            self.ultimo_hit_tempo = agora # Mostra a barra de vida
+            print(f"[{self.nome}] Regenerou! Vida: {self.vida_atual:.1f}/{self.max_vida}") # Log
+            
+    # --- FIM DAS NOVAS FUNÇÕES ---
     
     def rotacionar(self):
         angulo_alvo = None
@@ -245,6 +307,11 @@ class Nave(pygame.sprite.Sprite):
                 tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, ouvinte_real, VOLUME_BASE_TIRO_PLAYER)
     
     def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
+        # --- INÍCIO DA ADIÇÃO (Parar regen ao ser atingido) ---
+        if self.esta_regenerando:
+            self.parar_regeneracao()
+        # --- FIM DA ADIÇÃO ---
+        
         if self.vida_atual <= 0 and estado_jogo_atual == "GAME_OVER": return False
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_hit_tempo < 150: return False
@@ -284,20 +351,15 @@ class Nave(pygame.sprite.Sprite):
     def ganhar_pontos(self, quantidade):
         if quantidade <= 0:
             return
-
         self.pontos += quantidade 
         self._pontos_acumulados_para_upgrade += quantidade
-        
         while self._pontos_acumulados_para_upgrade >= self._limiar_pontos_atual:
             self.pontos_upgrade_disponiveis += 1
             self._pontos_acumulados_para_upgrade -= self._limiar_pontos_atual 
             print(f"[{self.nome}] Ganhou 1 Ponto de Upgrade! (Total: {self.pontos_upgrade_disponiveis})")
-
             pontos_totais_aproximados = self.pontos 
-            
             if self._indice_limiar < len(self._pontos_no_limiar) and \
                pontos_totais_aproximados >= self._pontos_no_limiar[self._indice_limiar]:
-                
                 self._indice_limiar += 1
                 self._limiar_pontos_atual = self._limiares[self._indice_limiar]
                 print(f"[{self.nome}] Próximo Ponto de Upgrade a cada {self._limiar_pontos_atual} pontos de score.")
@@ -306,15 +368,13 @@ class Nave(pygame.sprite.Sprite):
         num_ativos = len(self.grupo_auxiliares_ativos)
         if num_ativos < len(self.lista_todas_auxiliares):
             aux_para_adicionar = self.lista_todas_auxiliares[num_ativos]
-
             offset_rotacionado = aux_para_adicionar.offset_pos.rotate(-self.angulo)
             posicao_correta_atual = self.posicao + offset_rotacionado
             aux_para_adicionar.posicao = posicao_correta_atual
             aux_para_adicionar.rect.center = posicao_correta_atual 
             aux_para_adicionar.angulo = self.angulo 
-
             self.grupo_auxiliares_ativos.add(aux_para_adicionar)
-            print(f"[{self.nome}] Ativando auxiliar {num_ativos + 1}")
+            # print(f"[{self.nome}] Ativando auxiliar {num_ativos + 1}") # Log Reduzido
             return True 
         else:
             return False
@@ -356,10 +416,8 @@ class Nave(pygame.sprite.Sprite):
         elif tipo == "auxiliar":
             num_ativos = len(self.grupo_auxiliares_ativos)
             max_aux = len(self.lista_todas_auxiliares) 
-            
             if num_ativos < max_aux:
                 custo_atual_aux = CUSTOS_AUXILIARES[num_ativos] 
-                
                 if self.pontos_upgrade_disponiveis >= custo_atual_aux:
                     if self.comprar_auxiliar(): 
                         self.pontos_upgrade_disponiveis -= custo_atual_aux 
@@ -397,9 +455,10 @@ class Nave(pygame.sprite.Sprite):
         return comprou
 
     def coletar_vida(self, quantidade):
-        if self.vida_atual < self.max_vida:
-            self.vida_atual = min(self.max_vida, self.vida_atual + quantidade); self.ultimo_hit_tempo = pygame.time.get_ticks()
-            print(f"[{self.nome}] Coletou vida! Vida: {self.vida_atual}/{self.max_vida}"); return True
+        # Esta função não é mais chamada, mas a deixamos aqui por segurança
+        # if self.vida_atual < self.max_vida:
+        #     self.vida_atual = min(self.max_vida, self.vida_atual + quantidade); self.ultimo_hit_tempo = pygame.time.get_ticks()
+        #     print(f"[{self.nome}] Coletou vida! Vida: {self.vida_atual}/{self.max_vida}"); return True
         return False
         
     def desenhar(self, surface, camera):
@@ -479,6 +538,10 @@ class Player(Nave):
             self.quer_mover_tras = False
             self.quer_atirar = False
         
+        # --- INÍCIO DA ADIÇÃO (Chamar update de regeneração) ---
+        self.update_regeneracao()
+        # --- FIM DA ADIÇÃO ---
+        
         self.rotacionar()
         self.mover()
         
@@ -500,7 +563,7 @@ class Player(Nave):
             
             if mouse_buttons[0]:
                 mouse_pos_tela = pygame.mouse.get_pos()
-                if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela):
+                if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela) and not ui.RECT_BOTAO_REGEN_HUD.collidepoint(mouse_pos_tela): # <-- Modificado para não mover ao clicar em regen
                     camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
                     mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0], mouse_pos_tela[1] + camera_world_topleft[1])
                     self.posicao_alvo_mouse = mouse_pos_mundo
@@ -516,30 +579,22 @@ class Player(Nave):
 
 
 # --- Classe do Bot Aliado ---
-# --- INÍCIO DA MODIFICAÇÃO (Definição do Bot) ---
 class NaveBot(Nave):
-    def __init__(self, x, y, dificuldade="Normal"): # Recebe a dificuldade
+    def __init__(self, x, y, dificuldade="Normal"):
         super().__init__(x, y, cor=LARANJA_BOT, nome=f"Bot {random.randint(1, 99)}")
         
         self.cerebro = BotAI(self) 
         
-        # Se a dificuldade for "Dificil", dá upgrades aleatórios
         if dificuldade == "Dificil":
-            print(f"[{self.nome}] Gerando upgrades aleatórios (Dificil)...")
+            # print(f"[{self.nome}] Gerando upgrades aleatórios (Dificil)...")
             self.nivel_motor = random.randint(1, MAX_NIVEL_MOTOR)
             self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
-            
             self.nivel_dano = random.randint(1, MAX_NIVEL_DANO)
             self.nivel_escudo = random.randint(0, MAX_NIVEL_ESCUDO)
             max_spawn_vida_lvl = 3; self.nivel_max_vida = random.randint(1, max_spawn_vida_lvl); self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
             max_aux = len(self.lista_todas_auxiliares); num_auxiliares = random.randint(0, max_aux)
             if num_auxiliares > 0:
                 for _ in range(num_auxiliares): self.comprar_auxiliar()
-        
-        # Se for "Normal", ele pula o bloco 'if' e usa os padrões 
-        # (Nv. 1) definidos no __init__ da Nave (classe pai).
-# --- FIM DA MODIFICAÇÃO ---
-
     
     def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
         vida_antes = self.vida_atual
@@ -566,19 +621,35 @@ class NaveBot(Nave):
             
             self.cerebro.resetar_ia()
             self.comprar_auxiliar()
+            
+            self.parar_regeneracao() # Garante que para de regenerar ao morrer
         return morreu
         
     def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_vidas_ref):
         # 1. Pede ao "cérebro" para pensar
         self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_vidas_ref)
 
-        # 2. O "corpo" (NaveBot) executa as intenções
+        # 2. Atualiza a regeneração ANTES de mover
+        self.update_regeneracao()
+        
+        # 3. O "corpo" (NaveBot) executa as intenções
         self.rotacionar() 
         self.mover()      
         
-        # 3. O "corpo" lida com ações
+        # 4. O "corpo" lida com ações
         self.lidar_com_tiros(grupo_projeteis_bots, player_ref.posicao)
         self.processar_upgrades_ia()
+        
+        # 5. IA simples para regenerar
+        # Se o bot não tem alvo e está com vida baixa, ele tenta regenerar
+        if self.alvo_selecionado is None and self.vida_atual < (self.max_vida * 0.5) and not self.esta_regenerando:
+             # O bot para de vagar (cérebro vai parar de definir 'quer_mover_frente')
+             self.cerebro.estado_ia = "VAGANDO" # Garante que não está em modo de ataque
+             self.cerebro.virando_aleatoriamente_timer = 0
+             self.quer_mover_frente = False
+             
+             # Tenta iniciar a regeneração (vai funcionar se ele estiver parado)
+             self.iniciar_regeneracao(player_ref.nave_regeneradora_sprite.groups()) # Reutiliza o grupo do player
 
     def processar_upgrades_ia(self):
         if self.pontos_upgrade_disponiveis > 0 and self.total_upgrades_feitos < MAX_TOTAL_UPGRADES:

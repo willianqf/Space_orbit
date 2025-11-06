@@ -4,7 +4,6 @@ import pygame
 from settings import *
 
 # --- Variáveis Globais de UI (Tamanho e Posição) ---
-# Serão atualizadas por recalculate_ui_positions
 # Tamanhos Fixos
 BTN_LOJA_W, BTN_LOJA_H = 300, 50
 BTN_MENU_W, BTN_MENU_H = 250, 50
@@ -18,20 +17,20 @@ BTN_PAUSE_CTRL_W, BTN_PAUSE_CTRL_H = 40, 40
 LOGIN_PANEL_W, LOGIN_PANEL_H = 350, 250
 LOGIN_INPUT_W, LOGIN_INPUT_H = 300, 40
 LOGIN_BTN_W, LOGIN_BTN_H = 200, 50
-
-# --- INÍCIO DA ADIÇÃO (Dificuldade) ---
 LOGIN_DIFICULDADE_W, LOGIN_DIFICULDADE_H = 200, 40
 LOGIN_ARROW_W, LOGIN_ARROW_H = 40, 40
-# --- FIM DA ADIÇÃO ---
 
-# --- INÍCIO DA MODIFICAÇÃO (Adicionar Tela de Conexão) ---
-CONNECT_PANEL_W, CONNECT_PANEL_H = 350, 300 # Um pouco mais alto
+# --- Bloco da Tela de Conexão ---
+CONNECT_PANEL_W, CONNECT_PANEL_H = 350, 300
 CONNECT_INPUT_W, CONNECT_INPUT_H = 300, 40
 CONNECT_BTN_W, CONNECT_BTN_H = 200, 50
-# --- FIM DA MODIFICAÇÃO ---
 
-MINIMAP_WIDTH = 150 # Definido localmente aqui, mas poderia vir de settings
-MINIMAP_HEIGHT = 150 # Definido localmente aqui, mas poderia vir de settings
+MINIMAP_WIDTH = 150 
+MINIMAP_HEIGHT = 150 
+
+# --- INÍCIO DA ADIÇÃO (Botão Regenerar) ---
+BTN_HUD_REGEN_W, BTN_HUD_REGEN_H = 160, 30
+# --- FIM DA ADIÇÃO ---
 
 # Rects (inicializados com tamanho, posição será definida depois)
 RECT_TERMINAL_INPUT = pygame.Rect(0, 0, 0, TERMINAL_H)
@@ -45,9 +44,9 @@ RECT_BOTAO_UPGRADE_HUD = pygame.Rect(0, 0, BTN_HUD_UPGRADE_W, BTN_HUD_UPGRADE_H)
 RECT_BOTAO_JOGAR_OFF = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
 RECT_BOTAO_MULTIPLAYER = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
 RECT_BOTAO_SAIR = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
-MINIMAP_RECT = pygame.Rect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT) # Posição será definida
+MINIMAP_RECT = pygame.Rect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT)
 RECT_LOGO_MENU = pygame.Rect(0, 0, 0, 0)
-# Novos Rects Pausa
+# Rects Pausa
 RECT_PAUSE_FUNDO = pygame.Rect(0, 0, PAUSE_PANEL_W, PAUSE_PANEL_H)
 RECT_TEXTO_BOTS = pygame.Rect(0, 0, 200, 40)
 RECT_BOTAO_BOT_MENOS = pygame.Rect(0, 0, BTN_PAUSE_CTRL_W, BTN_PAUSE_CTRL_H)
@@ -55,24 +54,22 @@ RECT_BOTAO_BOT_MAIS = pygame.Rect(0, 0, BTN_PAUSE_CTRL_W, BTN_PAUSE_CTRL_H)
 RECT_BOTAO_VOLTAR_MENU = pygame.Rect(0, 0, 200, 40)
 RECT_TEXTO_VOLTAR = pygame.Rect(0, 0, 200, 30)
 RECT_BOTAO_VOLTAR_MENU = pygame.Rect(0, 0, BTN_REINICIAR_W, BTN_REINICIAR_H)
-
-# --- Rects da Tela de Nome (Login) ---
+# Rects Login
 RECT_LOGIN_PAINEL = pygame.Rect(0, 0, LOGIN_PANEL_W, LOGIN_PANEL_H)
 RECT_LOGIN_INPUT = pygame.Rect(0, 0, LOGIN_INPUT_W, LOGIN_INPUT_H)
 RECT_LOGIN_BOTAO = pygame.Rect(0, 0, LOGIN_BTN_W, LOGIN_BTN_H)
-
-# --- INÍCIO DA ADIÇÃO (Rects de Dificuldade) ---
 RECT_LOGIN_DIFICULDADE_TEXT = pygame.Rect(0, 0, LOGIN_DIFICULDADE_W, LOGIN_DIFICULDADE_H)
 RECT_LOGIN_DIFICULDADE_LEFT = pygame.Rect(0, 0, LOGIN_ARROW_W, LOGIN_ARROW_H)
 RECT_LOGIN_DIFICULDADE_RIGHT = pygame.Rect(0, 0, LOGIN_ARROW_W, LOGIN_ARROW_H)
-# --- FIM DA ADIÇÃO ---
-
-# --- INÍCIO DA MODIFICAÇÃO (Rects da Tela de Conexão) ---
+# Rects Conexão
 RECT_CONNECT_PAINEL = pygame.Rect(0, 0, CONNECT_PANEL_W, CONNECT_PANEL_H)
 RECT_CONNECT_NOME = pygame.Rect(0, 0, CONNECT_INPUT_W, CONNECT_INPUT_H)
 RECT_CONNECT_IP = pygame.Rect(0, 0, CONNECT_INPUT_W, CONNECT_INPUT_H)
 RECT_CONNECT_BOTAO = pygame.Rect(0, 0, CONNECT_BTN_W, CONNECT_BTN_H)
-# --- FIM DA MODIFICAÇÃO ---
+
+# --- INÍCIO DA ADIÇÃO (Rect Regenerar) ---
+RECT_BOTAO_REGEN_HUD = pygame.Rect(0, 0, BTN_HUD_REGEN_W, BTN_HUD_REGEN_H)
+# --- FIM DA ADIÇÃO ---
 
 
 # Variáveis para guardar posições calculadas
@@ -86,15 +83,13 @@ def recalculate_ui_positions(w, h):
     global RECT_BOTAO_JOGAR_OFF, RECT_BOTAO_MULTIPLAYER, RECT_BOTAO_SAIR
     global RECT_PAUSE_FUNDO, RECT_TEXTO_BOTS, RECT_BOTAO_BOT_MENOS, RECT_BOTAO_BOT_MAIS, RECT_TEXTO_VOLTAR, RECT_BOTAO_VOLTAR_MENU
     global RECT_BOTAO_VOLTAR_MENU, RECT_TEXTO_VOLTAR
-    
-    # Rects de Login
     global RECT_LOGIN_PAINEL, RECT_LOGIN_INPUT, RECT_LOGIN_BOTAO
-    
-    # --- INÍCIO DA ADIÇÃO (Globals de Dificuldade) ---
     global RECT_LOGIN_DIFICULDADE_TEXT, RECT_LOGIN_DIFICULDADE_LEFT, RECT_LOGIN_DIFICULDADE_RIGHT
-    # --- FIM DA ADIÇÃO ---
-    
     global RECT_CONNECT_PAINEL, RECT_CONNECT_NOME, RECT_CONNECT_IP, RECT_CONNECT_BOTAO
+    
+    # --- INÍCIO DA ADIÇÃO (Global Regenerar) ---
+    global RECT_BOTAO_REGEN_HUD
+    # --- FIM DA ADIÇÃO ---
 
     # Minimapa
     MINIMAP_POS_X = w - MINIMAP_WIDTH - 10
@@ -104,6 +99,11 @@ def recalculate_ui_positions(w, h):
     # Terminal Input
     RECT_TERMINAL_INPUT.width = w - 20
     RECT_TERMINAL_INPUT.bottomleft = (10, h - 10)
+    
+    # --- INÍCIO DA ADIÇÃO (Posição Botão Regenerar) ---
+    # Posiciona acima do terminal
+    RECT_BOTAO_REGEN_HUD.bottomleft = (10, RECT_TERMINAL_INPUT.top - 10)
+    # --- FIM DA ADIÇÃO ---
 
     # Botões da Loja (Centralizados)
     btn_y_start_loja = 180
@@ -141,7 +141,7 @@ def recalculate_ui_positions(w, h):
     RECT_BOTAO_MULTIPLAYER.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing)
     RECT_BOTAO_SAIR.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing * 2)
 
-    # --- Posições do Menu de Pausa (Centralizado) ---
+    # Posições do Menu de Pausa (Centralizado)
     RECT_PAUSE_FUNDO.center = (w // 2, h // 2)
     base_y_pause = RECT_PAUSE_FUNDO.top + 60
     spacing_pause_items = 25
@@ -153,24 +153,19 @@ def recalculate_ui_positions(w, h):
     RECT_BOTAO_BOT_MAIS.midleft = (RECT_TEXTO_BOTS.right + spacing_pause_buttons, RECT_TEXTO_BOTS.centery)
     RECT_TEXTO_VOLTAR.midbottom = (RECT_PAUSE_FUNDO.centerx, RECT_PAUSE_FUNDO.bottom - 20)
     
-    # --- Posições da Tela de Nome (Login) ---
+    # Posições da Tela de Nome (Login)
     RECT_LOGIN_PAINEL.center = (w // 2, h // 2)
     input_y_pos = RECT_LOGIN_PAINEL.top + 100
     RECT_LOGIN_INPUT.center = (RECT_LOGIN_PAINEL.centerx, input_y_pos)
-    
-    # --- INÍCIO DA ADIÇÃO (Posições de Dificuldade) ---
     dificuldade_y_pos = RECT_LOGIN_INPUT.bottom + 40
     spacing_arrows = 10
     RECT_LOGIN_DIFICULDADE_TEXT.center = (RECT_LOGIN_PAINEL.centerx, dificuldade_y_pos)
     RECT_LOGIN_DIFICULDADE_LEFT.midright = (RECT_LOGIN_DIFICULDADE_TEXT.left - spacing_arrows, dificuldade_y_pos)
     RECT_LOGIN_DIFICULDADE_RIGHT.midleft = (RECT_LOGIN_DIFICULDADE_TEXT.right + spacing_arrows, dificuldade_y_pos)
-    # --- FIM DA ADIÇÃO ---
-
-    # Posição Y do Botão (abaixo da dificuldade)
     btn_y_pos = RECT_LOGIN_DIFICULDADE_TEXT.bottom + 30
     RECT_LOGIN_BOTAO.center = (RECT_LOGIN_PAINEL.centerx, btn_y_pos)
 
-    # --- Posições da Tela de Conexão ---
+    # Posições da Tela de Conexão
     RECT_CONNECT_PAINEL.center = (w // 2, h // 2)
     nome_y_pos = RECT_CONNECT_PAINEL.top + 100
     RECT_CONNECT_NOME.center = (RECT_CONNECT_PAINEL.centerx, nome_y_pos)
@@ -203,23 +198,18 @@ def desenhar_menu(surface, largura_tela, altura_tela):
     draw_menu_button(RECT_BOTAO_MULTIPLAYER, "Multijogador")
     draw_menu_button(RECT_BOTAO_SAIR, "Sair")
 
-# --- INÍCIO DA MODIFICAÇÃO (Assinatura da Função) ---
 def desenhar_tela_nome(surface, nome_jogador_atual, input_nome_ativo, dificuldade_atual):
-# --- FIM DA MODIFICAÇÃO ---
     """ Desenha a tela de entrada de nome. """
     
-    # 1. Fundo
     surface.fill(PRETO)
     if LOGO_JOGO:
         logo_rect = LOGO_JOGO.get_rect(center=(surface.get_width() // 2, surface.get_height() // 3))
         surface.blit(LOGO_JOGO, logo_rect)
         
-    # 2. Título
     texto_titulo = FONT_TITULO.render("Digite seu nome", True, BRANCO)
     titulo_rect = texto_titulo.get_rect(center=(RECT_LOGIN_PAINEL.centerx, RECT_LOGIN_PAINEL.top + 40))
     surface.blit(texto_titulo, titulo_rect)
 
-    # 3. Caixa de Input de Nome
     cor_borda_input = BRANCO if input_nome_ativo else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, PRETO, RECT_LOGIN_INPUT, border_radius=5)
     pygame.draw.rect(surface, cor_borda_input, RECT_LOGIN_INPUT, 2, border_radius=5)
@@ -234,32 +224,25 @@ def desenhar_tela_nome(surface, nome_jogador_atual, input_nome_ativo, dificuldad
         placeholder_rect = placeholder_surf.get_rect(midleft=(RECT_LOGIN_INPUT.x + 15, RECT_LOGIN_INPUT.centery))
         surface.blit(placeholder_surf, placeholder_rect)
         
-    # --- INÍCIO DA ADIÇÃO (Desenho da Dificuldade) ---
-    # Botão Esquerdo
+    # Desenho da Dificuldade
     pygame.draw.rect(surface, BRANCO, RECT_LOGIN_DIFICULDADE_LEFT, border_radius=5)
     texto_left = FONT_TITULO.render("<", True, PRETO)
     texto_left_rect = texto_left.get_rect(center=RECT_LOGIN_DIFICULDADE_LEFT.center)
     surface.blit(texto_left, texto_left_rect)
     
-    # Texto da Dificuldade
     texto_dificuldade = FONT_PADRAO.render(f"Dificuldade: {dificuldade_atual}", True, BRANCO)
     texto_dificuldade_rect = texto_dificuldade.get_rect(center=RECT_LOGIN_DIFICULDADE_TEXT.center)
     surface.blit(texto_dificuldade, texto_dificuldade_rect)
     
-    # Botão Direito
     pygame.draw.rect(surface, BRANCO, RECT_LOGIN_DIFICULDADE_RIGHT, border_radius=5)
     texto_right = FONT_TITULO.render(">", True, PRETO)
     texto_right_rect = texto_right.get_rect(center=RECT_LOGIN_DIFICULDADE_RIGHT.center)
     surface.blit(texto_right, texto_right_rect)
-    # --- FIM DA ADIÇÃO ---
         
-    # 5. Botão "Respawn"
     pygame.draw.rect(surface, BRANCO, RECT_LOGIN_BOTAO, border_radius=5)
     texto_botao = FONT_PADRAO.render("Respawn", True, PRETO)
     texto_botao_rect = texto_botao.get_rect(center=RECT_LOGIN_BOTAO.center)
     surface.blit(texto_botao, texto_botao_rect)
-
-# --- (O resto do arquivo: desenhar_pause, desenhar_loja, desenhar_hud, etc... continua o mesmo) ---
 
 def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos):
     fundo_overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
@@ -386,6 +369,28 @@ def desenhar_hud(surface, nave, estado_jogo):
         texto_aux = FONT_HUD_DETALHES.render(f"Auxiliares: {num_aux}/{max_aux}", True, BRANCO)
         surface.blit(texto_aux, (pos_x_detalhes, pos_y_atual_detalhes))
         pos_y_atual_detalhes += line_spacing_detalhes
+
+        # --- INÍCIO DA ADIÇÃO (Desenhar Botão Regenerar) ---
+        # (getattr é usado para evitar erro se 'nave' não tiver o atributo ainda)
+        is_regenerando = getattr(nave, 'esta_regenerando', False) 
+        
+        if is_regenerando:
+            cor_botao = LILAS_REGEN
+            texto_botao = "Regenerando..."
+        elif nave.vida_atual >= nave.max_vida:
+            cor_botao = CINZA_BOTAO_DESLIGADO
+            texto_botao = "Vida Cheia"
+        else:
+            cor_botao = BRANCO
+            texto_botao = "Regenerar Vida (R)" # Adicionando (R) como dica de tecla
+            
+        pygame.draw.rect(surface, cor_botao, RECT_BOTAO_REGEN_HUD, border_radius=5)
+        # Usando FONT_RANKING (16) que é um pouco menor e cabe bem
+        texto_surf = FONT_RANKING.render(texto_botao, True, PRETO) 
+        texto_rect = texto_surf.get_rect(center=RECT_BOTAO_REGEN_HUD.center)
+        surface.blit(texto_surf, texto_rect)
+        # --- FIM DA ADIÇÃO ---
+
 
 def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height, online_players, meu_nome_rede):
     fundo_mini = pygame.Surface((MINIMAP_WIDTH, MINIMAP_HEIGHT), pygame.SRCALPHA)
