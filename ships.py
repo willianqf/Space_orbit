@@ -64,49 +64,71 @@ class NaveAuxiliar(pygame.sprite.Sprite):
         self.posicao = self.owner.posicao + self.offset_pos.rotate(-self.owner.angulo); self.rect = self.imagem_original.get_rect(center=self.posicao)
         self.angulo = self.owner.angulo; self.alvo_atual = None; self.distancia_tiro = 600; self.cooldown_tiro = 1000; self.ultimo_tiro_tempo = 0
 
-    def update(self, lista_alvos, grupo_projeteis_destino, estado_jogo_atual, nave_player_ref):
+    # --- INÍCIO: MODIFICAÇÃO (Adicionar client_socket) ---
+    def update(self, lista_alvos, grupo_projeteis_destino, estado_jogo_atual, nave_player_ref, client_socket=None):
+    # --- FIM: MODIFICAÇÃO ---
         parar_ataque = (self.owner == nave_player_ref and estado_jogo_atual == "GAME_OVER")
         offset_rotacionado = self.offset_pos.rotate(-self.owner.angulo); posicao_alvo_seguir = self.owner.posicao + offset_rotacionado
-        self.posicao = self.posicao.lerp(posicao_alvo_seguir, 0.1) 
+        self.posicao = self.posicao.lerp(posicao_alvo_seguir, 0.1) # <-- Movimento SEMPRE corre
         
         self.alvo_atual = None 
 
-        if not parar_ataque:
-            alvo_do_dono = self.owner.alvo_selecionado 
-            
-            if alvo_do_dono and alvo_do_dono.groups():
-                try:
-                    dist = self.posicao.distance_to(alvo_do_dono.posicao)
-                    if dist < self.distancia_tiro: 
-                        self.alvo_atual = alvo_do_dono
-                except ValueError:
-                    self.alvo_atual = None
-            
-            if self.alvo_atual:
-                try: 
-                    direcao = (self.alvo_atual.posicao - self.posicao).normalize()
-                    self.angulo = direcao.angle_to(pygame.math.Vector2(0, -1))
-                except ValueError: 
-                    self.angulo = self.owner.angulo 
+        # --- INÍCIO: MODIFICAÇÃO (Verificar se está online) ---
+        # Se client_socket NÃO é None (estamos online), o SERVIDOR trata dos disparos.
+        # O cliente (aqui) não deve disparar.
+        if client_socket is None:
+        # --- FIM: MODIFICAÇÃO ---
+            if not parar_ataque:
+                alvo_do_dono = self.owner.alvo_selecionado 
                 
-                agora = pygame.time.get_ticks()
-                if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
-                    self.ultimo_tiro_tempo = agora
-                    radianos = math.radians(self.angulo)
+                if alvo_do_dono and alvo_do_dono.groups():
+                    try:
+                        dist = self.posicao.distance_to(alvo_do_dono.posicao)
+                        if dist < self.distancia_tiro: 
+                            self.alvo_atual = alvo_do_dono
+                    except ValueError:
+                        self.alvo_atual = None
+                
+                if self.alvo_atual:
+                    try: 
+                        direcao = (self.alvo_atual.posicao - self.posicao).normalize()
+                        self.angulo = direcao.angle_to(pygame.math.Vector2(0, -1))
+                    except ValueError: 
+                        self.angulo = self.owner.angulo 
                     
-                    proj = ProjetilTeleguiadoJogador(self.posicao.x, self.posicao.y, radianos, 
-                                                   self.owner.nivel_dano, 
-                                                   owner_nave=self.owner, 
-                                                   alvo_sprite=self.alvo_atual)
-                    
-                    grupo_projeteis_destino.add(proj)
-                    tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, nave_player_ref.posicao, VOLUME_BASE_TIRO_PLAYER)
-            else:
+                    agora = pygame.time.get_ticks()
+                    if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
+                        self.ultimo_tiro_tempo = agora
+                        radianos = math.radians(self.angulo)
+                        
+                        proj = ProjetilTeleguiadoJogador(self.posicao.x, self.posicao.y, radianos, 
+                                                       self.owner.nivel_dano, 
+                                                       owner_nave=self.owner, 
+                                                       alvo_sprite=self.alvo_atual)
+                        
+                        grupo_projeteis_destino.add(proj)
+                        tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, nave_player_ref.posicao, VOLUME_BASE_TIRO_PLAYER)
+                else:
+                    self.angulo = self.owner.angulo
+            
+            else: 
                 self.angulo = self.owner.angulo
         
-        else: 
-            self.angulo = self.owner.angulo
-        
+        # --- INÍCIO: MODIFICAÇÃO (Lógica de mira online) ---
+        else:
+            # Se estiver ONLINE, apenas aponta para o alvo do dono (se houver)
+            # ou segue o ângulo do dono. O servidor trata do disparo.
+            alvo_do_dono = self.owner.alvo_selecionado
+            if alvo_do_dono and alvo_do_dono.groups():
+                try: 
+                    direcao = (alvo_do_dono.posicao - self.posicao).normalize()
+                    self.angulo = direcao.angle_to(pygame.math.Vector2(0, -1))
+                except ValueError: 
+                    self.angulo = self.owner.angulo
+            else:
+                self.angulo = self.owner.angulo
+        # --- FIM: MODIFICAÇÃO ---
+
         self.rect.center = self.posicao
         
     def desenhar(self, surface, camera):
@@ -139,6 +161,10 @@ class Nave(pygame.sprite.Sprite):
         self.image = self.imagem_original; self.rect = pygame.Rect(x, y, self.largura_base * 0.8, self.altura * 0.8); self.rect.center = self.posicao
         self.cooldown_tiro = 250; self.ultimo_tiro_tempo = 0; self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0
         
+        # --- INÍCIO: ADIÇÃO (Nível Aux) ---
+        self.nivel_aux = 0 # Usado pelo modo online para saber quantos auxiliares desenhar
+        # --- FIM: ADIÇÃO ---
+        
         self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
         self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
         
@@ -170,7 +196,6 @@ class Nave(pygame.sprite.Sprite):
             # Precisamos matar o sprite para removê-lo de TODOS os grupos.
             for sprite in self.nave_regeneradora_sprite:
                 sprite.kill() 
-            # self.nave_regeneradora_sprite.empty() # .kill() já faz com que o GroupSingle fique vazio.
             # --- FIM DA CORREÇÃO ---
             
             # print(f"[{self.nome}] Regeneração interrompida.") # Opcional: Log
@@ -179,7 +204,6 @@ class Nave(pygame.sprite.Sprite):
         """Inicia a regeneração se as condições forem válidas."""
         # Não pode regenerar se a vida estiver cheia
         if self.vida_atual >= self.max_vida:
-            # print(f"[{self.nome}] Tentou regenerar com vida cheia.") # Opcional: Log
             return
             
         # Não pode regenerar se já estiver regenerando
@@ -188,7 +212,6 @@ class Nave(pygame.sprite.Sprite):
 
         # Condição de estar parado (verificado em update_regeneracao)
         if self.quer_mover_frente or self.quer_mover_tras or self.posicao_alvo_mouse is not None:
-            # print(f"[{self.nome}] Tentou regenerar em movimento.") # Opcional: Log
             return
             
         print(f"[{self.nome}] Iniciando regeneração...")
@@ -214,7 +237,6 @@ class Nave(pygame.sprite.Sprite):
             return
             
         # Condição 1: Para se o jogador se mover
-        # (Verifica as "intenções" de movimento antes que o movimento ocorra)
         if self.quer_mover_frente or self.quer_mover_tras or self.posicao_alvo_mouse is not None:
             self.parar_regeneracao()
             return
@@ -315,10 +337,8 @@ class Nave(pygame.sprite.Sprite):
                 tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, ouvinte_real, VOLUME_BASE_TIRO_PLAYER)
     
     def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
-        # --- INÍCIO DA ADIÇÃO (Parar regen ao ser atingido) ---
         if self.esta_regenerando:
             self.parar_regeneracao()
-        # --- FIM DA ADIÇÃO ---
         
         if self.vida_atual <= 0 and estado_jogo_atual == "GAME_OVER": return False
         agora = pygame.time.get_ticks()
@@ -369,8 +389,9 @@ class Nave(pygame.sprite.Sprite):
             if self._indice_limiar < len(self._pontos_no_limiar) and \
                pontos_totais_aproximados >= self._pontos_no_limiar[self._indice_limiar]:
                 self._indice_limiar += 1
-                self._limiar_pontos_atual = self._limiares[self._indice_limiar]
-                print(f"[{self.nome}] Próximo Ponto de Upgrade a cada {self._limiar_pontos_atual} pontos de score.")
+                if self._indice_limiar < len(self._limiares): # Proteção
+                    self._limiar_pontos_atual = self._limiares[self._indice_limiar]
+                    print(f"[{self.nome}] Próximo Ponto de Upgrade a cada {self._limiar_pontos_atual} pontos de score.")
         
     def comprar_auxiliar(self):
         num_ativos = len(self.grupo_auxiliares_ativos)
@@ -382,7 +403,6 @@ class Nave(pygame.sprite.Sprite):
             aux_para_adicionar.rect.center = posicao_correta_atual 
             aux_para_adicionar.angulo = self.angulo 
             self.grupo_auxiliares_ativos.add(aux_para_adicionar)
-            # print(f"[{self.nome}] Ativando auxiliar {num_ativos + 1}") # Log Reduzido
             return True 
         else:
             return False
@@ -430,6 +450,7 @@ class Nave(pygame.sprite.Sprite):
                     if self.comprar_auxiliar(): 
                         self.pontos_upgrade_disponiveis -= custo_atual_aux 
                         self.total_upgrades_feitos += 1 
+                        self.nivel_aux += 1 # Sincroniza o contador
                         print(f"[{self.nome}] Auxiliar comprado por {custo_atual_aux} pts! ({self.pontos_upgrade_disponiveis} Pts Restantes)")
                         comprou = True
                 else:
@@ -463,10 +484,6 @@ class Nave(pygame.sprite.Sprite):
         return comprou
 
     def coletar_vida(self, quantidade):
-        # Esta função não é mais chamada, mas a deixamos aqui por segurança
-        # if self.vida_atual < self.max_vida:
-        #     self.vida_atual = min(self.max_vida, self.vida_atual + quantidade); self.ultimo_hit_tempo = pygame.time.get_ticks()
-        #     print(f"[{self.nome}] Coletou vida! Vida: {self.vida_atual}/{self.max_vida}"); return True
         return False
         
     def desenhar(self, surface, camera):
@@ -539,22 +556,28 @@ class Player(Nave):
     def update(self, grupo_projeteis_jogador, camera, client_socket=None):
         if client_socket is None:
             self.processar_input_humano(camera)
+            # --- INÍCIO: MODIFICAÇÃO (Regeneração e Tiros Offline) ---
+            self.update_regeneracao()
+            self.rotacionar()
+            self.mover()
+            self.lidar_com_tiros(grupo_projeteis_jogador, self.posicao)
+            # --- FIM: MODIFICAÇÃO ---
         else:
+            # --- INÍCIO: MODIFICAÇÃO (Lógica Online) ---
+            # No modo online, o 'main.py' trata de sincronizar o estado
+            # e a 'Nave' (classe base) trata de sincronizar os visuais
+            # (como a regeneração). O Jogador não deve fazer nada aqui.
             self.quer_virar_esquerda = False
             self.quer_virar_direita = False
             self.quer_mover_frente = False
             self.quer_mover_tras = False
             self.quer_atirar = False
+            
+            # (Removido: update_regeneracao(), rotacionar(), mover(), lidar_com_tiros())
+            # (Eles são chamados apenas no modo offline acima)
+            # --- FIM: MODIFICAÇÃO ---
+            pass
         
-        # --- INÍCIO DA ADIÇÃO (Chamar update de regeneração) ---
-        self.update_regeneracao()
-        # --- FIM DA ADIÇÃO ---
-        
-        self.rotacionar()
-        self.mover()
-        
-        if client_socket is None:
-            self.lidar_com_tiros(grupo_projeteis_jogador, self.posicao)
 
     def processar_input_humano(self, camera):
         agora = pygame.time.get_ticks()
@@ -602,7 +625,9 @@ class NaveBot(Nave):
             max_spawn_vida_lvl = 3; self.nivel_max_vida = random.randint(1, max_spawn_vida_lvl); self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
             max_aux = len(self.lista_todas_auxiliares); num_auxiliares = random.randint(0, max_aux)
             if num_auxiliares > 0:
-                for _ in range(num_auxiliares): self.comprar_auxiliar()
+                for _ in range(num_auxiliares): 
+                    self.comprar_auxiliar() # Isto chama o comprar_auxiliar local
+                    self.nivel_aux += 1 # Mantém o contador sincronizado
     
     def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
         vida_antes = self.vida_atual
@@ -621,7 +646,7 @@ class NaveBot(Nave):
                 nova_aux = NaveAuxiliar(self, pos)
                 self.lista_todas_auxiliares.append(nova_aux)
             
-            self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0
+            self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0; self.nivel_aux = 0
             
             self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
             self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
@@ -649,15 +674,12 @@ class NaveBot(Nave):
         self.processar_upgrades_ia()
         
         # 5. IA simples para regenerar
-        # Se o bot não tem alvo e está com vida baixa, ele tenta regenerar
         if self.alvo_selecionado is None and self.vida_atual < (self.max_vida * 0.5) and not self.esta_regenerando:
-             # O bot para de vagar (cérebro vai parar de definir 'quer_mover_frente')
-             self.cerebro.estado_ia = "VAGANDO" # Garante que não está em modo de ataque
+             self.cerebro.estado_ia = "VAGANDO" 
              self.cerebro.virando_aleatoriamente_timer = 0
              self.quer_mover_frente = False
              
-             # Tenta iniciar a regeneração (vai funcionar se ele estiver parado)
-             self.iniciar_regeneracao(grupo_efeitos_visuais_ref) # Passa o grupo de efeitos principal
+             self.iniciar_regeneracao(grupo_efeitos_visuais_ref) 
 
     def processar_upgrades_ia(self):
         if self.pontos_upgrade_disponiveis > 0 and self.total_upgrades_feitos < MAX_TOTAL_UPGRADES:

@@ -274,7 +274,9 @@ def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos):
     voltar_rect = texto_voltar.get_rect(center=RECT_TEXTO_VOLTAR.center)
     surface.blit(texto_voltar, voltar_rect)
 
-def desenhar_loja(surface, nave, largura_tela, altura_tela):
+# --- INÍCIO: MODIFICAÇÃO (Adicionar client_socket como parâmetro) ---
+def desenhar_loja(surface, nave, largura_tela, altura_tela, client_socket=None):
+# --- FIM: MODIFICAÇÃO ---
     fundo_loja = pygame.Surface((largura_tela, altura_tela), pygame.SRCALPHA)
     fundo_loja.fill(CINZA_LOJA_FUNDO)
     surface.blit(fundo_loja, (0, 0))
@@ -306,8 +308,15 @@ def desenhar_loja(surface, nave, largura_tela, altura_tela):
         txt_dano = f"Dano Nv. {nave.nivel_dano + 1}/{MAX_NIVEL_DANO} (Custo: {custo_padrao} Pt)"
     else: txt_dano = f"Dano Nv. {nave.nivel_dano} (MAX)"
     draw_text_on_button(RECT_BOTAO_DANO, txt_dano, FONT_PADRAO, PRETO)
-    num_ativos = len(nave.grupo_auxiliares_ativos)
-    max_aux = len(nave.lista_todas_auxiliares)
+    
+    # --- INÍCIO: MODIFICAÇÃO (Ler auxiliares do servidor ou localmente) ---
+    if client_socket:
+        num_ativos = nave.nivel_aux # Lê o número do estado sincronizado
+    else:
+        num_ativos = len(nave.grupo_auxiliares_ativos) # Lê os sprites locais
+    # --- FIM: MODIFICAÇÃO ---
+
+    max_aux = len(nave.lista_todas_auxiliares) # Assume 4
     if num_ativos < max_aux:
         custo_atual_aux = CUSTOS_AUXILIARES[num_ativos]
         txt_aux = f"Comprar Auxiliar {num_ativos + 1}/{max_aux} (Custo: {custo_atual_aux} Pts)"
@@ -364,7 +373,16 @@ def desenhar_hud(surface, nave, estado_jogo):
         texto_escudo = FONT_HUD_DETALHES.render(f"Escudo: Nv {nave.nivel_escudo}/{MAX_NIVEL_ESCUDO}", True, BRANCO)
         surface.blit(texto_escudo, (pos_x_detalhes, pos_y_atual_detalhes))
         pos_y_atual_detalhes += line_spacing_detalhes
-        num_aux = len(nave.grupo_auxiliares_ativos)
+        
+        # --- INÍCIO: MODIFICAÇÃO (Ler auxiliares do servidor ou localmente) ---
+        # (Esta lógica é idêntica à da loja, mas pode ser simplificada
+        #  assumindo que 'client_socket' não é passado para 'desenhar_hud')
+        if hasattr(nave, 'nivel_aux'): # Se o atributo existe (online)
+            num_aux = nave.nivel_aux
+        else: # Fallback para offline
+            num_aux = len(nave.grupo_auxiliares_ativos)
+        # --- FIM: MODIFICAÇÃO ---
+            
         max_aux = len(nave.lista_todas_auxiliares)
         texto_aux = FONT_HUD_DETALHES.render(f"Auxiliares: {num_aux}/{max_aux}", True, BRANCO)
         surface.blit(texto_aux, (pos_x_detalhes, pos_y_atual_detalhes))
