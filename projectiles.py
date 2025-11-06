@@ -61,7 +61,7 @@ class ProjetilTeleguiadoJogador(Projetil):
         
         # 2. Adiciona tempo de vida (1.5 segundos)
         self.tempo_criacao = pygame.time.get_ticks()
-        self.duracao_vida = 650 # 
+        self.duracao_vida = 700 # 
 
     def update(self, *args, **kwargs):
         # 1. Verifica o tempo de vida

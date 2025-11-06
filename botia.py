@@ -284,7 +284,13 @@ class BotAI:
 
         # === PRIORIDADE 6: VAGAR (Default) ===
         if self.estado_ia == "VAGANDO":
-            self.bot.quer_mover_frente = True
+            
+            # --- INÍCIO DA CORREÇÃO ---
+            # O Bot só deve tentar andar se NÃO estiver regenerando
+            if not self.bot.esta_regenerando:
+                self.bot.quer_mover_frente = True
+            # --- FIM DA CORREÇÃO ---
+
             if self.virando_aleatoriamente_timer > 0:
                 if self.direcao_virada_aleatoria == "esquerda": self.bot.quer_virar_esquerda = True
                 else: self.bot.quer_virar_direita = True

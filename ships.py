@@ -164,7 +164,15 @@ class Nave(pygame.sprite.Sprite):
         """Para a regeneração e remove a nave lilás."""
         if self.esta_regenerando:
             self.esta_regenerando = False
-            self.nave_regeneradora_sprite.empty() # Remove a nave
+            
+            # --- INÍCIO DA CORREÇÃO ---
+            # .empty() apenas remove do GroupSingle, não dos outros grupos (como grupo_efeitos_visuais).
+            # Precisamos matar o sprite para removê-lo de TODOS os grupos.
+            for sprite in self.nave_regeneradora_sprite:
+                sprite.kill() 
+            # self.nave_regeneradora_sprite.empty() # .kill() já faz com que o GroupSingle fique vazio.
+            # --- FIM DA CORREÇÃO ---
+            
             # print(f"[{self.nome}] Regeneração interrompida.") # Opcional: Log
 
     def iniciar_regeneracao(self, grupo_efeitos_visuais):
