@@ -14,7 +14,7 @@ from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, MAP_WI
                       PONTOS_LIMIARES_PARA_UPGRADE, PONTOS_SCORE_PARA_MUDAR_LIMIAR, CUSTOS_AUXILIARES, FONT_NOME_JOGADOR, BRANCO, VELOCIDADE_ROTACAO_NAVE
                       ) 
 # Importa classes necessárias
-from projectiles import Projetil
+from projectiles import Projetil, ProjetilTeleguiadoJogador
 from effects import Explosao
 from entities import Obstaculo, VidaColetavel 
 
@@ -81,37 +81,19 @@ class NaveAuxiliar(pygame.sprite.Sprite):
         offset_rotacionado = self.offset_pos.rotate(-self.owner.angulo); posicao_alvo_seguir = self.owner.posicao + offset_rotacionado
         self.posicao = self.posicao.lerp(posicao_alvo_seguir, 0.1) # Movimento de seguir o dono
         
-        self.alvo_atual = None # Reseta o alvo a cada frame
+        self.alvo_atual = None # Reseta o alvo
 
         if not parar_ataque:
-            alvo_nave_mais_proxima = None
-            dist_min_nave = self.distancia_tiro # Distância máxima de tiro da auxiliar
-            alvo_inimigo_mais_proximo = None
-            dist_min_inimigo = self.distancia_tiro
-
-            for alvo in lista_alvos:
-                if alvo == self.owner or alvo is None or not alvo.groups(): 
-                    continue
-                if isinstance(alvo, (Obstaculo, VidaColetavel)):
-                    continue
-
-                dist = self.posicao.distance_to(alvo.posicao)
-                is_nave_alvo = type(alvo).__name__ in ('Player', 'NaveBot')
-                
-                if is_nave_alvo:
-                    if dist < dist_min_nave:
-                        dist_min_nave = dist
-                        alvo_nave_mais_proxima = alvo
-                else:
-                    if dist < dist_min_inimigo:
-                        dist_min_inimigo = dist
-                        alvo_inimigo_mais_proximo = alvo
-
-            if alvo_nave_mais_proxima:
-                self.alvo_atual = alvo_nave_mais_proxima
-            elif alvo_inimigo_mais_proximo:
-                self.alvo_atual = alvo_inimigo_mais_proximo
-
+            alvo_do_dono = self.owner.alvo_selecionado 
+            
+            if alvo_do_dono and alvo_do_dono.groups():
+                try:
+                    dist = self.posicao.distance_to(alvo_do_dono.posicao)
+                    if dist < self.distancia_tiro: 
+                        self.alvo_atual = alvo_do_dono
+                except ValueError:
+                    self.alvo_atual = None
+            
             if self.alvo_atual:
                 try: 
                     direcao = (self.alvo_atual.posicao - self.posicao).normalize()
@@ -122,14 +104,12 @@ class NaveAuxiliar(pygame.sprite.Sprite):
                 agora = pygame.time.get_ticks()
                 if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
                     self.ultimo_tiro_tempo = agora
-                    
-                    # --- INÍCIO DA CORREÇÃO (BUG "radianos") ---
-                    # Esta linha estava faltando, causando o bug
                     radianos = math.radians(self.angulo)
                     
-                    # Passa o 'owner_nave' (que é o dono da auxiliar) para o projétil
-                    proj = Projetil(self.posicao.x, self.posicao.y, radianos, self.owner.nivel_dano, owner_nave=self.owner)
-                    # --- FIM DA CORREÇÃO ---
+                    proj = ProjetilTeleguiadoJogador(self.posicao.x, self.posicao.y, radianos, 
+                                                   self.owner.nivel_dano, 
+                                                   owner_nave=self.owner, 
+                                                   alvo_sprite=self.alvo_atual)
                     
                     grupo_projeteis_destino.add(proj)
                     tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, nave_player_ref.posicao, VOLUME_BASE_TIRO_PLAYER)
@@ -170,9 +150,10 @@ class Nave(pygame.sprite.Sprite):
         
         self.image = self.imagem_original; self.rect = pygame.Rect(x, y, self.largura_base * 0.8, self.altura * 0.8); self.rect.center = self.posicao
         self.cooldown_tiro = 250; self.ultimo_tiro_tempo = 0; self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0
-        self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida; self.velocidade_movimento_base = 4 + self.nivel_motor
         
-        # Intenções de movimento (controladas pelo Player ou pela IA)
+        self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
+        self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
+        
         self.quer_virar_esquerda = False; self.quer_virar_direita = False; self.quer_mover_frente = False; self.quer_mover_tras = False; self.quer_atirar = False
         
         self.alvo_selecionado = None; self.posicao_alvo_mouse = None; self.tempo_barra_visivel = 2000; self.ultimo_hit_tempo = 0
@@ -180,7 +161,7 @@ class Nave(pygame.sprite.Sprite):
         self.tempo_fim_lentidao = 0; self.lista_todas_auxiliares = []; self.grupo_auxiliares_ativos = pygame.sprite.Group()
         for pos in self.POSICOES_AUXILIARES: self.lista_todas_auxiliares.append(NaveAuxiliar(self, pos))
         
-        self.tempo_spawn_protecao_input = 0 # Timer para ignorar input do mouse
+        self.tempo_spawn_protecao_input = 0
 
     def update(self, grupo_projeteis_destino, camera=None): pass
     
@@ -243,10 +224,13 @@ class Nave(pygame.sprite.Sprite):
         radianos = math.radians(self.angulo); offset_ponta = self.altura / 2 + 10
         pos_x = self.posicao.x + (-math.sin(radianos) * offset_ponta); pos_y = self.posicao.y + (-math.cos(radianos) * offset_ponta)
         
-        # --- INÍCIO DA MODIFICAÇÃO ('owner_nave') ---
-        # Passa 'self' (a própria nave) como o dono do projétil
-        return Projetil(pos_x, pos_y, radianos, self.nivel_dano, owner_nave=self)
-        # --- FIM DA MODIFICAÇÃO ---
+        if self.alvo_selecionado and self.alvo_selecionado.groups():
+            return ProjetilTeleguiadoJogador(pos_x, pos_y, radianos, 
+                                           self.nivel_dano, 
+                                           owner_nave=self, 
+                                           alvo_sprite=self.alvo_selecionado)
+        else:
+            return Projetil(pos_x, pos_y, radianos, self.nivel_dano, owner_nave=self)
     
     def lidar_com_tiros(self, grupo_destino, pos_ouvinte=None):
         agora = pygame.time.get_ticks() 
@@ -273,7 +257,6 @@ class Nave(pygame.sprite.Sprite):
         self.ultimo_hit_tempo = agora
         
         if vida_antes > 0:
-            # --- CORREÇÃO: Mostra o FX apenas no nível MÁXIMO de escudo ---
             if self.nivel_escudo >= s.MAX_NIVEL_ESCUDO:
                 self.mostrar_escudo_fx = True
                 self.tempo_escudo_fx = agora
@@ -353,7 +336,7 @@ class Nave(pygame.sprite.Sprite):
                     self.pontos_upgrade_disponiveis -= custo_upgrade_atual
                     self.total_upgrades_feitos += 1
                     self.nivel_motor += 1
-                    self.velocidade_movimento_base = 4 + self.nivel_motor
+                    self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
                     print(f"[{self.nome}] Motor comprado! Nível {self.nivel_motor}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
                     comprou = True
                 else: print(f"[{self.nome}] Pontos insuficientes!") 
@@ -439,11 +422,9 @@ class Nave(pygame.sprite.Sprite):
             if agora - self.tempo_escudo_fx < DURACAO_FX_ESCUDO:
                 raio_escudo = self.altura * 0.8 + 10; largura_arco_rad = math.radians(90); cor_fx_com_alpha = COR_ESCUDO_FX
                 
-                # --- CORREÇÃO: Inverter o ângulo para o sistema de coordenadas do pygame.draw.arc ---
                 angulo_central_invertido = -self.angulo_impacto_rad_pygame
                 angulo_inicio_pygame_rad = angulo_central_invertido - (largura_arco_rad / 2)
                 angulo_fim_pygame_rad = angulo_central_invertido + (largura_arco_rad / 2)
-                # --- FIM DA CORREÇÃO ---
                 
                 rect_escudo_mundo = pygame.Rect(0, 0, raio_escudo * 2, raio_escudo * 2); rect_escudo_mundo.center = self.posicao; rect_escudo_tela = camera.apply(rect_escudo_mundo)
                 temp_surface = pygame.Surface(rect_escudo_tela.size, pygame.SRCALPHA)
@@ -489,11 +470,9 @@ class Player(Nave):
         return super().foi_atingido(dano, estado_jogo_atual, proj_pos)
 
     def update(self, grupo_projeteis_jogador, camera, client_socket=None):
-        # Se estivermos offline (client_socket is None), processa o input local.
         if client_socket is None:
             self.processar_input_humano(camera)
         else:
-            # Se estivermos online, o servidor é que manda.
             self.quer_virar_esquerda = False
             self.quer_virar_direita = False
             self.quer_mover_frente = False
@@ -509,7 +488,6 @@ class Player(Nave):
     def processar_input_humano(self, camera):
         agora = pygame.time.get_ticks()
 
-        # 1. Processa o Teclado (Sempre)
         teclas = pygame.key.get_pressed()
         self.quer_virar_esquerda = teclas[pygame.K_a] or teclas[pygame.K_LEFT]
         self.quer_virar_direita = teclas[pygame.K_d] or teclas[pygame.K_RIGHT]
@@ -517,7 +495,6 @@ class Player(Nave):
         self.quer_mover_tras = teclas[pygame.K_s] or teclas[pygame.K_DOWN]
         self.quer_atirar = teclas[pygame.K_SPACE]
 
-        # 2. Processa o Mouse (Apenas se a proteção de spawn tiver acabado)
         if agora > self.tempo_spawn_protecao_input:
             mouse_buttons = pygame.mouse.get_pressed()
             
@@ -539,27 +516,29 @@ class Player(Nave):
 
 
 # --- Classe do Bot Aliado ---
+# --- INÍCIO DA MODIFICAÇÃO (Definição do Bot) ---
 class NaveBot(Nave):
-    def __init__(self, x, y):
+    def __init__(self, x, y, dificuldade="Normal"): # Recebe a dificuldade
         super().__init__(x, y, cor=LARANJA_BOT, nome=f"Bot {random.randint(1, 99)}")
         
-        # --- INÍCIO DA REATORAÇÃO (Cérebro da IA) ---
-        self.cerebro = BotAI(self) # Cria o "cérebro" e passa uma referência de si mesmo
-        # --- FIM DA REATORAÇÃO ---
+        self.cerebro = BotAI(self) 
         
-        print(f"[{self.nome}] Gerando upgrades aleatórios...")
-        self.nivel_motor = random.randint(1, MAX_NIVEL_MOTOR); self.velocidade_movimento_base = 4 + self.nivel_motor
-        if self.nivel_motor > 1: print(f"  -> Spawn com Motor Nv. {self.nivel_motor}")
-        self.nivel_dano = random.randint(1, MAX_NIVEL_DANO)
-        if self.nivel_dano > 1: print(f"  -> Spawn com Dano Nv. {self.nivel_dano}")
-        self.nivel_escudo = random.randint(0, MAX_NIVEL_ESCUDO)
-        if self.nivel_escudo > 0: print(f"  -> Spawn com Escudo Nv. {self.nivel_escudo}")
-        max_spawn_vida_lvl = 3; self.nivel_max_vida = random.randint(1, max_spawn_vida_lvl); self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
-        if self.nivel_max_vida > 1: print(f"  -> Spawn com Vida Máx. Nv. {self.nivel_max_vida} ({self.max_vida} HP)")
-        max_aux = len(self.lista_todas_auxiliares); num_auxiliares = random.randint(0, max_aux)
-        if num_auxiliares > 0:
-            print(f"  -> Spawn com {num_auxiliares} Auxiliares.")
-            for _ in range(num_auxiliares): self.comprar_auxiliar()
+        # Se a dificuldade for "Dificil", dá upgrades aleatórios
+        if dificuldade == "Dificil":
+            print(f"[{self.nome}] Gerando upgrades aleatórios (Dificil)...")
+            self.nivel_motor = random.randint(1, MAX_NIVEL_MOTOR)
+            self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
+            
+            self.nivel_dano = random.randint(1, MAX_NIVEL_DANO)
+            self.nivel_escudo = random.randint(0, MAX_NIVEL_ESCUDO)
+            max_spawn_vida_lvl = 3; self.nivel_max_vida = random.randint(1, max_spawn_vida_lvl); self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
+            max_aux = len(self.lista_todas_auxiliares); num_auxiliares = random.randint(0, max_aux)
+            if num_auxiliares > 0:
+                for _ in range(num_auxiliares): self.comprar_auxiliar()
+        
+        # Se for "Normal", ele pula o bloco 'if' e usa os padrões 
+        # (Nv. 1) definidos no __init__ da Nave (classe pai).
+# --- FIM DA MODIFICAÇÃO ---
 
     
     def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
@@ -572,7 +551,6 @@ class NaveBot(Nave):
             novo_x = random.randint(50, MAP_WIDTH - 50) 
             novo_y = random.randint(50, MAP_HEIGHT - 50)
             self.posicao = pygame.math.Vector2(novo_x, novo_y); self.rect.center = self.posicao
-            print(f"[{self.nome}] Respawn em ({int(novo_x)}, {int(novo_y)})")
             
             self.grupo_auxiliares_ativos.empty()
             self.lista_todas_auxiliares = [] 
@@ -581,46 +559,34 @@ class NaveBot(Nave):
                 self.lista_todas_auxiliares.append(nova_aux)
             
             self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0
-            self.velocidade_movimento_base = 4 + self.nivel_motor; self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
+            
+            self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
+            self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
             self.alvo_selecionado = None; self.posicao_alvo_mouse = None; self.tempo_fim_lentidao = 0; self.rastro_particulas = []
             
-            # --- INÍCIO DA REATORAÇÃO ---
-            self.cerebro.resetar_ia() # Reseta o "cérebro"
-            # --- FIM DA REATORAÇÃO ---
-
-            print(f"[{self.nome}] Readicionando auxiliar padrão."); self.comprar_auxiliar()
+            self.cerebro.resetar_ia()
+            self.comprar_auxiliar()
         return morreu
         
-    # --- FUNÇÃO MOVER REMOVIDA ---
-    # Agora o NaveBot herda a função mover() da Nave (pai),
-    # que já tem a lógica correta de colisão com as bordas (clamping).
-
     def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_vidas_ref):
-        # --- INÍCIO DA REATORAÇÃO ---
-        # 1. Pede ao "cérebro" para pensar e definir as intenções de movimento
-        #    (Passa todos os grupos que a IA precisa para tomar decisões)
+        # 1. Pede ao "cérebro" para pensar
         self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_vidas_ref)
-        # --- FIM DA REATORAÇÃO ---
 
-        # 2. O "corpo" (NaveBot) executa as intenções definidas pelo cérebro
-        self.rotacionar() # Usa self.quer_virar_...
-        self.mover()      # Usa self.quer_mover_...
+        # 2. O "corpo" (NaveBot) executa as intenções
+        self.rotacionar() 
+        self.mover()      
         
         # 3. O "corpo" lida com ações
-        self.lidar_com_tiros(grupo_projeteis_bots, player_ref.posicao) # Usa self.quer_atirar...
-        self.processar_upgrades_ia() # Lógica de upgrade (pode ficar aqui)
-
-    # --- FUNÇÕES 'encontrar_alvo' e 'processar_input_ia' REMOVIDAS ---
-    # Elas agora vivem dentro da classe BotAI em botia.py
+        self.lidar_com_tiros(grupo_projeteis_bots, player_ref.posicao)
+        self.processar_upgrades_ia()
 
     def processar_upgrades_ia(self):
-        # Prioriza motor, vida, dano, escudo (auxiliares são comprados no spawn por enquanto)
         if self.pontos_upgrade_disponiveis > 0 and self.total_upgrades_feitos < MAX_TOTAL_UPGRADES:
             if self.nivel_motor < MAX_NIVEL_MOTOR:
                  self.comprar_upgrade("motor")
-            elif self.nivel_escudo < MAX_NIVEL_ESCUDO: # Prioriza escudo antes de vida max
+            elif self.nivel_escudo < MAX_NIVEL_ESCUDO: 
                  self.comprar_upgrade("escudo")
             elif self.nivel_dano < MAX_NIVEL_DANO:
                  self.comprar_upgrade("dano")
-            else: # Se não puder comprar os outros, tenta vida
+            else: 
                  self.comprar_upgrade("max_health")
