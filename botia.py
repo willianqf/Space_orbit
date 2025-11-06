@@ -93,8 +93,8 @@ class BotAI:
             # Verifica se grupo_vidas não é None ANTES de iterar
             if grupo_vidas: 
                 for vida in grupo_vidas:
-            # --- FIM DA CORREÇÃO DO BUG ---
-                    if not vida.groups(): continue
+                    # FIX: Ignora sprites que não tenham .posicao (como Explosoes)
+                    if not vida.groups() or not hasattr(vida, 'posicao'): continue
                     try:
                         dist = self.bot.posicao.distance_to(vida.posicao)
                         if dist < self.distancia_scan_geral and dist < dist_min:
@@ -222,7 +222,7 @@ class BotAI:
             if self.grupo_vidas_ref:
                 for vida in self.grupo_vidas_ref: 
             # --- FIM DA CORREÇÃO DO BUG ---
-                     if not vida.groups(): continue
+                     if not vida.groups() or not hasattr(vida, 'posicao'): continue
                      dist = self.bot.posicao.distance_to(vida.posicao)
                      if dist < dist_min:
                          dist_min = dist

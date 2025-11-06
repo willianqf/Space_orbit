@@ -126,13 +126,15 @@ grupo_inimigos = pygame.sprite.Group()
 grupo_motherships = pygame.sprite.Group() 
 grupo_boss_congelante = pygame.sprite.Group()
 grupo_bots = pygame.sprite.Group()
-grupo_explosoes = pygame.sprite.Group()
+# grupo_explosoes = pygame.sprite.Group() # <-- REMOVIDO
 grupo_player = pygame.sprite.GroupSingle()
 
 # --- INÍCIO DA ADIÇÃO (Grupo de Efeitos) ---
-# Usado para desenhar a nave de regeneração
-grupo_efeitos_visuais = pygame.sprite.Group()
-# --- FIM DA ADIÇÃO ---
+# MODIFICADO: Removida a definição duplicada
+# Usado para desenhar a nave de regeneração E AS EXPLOSÕES
+grupo_efeitos_visuais = pygame.sprite.Group() # <-- ÚNICA DEFINIÇÃO
+grupo_explosoes = grupo_efeitos_visuais      # <-- APONTA PARA A DEFINIÇÃO ACIMA
+# --- FIM DA ADIÇÃO --
 
 
 # 6. Criação do Jogador
@@ -939,8 +941,9 @@ while rodando:
             grupo_projeteis_bots.update()
             grupo_projeteis_inimigos.update()
             
+            # MODIFICADO: Removida a chamada duplicada de update
             # --- INÍCIO DA ADIÇÃO (Update de Efeitos) ---
-            grupo_efeitos_visuais.update()
+            # grupo_efeitos_visuais.update() # <-- REMOVIDO
             # --- FIM DA ADIÇÃO ---
             
             if estado_jogo == "JOGANDO":
@@ -1045,7 +1048,10 @@ while rodando:
         for bot in grupo_bots: 
             bot.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_bots, estado_jogo, nave_player)
         nave_player.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_player, estado_jogo, nave_player)
-        grupo_explosoes.update()
+        
+        # MODIFICADO: Esta é agora a ÚNICA chamada de update para este grupo
+        grupo_efeitos_visuais.update() 
+
 
 
     if estado_jogo == "JOGANDO":

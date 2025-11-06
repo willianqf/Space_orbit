@@ -625,9 +625,9 @@ class NaveBot(Nave):
             self.parar_regeneracao() # Garante que para de regenerar ao morrer
         return morreu
         
-    def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref):
+    def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref):
         # 1. Pede ao "cérebro" para pensar
-        self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref)
+        self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref)
 
         # 2. Atualiza a regeneração ANTES de mover
         self.update_regeneracao()
@@ -649,7 +649,7 @@ class NaveBot(Nave):
              self.quer_mover_frente = False
              
              # Tenta iniciar a regeneração (vai funcionar se ele estiver parado)
-             self.iniciar_regeneracao(player_ref.nave_regeneradora_sprite.groups()) # Reutiliza o grupo do player
+             self.iniciar_regeneracao(grupo_efeitos_visuais_ref) # Passa o grupo de efeitos principal
 
     def processar_upgrades_ia(self):
         if self.pontos_upgrade_disponiveis > 0 and self.total_upgrades_feitos < MAX_TOTAL_UPGRADES:
