@@ -12,14 +12,13 @@ from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, MAP_WI
                       RASTRO_MAX_PARTICULAS, RASTRO_DURACAO, RASTRO_TAMANHO_INICIAL, COR_RASTRO_MOTOR,
                       VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAX_TOTAL_UPGRADES, MAX_DISTANCIA_SOM_AUDIVEL, PANNING_RANGE_SOM, VOLUME_BASE_TIRO_PLAYER,
                       PONTOS_LIMIARES_PARA_UPGRADE, PONTOS_SCORE_PARA_MUDAR_LIMIAR, CUSTOS_AUXILIARES, FONT_NOME_JOGADOR, BRANCO, VELOCIDADE_ROTACAO_NAVE,
-                      REGEN_POR_TICK, REGEN_TICK_RATE # <-- Importar novas constantes
+                      REGEN_POR_TICK, REGEN_TICK_RATE, 
+                      ROXO_TIRO_LENTO, AZUL_CONGELANTE # --- MUDANÇA: Importar cores de status ---
                       ) 
 # Importa classes necessárias
 from projectiles import Projetil, ProjetilTeleguiadoJogador
 from effects import Explosao
-# --- INÍCIO DA MODIFICAÇÃO (Importar NaveRegeneradora) ---
-from entities import Obstaculo, NaveRegeneradora # <-- 'VidaColetavel' removida
-# --- FIM DA MODIFICAÇÃO ---
+from entities import Obstaculo, NaveRegeneradora 
 
 # --- INÍCIO DA REATORAÇÃO: Importa o cérebro do Bot ---
 from botia import BotAI
@@ -64,20 +63,14 @@ class NaveAuxiliar(pygame.sprite.Sprite):
         self.posicao = self.owner.posicao + self.offset_pos.rotate(-self.owner.angulo); self.rect = self.imagem_original.get_rect(center=self.posicao)
         self.angulo = self.owner.angulo; self.alvo_atual = None; self.distancia_tiro = 600; self.cooldown_tiro = 1000; self.ultimo_tiro_tempo = 0
 
-    # --- INÍCIO: MODIFICAÇÃO (Adicionar client_socket) ---
     def update(self, lista_alvos, grupo_projeteis_destino, estado_jogo_atual, nave_player_ref, client_socket=None):
-    # --- FIM: MODIFICAÇÃO ---
         parar_ataque = (self.owner == nave_player_ref and estado_jogo_atual == "GAME_OVER")
         offset_rotacionado = self.offset_pos.rotate(-self.owner.angulo); posicao_alvo_seguir = self.owner.posicao + offset_rotacionado
-        self.posicao = self.posicao.lerp(posicao_alvo_seguir, 0.1) # <-- Movimento SEMPRE corre
+        self.posicao = self.posicao.lerp(posicao_alvo_seguir, 0.1) 
         
         self.alvo_atual = None 
 
-        # --- INÍCIO: MODIFICAÇÃO (Verificar se está online) ---
-        # Se client_socket NÃO é None (estamos online), o SERVIDOR trata dos disparos.
-        # O cliente (aqui) não deve disparar.
         if client_socket is None:
-        # --- FIM: MODIFICAÇÃO ---
             if not parar_ataque:
                 alvo_do_dono = self.owner.alvo_selecionado 
                 
@@ -110,14 +103,9 @@ class NaveAuxiliar(pygame.sprite.Sprite):
                         tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, nave_player_ref.posicao, VOLUME_BASE_TIRO_PLAYER)
                 else:
                     self.angulo = self.owner.angulo
-            
             else: 
                 self.angulo = self.owner.angulo
-        
-        # --- INÍCIO: MODIFICAÇÃO (Lógica de mira online) ---
         else:
-            # Se estiver ONLINE, apenas aponta para o alvo do dono (se houver)
-            # ou segue o ângulo do dono. O servidor trata do disparo.
             alvo_do_dono = self.owner.alvo_selecionado
             if alvo_do_dono and alvo_do_dono.groups():
                 try: 
@@ -127,7 +115,6 @@ class NaveAuxiliar(pygame.sprite.Sprite):
                     self.angulo = self.owner.angulo
             else:
                 self.angulo = self.owner.angulo
-        # --- FIM: MODIFICAÇÃO ---
 
         self.rect.center = self.posicao
         
@@ -143,6 +130,8 @@ class Nave(pygame.sprite.Sprite):
         super().__init__()
         self.nome = nome; self.posicao = pygame.math.Vector2(x, y); self.largura_base = 30; self.altura = 30; self.cor = cor
         self.velocidade_rotacao = VELOCIDADE_ROTACAO_NAVE; self.angulo = 0.0; self.velocidade_movimento_base = 4
+        
+        # --- MUDANÇA: Adiciona tempo_fim_congelamento ---
         self.tempo_fim_congelamento = 0
         
         tamanho_surface = max(self.largura_base, self.altura) + 10; self.imagem_original = pygame.Surface((tamanho_surface, tamanho_surface), pygame.SRCALPHA)
@@ -161,9 +150,7 @@ class Nave(pygame.sprite.Sprite):
         self.image = self.imagem_original; self.rect = pygame.Rect(x, y, self.largura_base * 0.8, self.altura * 0.8); self.rect.center = self.posicao
         self.cooldown_tiro = 250; self.ultimo_tiro_tempo = 0; self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0
         
-        # --- INÍCIO: ADIÇÃO (Nível Aux) ---
-        self.nivel_aux = 0 # Usado pelo modo online para saber quantos auxiliares desenhar
-        # --- FIM: ADIÇÃO ---
+        self.nivel_aux = 0 
         
         self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
         self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
@@ -177,40 +164,25 @@ class Nave(pygame.sprite.Sprite):
         
         self.tempo_spawn_protecao_input = 0
         
-        # --- INÍCIO DAS ADIÇÕES (Regeneração) ---
         self.esta_regenerando = False
         self.nave_regeneradora_sprite = pygame.sprite.GroupSingle()
         self.ultimo_tick_regeneracao = 0
-        # --- FIM DAS ADIÇÕES ---
 
     def update(self, grupo_projeteis_destino, camera=None): pass
     
-    # --- INÍCIO DAS NOVAS FUNÇÕES DE REGENERAÇÃO ---
     def parar_regeneracao(self):
         """Para a regeneração e remove a nave lilás."""
         if self.esta_regenerando:
             self.esta_regenerando = False
-            
-            # --- INÍCIO DA CORREÇÃO ---
-            # .empty() apenas remove do GroupSingle, não dos outros grupos (como grupo_efeitos_visuais).
-            # Precisamos matar o sprite para removê-lo de TODOS os grupos.
             for sprite in self.nave_regeneradora_sprite:
                 sprite.kill() 
-            # --- FIM DA CORREÇÃO ---
             
-            # print(f"[{self.nome}] Regeneração interrompida.") # Opcional: Log
-
     def iniciar_regeneracao(self, grupo_efeitos_visuais):
         """Inicia a regeneração se as condições forem válidas."""
-        # Não pode regenerar se a vida estiver cheia
         if self.vida_atual >= self.max_vida:
             return
-            
-        # Não pode regenerar se já estiver regenerando
         if self.esta_regenerando:
             return
-
-        # Condição de estar parado (verificado em update_regeneracao)
         if self.quer_mover_frente or self.quer_mover_tras or self.posicao_alvo_mouse is not None:
             return
             
@@ -218,7 +190,6 @@ class Nave(pygame.sprite.Sprite):
         self.esta_regenerando = True
         self.ultimo_tick_regeneracao = pygame.time.get_ticks()
         
-        # Cria e adiciona a nave lilás
         nova_nave_regen = NaveRegeneradora(self)
         self.nave_regeneradora_sprite.add(nova_nave_regen)
         if grupo_efeitos_visuais is not None:
@@ -235,31 +206,25 @@ class Nave(pygame.sprite.Sprite):
         """Controla a lógica de regeneração a cada frame."""
         if not self.esta_regenerando:
             return
-            
-        # Condição 1: Para se o jogador se mover
         if self.quer_mover_frente or self.quer_mover_tras or self.posicao_alvo_mouse is not None:
             self.parar_regeneracao()
             return
-            
-        # Condição 2: Para se a vida estiver cheia
         if self.vida_atual >= self.max_vida:
-            self.vida_atual = self.max_vida # Garante que não ultrapasse
+            self.vida_atual = self.max_vida 
             self.parar_regeneracao()
             return
             
-        # Condição 3: Processa o "tick" de cura
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_tick_regeneracao > REGEN_TICK_RATE:
             self.ultimo_tick_regeneracao = agora
             self.vida_atual = min(self.max_vida, self.vida_atual + REGEN_POR_TICK)
-            self.ultimo_hit_tempo = agora # Mostra a barra de vida
+            self.ultimo_hit_tempo = agora 
             print(f"[{self.nome}] Regenerou! Vida: {self.vida_atual:.1f}/{self.max_vida}") # Log
             
-    # --- FIM DAS NOVAS FUNÇÕES ---
-    
     def rotacionar(self):
         angulo_alvo = None
         agora = pygame.time.get_ticks()
+        # --- MUDANÇA: Verifica congelamento ---
         if agora < self.tempo_fim_congelamento:
             return 
         
@@ -284,7 +249,13 @@ class Nave(pygame.sprite.Sprite):
         self.angulo %= 360
         
     def mover(self):
-        agora = pygame.time.get_ticks(); velocidade_atual = self.velocidade_movimento_base
+        agora = pygame.time.get_ticks()
+        # --- MUDANÇA: Verifica congelamento ---
+        if agora < self.tempo_fim_congelamento:
+            self.posicao_alvo_mouse = None # Para o movimento
+            return
+        
+        velocidade_atual = self.velocidade_movimento_base
         if agora < self.tempo_fim_lentidao: velocidade_atual *= 0.4
         
         nova_pos = pygame.math.Vector2(self.posicao.x, self.posicao.y); movendo_frente = False
@@ -326,6 +297,7 @@ class Nave(pygame.sprite.Sprite):
     
     def lidar_com_tiros(self, grupo_destino, pos_ouvinte=None):
         agora = pygame.time.get_ticks() 
+        # --- MUDANÇA: Verifica congelamento ---
         if agora < self.tempo_fim_congelamento:
             return 
         
@@ -486,7 +458,8 @@ class Nave(pygame.sprite.Sprite):
     def coletar_vida(self, quantidade):
         return False
         
-    def desenhar(self, surface, camera):
+    # --- MUDANÇA: Adicionado client_socket=None ---
+    def desenhar(self, surface, camera, client_socket=None):
         agora = pygame.time.get_ticks(); particulas_vivas = []
         for particula in self.rastro_particulas:
             pos_x, pos_y, tempo_criacao = particula; idade = agora - tempo_criacao
@@ -499,6 +472,21 @@ class Nave(pygame.sprite.Sprite):
         self.rastro_particulas = particulas_vivas
         
         self.image = pygame.transform.rotate(self.imagem_original, self.angulo); rect_desenho = self.image.get_rect(center = self.posicao)
+        
+        # --- MUDANÇA: Aplica efeitos de status (lento/congelado) ---
+        if client_socket: # Só aplica efeitos visuais se estiver online
+            # (Os tempos são atualizados pelo main.py a partir da rede)
+            if agora < self.tempo_fim_congelamento:
+                self.image.fill(AZUL_CONGELANTE, special_flags=pygame.BLEND_RGB_ADD)
+            elif agora < self.tempo_fim_lentidao:
+                self.image.fill(ROXO_TIRO_LENTO, special_flags=pygame.BLEND_RGB_MULT)
+        else: # Lógica offline
+             if agora < self.tempo_fim_congelamento:
+                self.image.fill(AZUL_CONGELANTE, special_flags=pygame.BLEND_RGB_ADD)
+             elif agora < self.tempo_fim_lentidao:
+                self.image.fill(ROXO_TIRO_LENTO, special_flags=pygame.BLEND_RGB_MULT)
+        # --- FIM MUDANÇA ---
+
         surface.blit(self.image, camera.apply(rect_desenho))
         
         if self.mostrar_escudo_fx:
@@ -556,26 +544,19 @@ class Player(Nave):
     def update(self, grupo_projeteis_jogador, camera, client_socket=None):
         if client_socket is None:
             self.processar_input_humano(camera)
-            # --- INÍCIO: MODIFICAÇÃO (Regeneração e Tiros Offline) ---
             self.update_regeneracao()
             self.rotacionar()
             self.mover()
             self.lidar_com_tiros(grupo_projeteis_jogador, self.posicao)
-            # --- FIM: MODIFICAÇÃO ---
         else:
-            # --- INÍCIO: MODIFICAÇÃO (Lógica Online) ---
-            # No modo online, o 'main.py' trata de sincronizar o estado
-            # e a 'Nave' (classe base) trata de sincronizar os visuais
-            # (como a regeneração). O Jogador não deve fazer nada aqui.
             self.quer_virar_esquerda = False
             self.quer_virar_direita = False
             self.quer_mover_frente = False
             self.quer_mover_tras = False
             self.quer_atirar = False
             
-            # (Removido: update_regeneracao(), rotacionar(), mover(), lidar_com_tiros())
-            # (Eles são chamados apenas no modo offline acima)
-            # --- FIM: MODIFICAÇÃO ---
+            # --- MUDANÇA: A lógica de regeneração (visual) agora é chamada pelo main.py
+            #            baseado no estado da rede, então não precisa ser chamada aqui.
             pass
         
 
@@ -594,7 +575,7 @@ class Player(Nave):
             
             if mouse_buttons[0]:
                 mouse_pos_tela = pygame.mouse.get_pos()
-                if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela) and not ui.RECT_BOTAO_REGEN_HUD.collidepoint(mouse_pos_tela): # <-- Modificado para não mover ao clicar em regen
+                if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela) and not ui.RECT_BOTAO_REGEN_HUD.collidepoint(mouse_pos_tela):
                     camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
                     mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0], mouse_pos_tela[1] + camera_world_topleft[1])
                     self.posicao_alvo_mouse = mouse_pos_mundo
@@ -617,7 +598,6 @@ class NaveBot(Nave):
         self.cerebro = BotAI(self) 
         
         if dificuldade == "Dificil":
-            # print(f"[{self.nome}] Gerando upgrades aleatórios (Dificil)...")
             self.nivel_motor = random.randint(1, MAX_NIVEL_MOTOR)
             self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
             self.nivel_dano = random.randint(1, MAX_NIVEL_DANO)
@@ -626,8 +606,8 @@ class NaveBot(Nave):
             max_aux = len(self.lista_todas_auxiliares); num_auxiliares = random.randint(0, max_aux)
             if num_auxiliares > 0:
                 for _ in range(num_auxiliares): 
-                    self.comprar_auxiliar() # Isto chama o comprar_auxiliar local
-                    self.nivel_aux += 1 # Mantém o contador sincronizado
+                    self.comprar_auxiliar() 
+                    self.nivel_aux += 1 
     
     def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
         vida_antes = self.vida_atual
@@ -655,25 +635,20 @@ class NaveBot(Nave):
             self.cerebro.resetar_ia()
             self.comprar_auxiliar()
             
-            self.parar_regeneracao() # Garante que para de regenerar ao morrer
+            self.parar_regeneracao() 
         return morreu
         
     def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref):
-        # 1. Pede ao "cérebro" para pensar
+        # --- MUDANÇA: Passa grupo_efeitos_visuais (para NaveRegeneradora) ---
         self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref)
 
-        # 2. Atualiza a regeneração ANTES de mover
         self.update_regeneracao()
-        
-        # 3. O "corpo" (NaveBot) executa as intenções
         self.rotacionar() 
         self.mover()      
         
-        # 4. O "corpo" lida com ações
         self.lidar_com_tiros(grupo_projeteis_bots, player_ref.posicao)
         self.processar_upgrades_ia()
         
-        # 5. IA simples para regenerar
         if self.alvo_selecionado is None and self.vida_atual < (self.max_vida * 0.5) and not self.esta_regenerando:
              self.cerebro.estado_ia = "VAGANDO" 
              self.cerebro.virando_aleatoriamente_timer = 0

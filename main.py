@@ -13,9 +13,7 @@ from settings import (MAX_TOTAL_UPGRADES, VOLUME_BASE_EXPLOSAO_BOSS, VOLUME_BASE
 import settings as s 
 from camera import Camera
 from projectiles import Projetil, ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento, ProjetilCongelante, ProjetilTeleguiadoJogador
-# --- INÍCIO DA MODIFICAÇÃO (Importar NaveRegeneradora) ---
-from entities import Obstaculo, NaveRegeneradora # 'VidaColetavel' foi removida
-# --- FIM DA MODIFICAÇÃO ---
+from entities import Obstaculo, NaveRegeneradora 
 from effects import Explosao 
 
 # Importa as classes de inimigos
@@ -57,20 +55,14 @@ try:
     print(f"Som '{caminho_som_congelante}' carregado com sucesso!")
 except pygame.error as e:
     print(f"[ERRO] Erro ao carregar um som: {e}")
-    s.SOM_TIRO_PLAYER = None
-    s.SOM_TIRO_INIMIGO_SIMPLES = None
-    s.SOM_EXPLOSAO_BOSS = None 
-    s.SOM_EXPLOSAO_NPC = None 
-    s.SOM_TIRO_LASER_LONGO = None 
-    s.SOM_TIRO_CONGELANTE = None
+    s.SOM_TIRO_PLAYER = None; s.SOM_TIRO_INIMIGO_SIMPLES = None
+    s.SOM_EXPLOSAO_BOSS = None; s.SOM_EXPLOSAO_NPC = None 
+    s.SOM_TIRO_LASER_LONGO = None; s.SOM_TIRO_CONGELANTE = None
 except Exception as e:
     print(f"[ERRO] Erro inesperado ao carregar sons: {e}")
-    s.SOM_TIRO_PLAYER = None
-    s.SOM_TIRO_INIMIGO_SIMPLES = None
-    s.SOM_EXPLOSAO_BOSS = None 
-    s.SOM_EXPLOSAO_NPC = None 
-    s.SOM_TIRO_LASER_LONGO = None 
-    s.SOM_TIRO_CONGELANTE = None
+    s.SOM_TIRO_PLAYER = None; s.SOM_TIRO_INIMIGO_SIMPLES = None
+    s.SOM_EXPLOSAO_BOSS = None; s.SOM_EXPLOSAO_NPC = None 
+    s.SOM_TIRO_LASER_LONGO = None; s.SOM_TIRO_CONGELANTE = None
 # --- FIM: GERAÇÃO DE SONS ---
 
 LARGURA_TELA = s.LARGURA_TELA_INICIAL
@@ -195,35 +187,37 @@ def network_listener_thread(sock):
                     for player_data in player_data_list:
                         if not player_data: continue 
                         
-                        # --- INÍCIO: MODIFICAÇÃO (Espera 15 partes com UPGRADES) ---
+                        # --- INÍCIO: MUDANÇA (Espera 17 partes com STATUS) ---
                         parts_player = player_data.split(':')
-                        if len(parts_player) == 15: # 8 campos base + 7 campos de upgrade
+                        if len(parts_player) == 17: # 8 campos base + 7 campos de upgrade + 2 campos de status
                             try:
                                 nome = parts_player[0]
                                 new_player_states[nome] = {
                                     'x': float(parts_player[1]),
                                     'y': float(parts_player[2]),
                                     'angulo': float(parts_player[3]),
-                                    'hp': float(parts_player[4]), # <-- HP agora é FLOAT
+                                    'hp': float(parts_player[4]), 
                                     'max_hp': int(parts_player[5]),
                                     'pontos': int(parts_player[6]),
                                     'esta_regenerando': bool(int(parts_player[7])),
-                                    # Novos campos de Upgrade
                                     'pontos_upgrade_disponiveis': int(parts_player[8]),
                                     'total_upgrades_feitos': int(parts_player[9]),
                                     'nivel_motor': int(parts_player[10]),
                                     'nivel_dano': int(parts_player[11]),
                                     'nivel_max_vida': int(parts_player[12]),
                                     'nivel_escudo': int(parts_player[13]),
-                                    'nivel_aux': int(parts_player[14])
+                                    'nivel_aux': int(parts_player[14]),
+                                    # Novos campos de Status
+                                    'is_lento': bool(int(parts_player[15])),
+                                    'is_congelado': bool(int(parts_player[16])),
                                 }
                             except ValueError:
                                 print(f"Erro ao processar dados do jogador: {parts_player}")
                                 pass
                         else:
-                            # Não imprime mais o erro, pois pode ser spam
+                             # Não imprime mais o erro
                             pass 
-                        # --- FIM: MODIFICAÇÃO ---
+                        # --- FIM: MUDANÇA ---
                         
                     new_projectiles_list = []
                     proj_data_list = payload_proj.split(';')
@@ -231,17 +225,20 @@ def network_listener_thread(sock):
                     for proj_data in proj_data_list:
                         if not proj_data: continue
                         
+                        # --- INÍCIO: MUDANÇA (Espera 5 partes com TIPO_PROJ) ---
                         parts_proj = proj_data.split(':')
-                        if len(parts_proj) == 4: # ID:X:Y:TIPO
+                        if len(parts_proj) == 5: # ID:X:Y:TIPO:TIPO_PROJ
                             try:
                                 new_projectiles_list.append(
                                     {'id': parts_proj[0], 
                                      'x': float(parts_proj[1]), 
                                      'y': float(parts_proj[2]), 
-                                     'tipo': parts_proj[3]}
+                                     'tipo': parts_proj[3], # 'player' ou 'npc'
+                                     'tipo_proj': parts_proj[4]} # 'normal', 'teleguiado', 'congelante', etc.
                                 )
                             except ValueError:
                                 pass 
+                        # --- FIM: MUDANÇA ---
 
                     new_npc_states = {}
                     npc_data_list = payload_npcs.split(';')
@@ -249,12 +246,13 @@ def network_listener_thread(sock):
                     for npc_data in npc_data_list:
                         if not npc_data: continue
                         
+                        # --- MUDANÇA: O formato (8 partes) já suporta minions ---
                         parts_npc = npc_data.split(':')
                         if len(parts_npc) == 8: 
                             try:
                                 npc_id = parts_npc[0]
                                 new_npc_states[npc_id] = {
-                                    'tipo': parts_npc[1],
+                                    'tipo': parts_npc[1], # 'bomba', 'minion_mothership', etc.
                                     'x': float(parts_npc[2]),
                                     'y': float(parts_npc[3]),
                                     'angulo': float(parts_npc[4]),
@@ -264,6 +262,7 @@ def network_listener_thread(sock):
                                 }
                             except ValueError:
                                 pass 
+                        # --- FIM MUDANÇA ---
 
                     with network_state_lock:
                         online_players_states.clear()
@@ -435,15 +434,15 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
             online_players_states.clear()
             online_projectiles.clear()
             online_npcs.clear() 
-            # --- INÍCIO: MODIFICAÇÃO (Adicionar estado inicial de UPGRADE) ---
-            # Este estado tem de ser igual ao inicial em server.py
+            # --- INÍCIO: MUDANÇA (Estado inicial com 17 campos) ---
             online_players_states[MEU_NOME_REDE] = {
                 'x': spawn_x, 'y': spawn_y, 'angulo': 0, 'hp': 5.0, 'max_hp': 5, 'pontos': 0, 'esta_regenerando': False,
                 'pontos_upgrade_disponiveis': 0, 'total_upgrades_feitos': 0,
                 'nivel_motor': 1, 'nivel_dano': 1, 'nivel_max_vida': 1,
-                'nivel_escudo': 0, 'nivel_aux': 0
+                'nivel_escudo': 0, 'nivel_aux': 0,
+                'is_lento': False, 'is_congelado': False # Adiciona os novos status
             }
-            # --- FIM: MODIFICAÇÃO ---
+            # --- FIM: MUDANÇA ---
     else:
         print("Spawnando em posição aleatória (Modo Offline)...")
         margem_spawn = 100
@@ -477,6 +476,7 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     nave_player.posicao_alvo_mouse = None
     nave_player.ultimo_hit_tempo = 0
     nave_player.tempo_fim_lentidao = 0
+    nave_player.tempo_fim_congelamento = 0 # --- MUDANÇA ---
     nave_player.rastro_particulas = []
     
     nave_player.parar_regeneracao() 
@@ -535,6 +535,7 @@ def respawn_player_offline(nave):
     nave.posicao_alvo_mouse = None
     nave.ultimo_hit_tempo = 0
     nave.tempo_fim_lentidao = 0
+    nave.tempo_fim_congelamento = 0 # --- MUDANÇA ---
     nave.rastro_particulas = []
     
     nave.parar_regeneracao() 
@@ -549,7 +550,7 @@ def resetar_para_menu():
     
     print("Voltando ao Menu Principal...")
     
-    nave_player.parar_regeneracao() # Parar a regeneração ao sair
+    nave_player.parar_regeneracao() 
     
     grupo_bots.empty()
     grupo_inimigos.empty()
@@ -604,17 +605,14 @@ def spawnar_mothership(pos_referencia):
         for mothership_existente in grupo_motherships:
             try:
                 if pos_potencial.distance_to(mothership_existente.posicao) < s.MIN_SPAWN_DIST_ENTRE_NAVES_MAE:
-                    muito_perto = True
-                    break 
+                    muito_perto = True; break 
             except ValueError:
-                muito_perto = True 
-                break
+                muito_perto = True; break
         if not muito_perto:
             nova_mothership = InimigoMothership(x, y)
             grupo_inimigos.add(nova_mothership)
             grupo_motherships.add(nova_mothership)
-            print(f"!!! Mothership spawnou em ({int(x)}, {int(y)}) !!!") 
-            return 
+            print(f"!!! Mothership spawnou em ({int(x)}, {int(y)}) !!!"); return 
     print("[AVISO] Não foi possível encontrar uma posição segura para spawnar a Mothership após várias tentativas.")
 def spawnar_obstaculo(pos_referencia):
     x, y = calcular_posicao_spawn(pos_referencia)
@@ -821,7 +819,9 @@ while rodando:
                             enviar_input_servidor(f"CLICK_TARGET|{int(mouse_pos_mundo.x)}|{int(mouse_pos_mundo.y)}")
                         else:
                             alvo_clicado = None
+                            # --- MUDANÇA: Agora bots estão no grupo 'grupo_bots' ---
                             todos_alvos_clicaveis = list(grupo_inimigos) + list(grupo_bots) + list(grupo_obstaculos)
+                            # --- FIM MUDANÇA ---
                             for alvo in todos_alvos_clicaveis:
                                 target_click_rect = pygame.Rect(0, 0, s.TARGET_CLICK_SIZE, s.TARGET_CLICK_SIZE)
                                 target_click_rect.center = alvo.posicao
@@ -860,7 +860,6 @@ while rodando:
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
                 
-                # --- INÍCIO: MODIFICAÇÃO (Enviar comandos de compra) ---
                 if ui.RECT_BOTAO_MOTOR.collidepoint(mouse_pos):
                     if client_socket: enviar_input_servidor("BUY_UPGRADE|motor")
                     else: nave_player.comprar_upgrade("motor")
@@ -876,7 +875,6 @@ while rodando:
                 elif ui.RECT_BOTAO_ESCUDO.collidepoint(mouse_pos):
                     if client_socket: enviar_input_servidor("BUY_UPGRADE|escudo")
                     else: nave_player.comprar_upgrade("escudo")
-                # --- FIM: MODIFICAÇÃO ---
 
         elif estado_jogo == "TERMINAL":
             if event.type == pygame.KEYDOWN:
@@ -940,12 +938,24 @@ while rodando:
                     nave_player.nivel_max_vida = my_state.get('nivel_max_vida', 1)
                     nave_player.nivel_escudo = my_state.get('nivel_escudo', 0)
                     
-                    # --- INÍCIO: SINCRONIZAÇÃO DE AUXILIARES VISUAIS ---
+                    # --- MUDANÇA: Sincroniza status de lento/congelado ---
+                    agora = pygame.time.get_ticks()
+                    if my_state.get('is_lento', False):
+                        # Define o tempo de lentidão para 1 segundo no futuro
+                        # (Isso garante que o efeito visual apareça)
+                        nave_player.tempo_fim_lentidao = agora + 1000 
+                    
+                    if my_state.get('is_congelado', False):
+                        # Define o tempo de congelamento
+                        nave_player.tempo_fim_congelamento = agora + 1000
+                    # --- FIM MUDANÇA ---
+                    
+                    
+                    # --- (Sincronização de Auxiliares - Sem alterações) ---
                     num_aux_servidor = my_state.get('nivel_aux', 0)
                     num_aux_local = len(nave_player.grupo_auxiliares_ativos)
 
                     if num_aux_servidor > num_aux_local:
-                        # Adiciona os sprites que faltam
                         for i in range(num_aux_local, num_aux_servidor):
                             if i < len(nave_player.lista_todas_auxiliares):
                                 try:
@@ -960,12 +970,10 @@ while rodando:
                                     print(f"Erro ao adicionar sprite aux online: {e}")
                     
                     elif num_aux_servidor < num_aux_local:
-                        # Remove todos (acontece no respawn, servidor envia 0)
                         nave_player.grupo_auxiliares_ativos.empty()
                         if num_aux_local > 0:
                             print("Resetando sprites auxiliares (Respawn)")
                     
-                    # Atualiza o 'nivel_aux' local (usado pelo ui.py)
                     nave_player.nivel_aux = num_aux_servidor
                     # --- FIM: SINCRONIZAÇÃO DE AUXILIARES VISUAIS ---
                     
@@ -1012,7 +1020,7 @@ while rodando:
             
             if estado_jogo == "JOGANDO":
                 if len(grupo_obstaculos) < s.MAX_OBSTACULOS: spawnar_obstaculo(nave_player.posicao)
-                contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership)))
+                contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership, MinionCongelante, BossCongelante))) # <-- MUDANÇA
                 if contagem_inimigos_normais < s.MAX_INIMIGOS: spawnar_inimigo_aleatorio(nave_player.posicao)
                 if len(grupo_motherships) < s.MAX_MOTHERSHIPS: spawnar_mothership(nave_player.posicao)
                 if len(grupo_boss_congelante) < s.MAX_BOSS_CONGELANTE: spawnar_boss_congelante(nave_player.posicao)
@@ -1030,6 +1038,7 @@ while rodando:
                             nave_player.ganhar_pontos(inimigo.pontos_por_morte);
                             if isinstance(inimigo, (InimigoMothership, BossCongelante)):
                                 if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+                                if isinstance(inimigo, BossCongelante): inimigo.grupo_minions_congelantes.empty() # --- MUDANÇA ---
                                 if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
                                     tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
                             else:
@@ -1059,6 +1068,7 @@ while rodando:
                             owner_do_tiro.ganhar_pontos(inimigo.pontos_por_morte);
                             if isinstance(inimigo, (InimigoMothership, BossCongelante)):
                                 if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+                                if isinstance(inimigo, BossCongelante): inimigo.grupo_minions_congelantes.empty() # --- MUDANÇA ---
                                 if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
                                     tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
                             else:
@@ -1100,6 +1110,7 @@ while rodando:
                         bot.ganhar_pontos(inimigo.pontos_por_morte)
                         if isinstance(inimigo, (InimigoMothership, BossCongelante)):
                             if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+                            if isinstance(inimigo, BossCongelante): inimigo.grupo_minions_congelantes.empty() # --- MUDANÇA ---
                             if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
                                 tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
                         else:
@@ -1109,10 +1120,7 @@ while rodando:
         for bot in grupo_bots: 
             bot.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_bots, estado_jogo, nave_player, client_socket)
         
-        # --- INÍCIO: MODIFICAÇÃO (Passar client_socket) ---
-        # Agora o update do auxiliar precisa de saber se está online
         nave_player.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_player, estado_jogo, nave_player, client_socket)
-        # --- FIM: MODIFICAÇÃO ---
         
         grupo_efeitos_visuais.update() 
 
@@ -1120,16 +1128,15 @@ while rodando:
 
     if estado_jogo == "JOGANDO":
         if client_socket:
-            pass # O movimento do jogador é controlado pelo lerp na secção 12
+            pass 
         else:
-            # No modo offline, o update do jogador (que processa inputs) é chamado
             nave_player.update(grupo_projeteis_player, camera, None)
 
     if client_socket is None and (estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL"):
         colisoes_proj_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_inimigos, False)
         for proj in colisoes_proj_inimigo_player:
             if isinstance(proj, ProjetilCongelante):
-                nave_player.aplicar_lentidao(s.DURACAO_CONGELAMENTO)
+                nave_player.aplicar_congelamento(s.DURACAO_CONGELAMENTO) # --- MUDANÇA: Nome da função corrigido ---
             elif isinstance(proj, ProjetilTeleguiadoLento):
                 nave_player.aplicar_lentidao(6000)
             else:
@@ -1153,6 +1160,7 @@ while rodando:
                 nave_player.ganhar_pontos(inimigo.pontos_por_morte)
                 if isinstance(inimigo, (InimigoMothership, BossCongelante)):
                     if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
+                    if isinstance(inimigo, BossCongelante): inimigo.grupo_minions_congelantes.empty() # --- MUDANÇA ---
                     if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
                         tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
                 else:
@@ -1201,10 +1209,27 @@ while rodando:
             
             for proj in new_projectiles:
                 pos_som = pygame.math.Vector2(proj['x'], proj['y'])
+                # --- MUDANÇA: Tocar som baseado no tipo de projétil ---
+                tipo_som = proj.get('tipo_proj', 'normal')
+                som_a_tocar = None
+                vol_base = 0.4
+
                 if proj['tipo'] == 'npc':
-                    tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, pos_som, nave_player.posicao, VOLUME_BASE_TIRO_INIMIGO)
-                else: 
-                    tocar_som_posicional(s.SOM_TIRO_PLAYER, pos_som, nave_player.posicao, VOLUME_BASE_TIRO_PLAYER)
+                    if tipo_som == 'congelante':
+                        som_a_tocar = s.SOM_TIRO_CONGELANTE
+                        vol_base = VOLUME_BASE_TIRO_CONGELANTE
+                    elif tipo_som == 'teleguiado_lento': # Som do atordoador (usando simples por enquanto)
+                        som_a_tocar = s.SOM_TIRO_INIMIGO_SIMPLES
+                        vol_base = VOLUME_BASE_TIRO_INIMIGO
+                    else: # 'normal', 'tiro_rapido', etc.
+                        som_a_tocar = s.SOM_TIRO_INIMIGO_SIMPLES
+                        vol_base = VOLUME_BASE_TIRO_INIMIGO
+                else: # 'player'
+                    som_a_tocar = s.SOM_TIRO_PLAYER
+                    vol_base = VOLUME_BASE_TIRO_PLAYER
+                
+                tocar_som_posicional(som_a_tocar, pos_som, nave_player.posicao, vol_base)
+                # --- FIM MUDANÇA ---
 
             current_npc_ids = set(online_npcs_copy.keys())
             dead_npc_states = [npc for npc_id, npc in online_npcs_last_frame.items() if npc_id not in current_npc_ids]
@@ -1213,7 +1238,13 @@ while rodando:
                 pos_npc = pygame.math.Vector2(npc['x'], npc['y'])
                 explosao = Explosao(pos_npc, npc['tamanho'] // 2 + 5)
                 grupo_explosoes.add(explosao)
-                tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+                # --- MUDANÇA: Tocar som de explosão de Boss ---
+                if npc['tipo'] in ['mothership', 'boss_congelante']:
+                    tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
+                else:
+                    tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+                # --- FIM MUDANÇA ---
+
 
             current_player_names = set(online_players_copy.keys())
             dead_player_states = [player for name, player in online_players_last_frame.items() if name not in current_player_names]
@@ -1229,8 +1260,30 @@ while rodando:
                     continue 
                 if state.get('hp', 0) <= 0:
                     continue 
-                img_rotacionada = pygame.transform.rotate(nave_player.imagem_original, state['angulo'])
+                    
+                # --- MUDANÇA: Desenha Bots com cor diferente ---
+                imagem_base_outro = nave_player.imagem_original
+                if "Bot_" in nome: # Se é um bot
+                    # (Precisamos recriar a imagem do bot aqui)
+                    temp_surf = pygame.Surface((40, 40), pygame.SRCALPHA)
+                    centro_x = 20; centro_y = 20;
+                    ponto_topo = (centro_x, centro_y - 15); ponto_base_esq = (centro_x - 15, centro_y + 15); ponto_base_dir = (centro_x + 15, centro_y + 15)
+                    pygame.draw.polygon(temp_surf, s.LARANJA_BOT, [ponto_topo, ponto_base_esq, ponto_base_dir])
+                    ponta_largura = 4; ponta_altura = 8;
+                    pygame.draw.rect(temp_surf, s.PONTA_NAVE, (ponto_topo[0] - ponta_largura / 2, ponto_topo[1] - ponta_altura, ponta_largura, ponta_altura))
+                    imagem_base_outro = temp_surf
+                # --- FIM MUDANÇA ---
+                    
+                img_rotacionada = pygame.transform.rotate(imagem_base_outro, state['angulo'])
                 pos_rect = img_rotacionada.get_rect(center=(state['x'], state['y']))
+                
+                # --- MUDANÇA: Aplica efeito de congelado/lento em outros ---
+                if state.get('is_congelado', False):
+                    img_rotacionada.fill(s.AZUL_CONGELANTE, special_flags=pygame.BLEND_RGB_ADD)
+                elif state.get('is_lento', False):
+                    img_rotacionada.fill(s.ROXO_TIRO_LENTO, special_flags=pygame.BLEND_RGB_MULT)
+                # --- FIM MUDANÇA ---
+                
                 tela.blit(img_rotacionada, camera.apply(pos_rect))
                 
                 if state.get('esta_regenerando', False):
@@ -1243,48 +1296,76 @@ while rodando:
                     pos_tela_regen = camera.apply(pygame.Rect(pos_regen_x, pos_regen_y, 0, 0)).topleft
                     pygame.draw.circle(tela, s.LILAS_REGEN, pos_tela_regen, 9, 2)
                 
-                # --- INÍCIO: MODIFICAÇÃO (Desenhar Auxiliares de OUTROS jogadores) ---
                 num_aux_outro = state.get('nivel_aux', 0)
                 if num_aux_outro > 0:
                     for i in range(num_aux_outro):
-                        if i < len(Nave.POSICOES_AUXILIARES): # Garantia extra
+                        if i < len(Nave.POSICOES_AUXILIARES): 
                             offset_pos = Nave.POSICOES_AUXILIARES[i]
-                            offset_rotacionado = offset_pos.rotate(-state['angulo']) # Usar o ângulo do 'state'
+                            offset_rotacionado = offset_pos.rotate(-state['angulo']) 
                             posicao_alvo_seguir = pygame.math.Vector2(state['x'], state['y']) + offset_rotacionado
                             
                             rect_fantasma = pygame.Rect(0, 0, 15, 15)
                             rect_fantasma.center = posicao_alvo_seguir
                             pos_tela = camera.apply(rect_fantasma).center
                             pygame.draw.circle(tela, s.VERDE_AUXILIAR, pos_tela, 8, 2)
-                # --- FIM: MODIFICAÇÃO ---
 
                 nome_surf = s.FONT_NOME_JOGADOR.render(nome, True, s.BRANCO)
                 nome_rect = nome_surf.get_rect(midbottom=(state['x'], state['y'] - 33))
                 tela.blit(nome_surf, camera.apply(nome_rect))
             
             for proj_dict in online_projectiles_copy: 
-                x, y, tipo = proj_dict['x'], proj_dict['y'], proj_dict['tipo'] 
-                cor = s.VERMELHO_TIRO
-                if tipo == 'npc': 
-                    cor = s.LARANJA_TIRO_INIMIGO
+                x, y, tipo, tipo_proj = proj_dict['x'], proj_dict['y'], proj_dict['tipo'], proj_dict['tipo_proj']
+                
+                # --- MUDANÇA: Desenha projéteis com cores corretas ---
+                cor = s.VERMELHO_TIRO # Padrão
+                raio = 5
+                
+                if tipo == 'npc':
+                    if tipo_proj == 'congelante':
+                        cor = s.AZUL_TIRO_CONGELANTE
+                        raio = 6
+                    elif tipo_proj == 'teleguiado_lento':
+                        cor = s.ROXO_TIRO_LENTO
+                        raio = 5
+                    else: # normal, rapido, etc.
+                        cor = s.LARANJA_TIRO_INIMIGO
+                        raio = 4
                 elif tipo == 'player':
+                    # (Aqui você pode adicionar lógica se o projétil do player mudar de cor)
                     cor = s.VERMELHO_TIRO
+                    raio = 5
+                
                 pos_tela = camera.apply(pygame.Rect(x, y, 0, 0)).topleft
-                pygame.draw.circle(tela, cor, pos_tela, 5) 
+                pygame.draw.circle(tela, cor, pos_tela, raio) 
+                # --- FIM MUDANÇA ---
             
             for npc_id, state in online_npcs_copy.items():
                 tamanho = state.get('tamanho', 30) 
                 tipo = state.get('tipo')
                 base_img = pygame.Surface((tamanho, tamanho), pygame.SRCALPHA)
                 cor = s.VERMELHO_PERSEGUIDOR 
+                
+                # --- MUDANÇA: Desenha os novos tipos de NPC ---
                 if tipo == 'boss_congelante':
                     cor = s.AZUL_CONGELANTE
                     centro = tamanho // 2
                     pygame.draw.circle(base_img, cor, (centro, centro), centro)
                     pygame.draw.circle(base_img, s.BRANCO, (centro, centro), centro, 2) 
+                elif tipo == 'minion_congelante':
+                    cor = s.AZUL_MINION_CONGELANTE
+                    centro = tamanho // 2
+                    pygame.draw.circle(base_img, cor, (centro, centro), centro)
                 elif tipo == 'mothership':
                     cor = s.CIANO_MOTHERSHIP
                     base_img.fill(cor) 
+                elif tipo == 'minion_mothership':
+                    cor = s.CIANO_MINION
+                    centro = tamanho // 2
+                    ponto_topo = (centro, centro - tamanho / 2)
+                    ponto_base_esq = (centro - tamanho / 2, centro + tamanho / 2)
+                    ponto_base_dir = (centro + tamanho / 2, centro + tamanho / 2)
+                    pygame.draw.polygon(base_img, cor, [ponto_topo, ponto_base_esq, ponto_base_dir])
+                # --- FIM MUDANÇA ---
                 elif tipo == 'bomba':
                     cor = s.AMARELO_BOMBA
                     base_img.fill(cor)
@@ -1300,8 +1381,9 @@ while rodando:
                 elif tipo == 'rapido':
                     cor = s.LARANJA_RAPIDO
                     base_img.fill(cor)
-                else: 
+                else: # 'perseguidor'
                     base_img.fill(cor)
+                    
                 img_rotacionada = pygame.transform.rotate(base_img, state['angulo'])
                 pos_rect = img_rotacionada.get_rect(center=(state['x'], state['y']))
                 tela.blit(img_rotacionada, camera.apply(pos_rect))
@@ -1334,14 +1416,13 @@ while rodando:
         
         # Desenha o nosso jogador (Sempre)
         if estado_jogo != "GAME_OVER": 
-            nave_player.desenhar(tela, camera); nave_player.desenhar_vida(tela, camera)
+            # --- MUDANÇA: Desenha efeitos de status no jogador ---
+            nave_player.desenhar(tela, camera, client_socket) # Passa o client_socket
+            # --- FIM MUDANÇA ---
+            nave_player.desenhar_vida(tela, camera)
             nave_player.desenhar_nome(tela, camera)
             
-            # --- INÍCIO: MODIFICAÇÃO (Desenhar Auxiliares Online) ---
-            # No modo online ou offline, agora desenhamos os sprites reais
-            # porque a lógica de sincronização (Secção 12) gere o grupo.
             for aux in nave_player.grupo_auxiliares_ativos: aux.desenhar(tela, camera)
-            # --- FIM: MODIFICAÇÃO ---
         
         for efeito in grupo_efeitos_visuais:
             if isinstance(efeito, NaveRegeneradora):
@@ -1349,7 +1430,6 @@ while rodando:
             else: 
                 efeito.draw(tela, camera)
 
-        # --- INÍCIO: MODIFICAÇÃO (Passar 'client_socket' para desenhar_loja) ---
         ui.desenhar_hud(tela, nave_player, estado_jogo)
         
         online_players_copy = {}
@@ -1382,9 +1462,7 @@ while rodando:
         if estado_jogo == "PAUSE":
             ui.desenhar_pause(tela, max_bots_atual, s.MAX_BOTS_LIMITE_SUPERIOR, len(grupo_bots))
         elif estado_jogo == "LOJA":
-            # Passa 'client_socket' para que a loja saiba como ler os dados
             ui.desenhar_loja(tela, nave_player, LARGURA_TELA, ALTURA_TELA, client_socket)
-        # --- FIM: MODIFICAÇÃO ---
         elif estado_jogo == "TERMINAL":
             ui.desenhar_terminal(tela, variavel_texto_terminal, LARGURA_TELA, ALTURA_TELA)
         elif estado_jogo == "GAME_OVER":
