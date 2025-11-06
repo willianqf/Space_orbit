@@ -931,7 +931,7 @@ while rodando:
                 spawnar_bot(nave_player.posicao, dificuldade_jogo_atual)
 
             # --- INÍCIO DA MODIFICAÇÃO (Remover grupo_vidas_coletaveis) ---
-            grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos, None) # Passa None para vidas
+            grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos, grupo_efeitos_visuais) # Passa None para vidas
             # --- FIM DA MODIFICAÇÃO ---
             grupo_inimigos.update(lista_alvos_naves, grupo_projeteis_inimigos, s.DESPAWN_DIST)
             

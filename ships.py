@@ -625,9 +625,9 @@ class NaveBot(Nave):
             self.parar_regeneracao() # Garante que para de regenerar ao morrer
         return morreu
         
-    def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_vidas_ref):
+    def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref):
         # 1. Pede ao "cérebro" para pensar
-        self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_vidas_ref)
+        self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref)
 
         # 2. Atualiza a regeneração ANTES de mover
         self.update_regeneracao()
