@@ -4,7 +4,10 @@ import math
 import pygame # Para Vector2
 from settings import (
     PONTOS_LIMIARES_PARA_UPGRADE, MAX_TOTAL_UPGRADES, MAX_NIVEL_MOTOR,
-    MAX_NIVEL_ESCUDO, MAX_NIVEL_DANO
+    MAX_NIVEL_ESCUDO, MAX_NIVEL_DANO,
+    # --- INÍCIO: MODIFICAÇÃO ---
+    VIDA_POR_NIVEL
+    # --- FIM: MODIFICAÇÃO ---
 )
 
 # --- CONSTANTES DA IA DO BOT (Movidas de server.py) ---
@@ -83,7 +86,9 @@ class ServerBotManager:
         spawn_x, spawn_y = self.spawn_calculator(posicoes_atuais)
         
         nivel_max_vida_inicial = 1
-        max_hp_inicial = 4 + nivel_max_vida_inicial
+        # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
+        max_hp_inicial = VIDA_POR_NIVEL[nivel_max_vida_inicial]
+        # --- FIM: MODIFICAÇÃO ---
         
         bot_state = {
             'nome': nome_bot,
@@ -93,7 +98,7 @@ class ServerBotManager:
             'x': float(spawn_x), 
             'y': float(spawn_y), 
             'angulo': 0.0,
-            'max_hp': max_hp_inicial, 
+            'max_hp': float(max_hp_inicial), 
             'hp': float(max_hp_inicial), 
             'pontos': 0, 
             'invencivel': False,
@@ -154,8 +159,11 @@ class ServerBotManager:
                  self.upgrade_purchaser(bot_state, "escudo")
             elif bot_state['nivel_dano'] < MAX_NIVEL_DANO:
                  self.upgrade_purchaser(bot_state, "dano")
-            else: 
+            # --- INÍCIO: CORREÇÃO CRASH (Bot AI Online) ---
+            # Verifica se o nível atual é MENOR que o índice máximo (len-1)
+            elif bot_state['nivel_max_vida'] < len(VIDA_POR_NIVEL) - 1:
                  self.upgrade_purchaser(bot_state, "max_health")
+            # --- FIM: CORREÇÃO ---
 
     def _process_regeneration(self, bot_state, agora_ms):
         """ Controla a regeneração do Bot, baseado no estado da IA. """

@@ -10,10 +10,15 @@ class Projetil(pygame.sprite.Sprite):
     def __init__(self, x, y, angulo_radianos, nivel_dano_owner=1, owner_nave=None):
         super().__init__()
         self.raio = 5
-        if nivel_dano_owner >= MAX_NIVEL_DANO:
+        
+        # --- INÍCIO: MODIFICAÇÃO (Correção Tiro Verde) ---
+        self.owner = owner_nave # Define self.owner PRIMEIRO
+        
+        cor_tiro_atual = VERMELHO_TIRO # Padrão
+        # Verifica o NÍVEL do dono para a cor, não o valor do dano
+        if self.owner and self.owner.nivel_dano >= MAX_NIVEL_DANO:
             cor_tiro_atual = VERDE_TIRO_MAX
-        else:
-            cor_tiro_atual = VERMELHO_TIRO
+        # --- FIM: MODIFICAÇÃO ---
 
         self.image = pygame.Surface((self.raio * 2, self.raio * 2), pygame.SRCALPHA)
         pygame.draw.circle(self.image, cor_tiro_atual, (self.raio, self.raio), self.raio)
@@ -23,8 +28,10 @@ class Projetil(pygame.sprite.Sprite):
         self.velocidade_valor = 25 # Renomeado de 'velocidade'
         self.angulo_radianos = angulo_radianos
         
-        self.owner = owner_nave
-        self.dano = nivel_dano_owner
+        # self.owner = owner_nave # <-- MOVIDO PARA CIMA
+        
+        # 'nivel_dano_owner' agora é o DANO REAL (ex: 1.6) passado por ships.py
+        self.dano = nivel_dano_owner 
         
         # Define o vetor de velocidade inicial
         self.velocidade_vetor = pygame.math.Vector2(
@@ -46,6 +53,7 @@ class Projetil(pygame.sprite.Sprite):
 class ProjetilTeleguiadoJogador(Projetil):
     def __init__(self, x, y, angulo_radianos, nivel_dano_owner=1, owner_nave=None, alvo_sprite=None):
         # Chama o __init__ da classe pai (Projetil)
+        # O construtor pai (modificado acima) cuidará da cor e do dano
         super().__init__(x, y, angulo_radianos, nivel_dano_owner, owner_nave)
         
         self.alvo_sprite = alvo_sprite

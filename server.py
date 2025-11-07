@@ -55,7 +55,11 @@ MAX_AUXILIARES = 4
 CUSTOS_AUXILIARES = s.CUSTOS_AUXILIARES
 PONTOS_LIMIARES_PARA_UPGRADE = s.PONTOS_LIMIARES_PARA_UPGRADE[:]
 PONTOS_SCORE_PARA_MUDAR_LIMIAR = s.PONTOS_SCORE_PARA_MUDAR_LIMIAR[:]
-# --- FIM: CONSTANTES DE UPGRADE ---
+
+# --- INÍCIO: MODIFICAÇÃO (Importar DANO e VIDA) ---
+DANO_POR_NIVEL = s.DANO_POR_NIVEL[:]
+VIDA_POR_NIVEL = s.VIDA_POR_NIVEL[:]
+# --- FIM: MODIFICAÇÃO ---
 
 # --- (Constantes de Auxiliares - Sem alterações) ---
 AUX_POSICOES = [
@@ -146,11 +150,22 @@ def server_comprar_upgrade(player_state, tipo_upgrade):
                 if player_state.get('is_bot', False) == False:
                     print(f"[LOG] [{player_state['nome']}] Pontos insuficientes para Auxiliar! Custo: {custo_atual_aux} Pts.")
     elif tipo_upgrade == "max_health":
+        
+        # --- INÍCIO: CORREÇÃO CRASH (Nível Máx. Vida) ---
+        # Verifica se o nível atual é MENOR que o índice máximo (len-1)
+        if player_state['nivel_max_vida'] >= len(VIDA_POR_NIVEL) - 1:
+            if player_state.get('is_bot', False) == False:
+                print(f"[LOG] [{player_state['nome']}] Pedido de compra negado (Vida Máx. já está no Nível 5)!")
+            return # Simplesmente retorna, não compra
+        # --- FIM: CORREÇÃO ---
+        
         if player_state['pontos_upgrade_disponiveis'] >= custo_padrao:
             player_state['pontos_upgrade_disponiveis'] -= custo_padrao
             player_state['total_upgrades_feitos'] += 1
             player_state['nivel_max_vida'] += 1
-            player_state['max_hp'] = 4 + player_state['nivel_max_vida'] 
+            # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
+            player_state['max_hp'] = VIDA_POR_NIVEL[player_state['nivel_max_vida']]
+            # --- FIM: MODIFICAÇÃO ---
             player_state['hp'] += 1 
             comprou = True
             print(f"[LOG] [{player_state['nome']}] Vida Máx. aumentada! Nível {player_state['nivel_max_vida']}.")
@@ -289,10 +304,15 @@ def update_player_logic(player_state, agora_ms=0):
             pos_y = player_state['y'] + (-math.cos(radianos) * OFFSET_PONTA_TIRO)
             vel_x_inicial = -math.sin(radianos); vel_y_inicial = -math.cos(radianos)
 
+            # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
+            dano_calculado = DANO_POR_NIVEL[player_state['nivel_dano']]
+            
             novo_projetil = {'id': f"{player_state['nome']}_{agora_ms}", 'owner_nome': player_state['nome'],
                 'x': pos_x, 'y': pos_y, 'pos_inicial_x': pos_x, 'pos_inicial_y': pos_y,
-                'dano': player_state['nivel_dano'], 'tipo': 'player', 'timestamp_criacao': agora_ms
+                'dano': dano_calculado, 'tipo': 'player', 'timestamp_criacao': agora_ms
             }
+            # --- FIM: MODIFICAÇÃO ---
+
             if player_state['alvo_lock']:
                 novo_projetil['tipo_proj'] = 'teleguiado' 
                 novo_projetil['velocidade'] = VELOCIDADE_PROJETIL_TELE
@@ -684,10 +704,14 @@ def game_loop(bot_manager):
                                     state['aux_cooldowns'][i] = agora_ms + AUX_COOLDOWN_TIRO
                                     radianos = math.radians(state['angulo'])
                                     vel_x_inicial = -math.sin(radianos) * 14; vel_y_inicial = -math.cos(radianos) * 14
+                                    
+                                    # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
+                                    dano_calculado_aux = DANO_POR_NIVEL[state['nivel_dano']]
                                     proj_aux = {'id': f"{state['nome']}_aux{i}_{agora_ms}", 'owner_nome': state['nome'], 'x': aux_x, 'y': aux_y,
-                                        'pos_inicial_x': aux_x, 'pos_inicial_y': aux_y, 'dano': state['nivel_dano'], 'tipo': 'player', 
+                                        'pos_inicial_x': aux_x, 'pos_inicial_y': aux_y, 'dano': dano_calculado_aux, 'tipo': 'player', 
                                         'timestamp_criacao': agora_ms, 'tipo_proj': 'teleguiado', 'velocidade': 14, 'alvo_id': target_id,
                                         'vel_x': vel_x_inicial, 'vel_y': vel_y_inicial}
+                                    # --- FIM: MODIFICAÇÃO ---
                                     novos_projeteis.append(proj_aux)
 
             network_projectiles.extend(novos_projeteis)
@@ -791,8 +815,13 @@ def game_loop(bot_manager):
                         dist_colisao_sq = ( (npc['tamanho']/2 + 5)**2 ) 
                         dist_sq = (npc['x'] - proj['x'])**2 + (npc['y'] - proj['y'])**2
                         if dist_sq < dist_colisao_sq:
-                            dano_real = proj['dano']
-                            if owner_state: dano_real = owner_state['nivel_dano'] 
+                            # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
+                            dano_real = proj['dano'] # O projétil já tem o dano real
+                            if owner_state: 
+                                # Verifica o nível de dano ATUAL do dono (caso o projétil seja antigo)
+                                dano_real = DANO_POR_NIVEL[owner_state['nivel_dano']]
+                            # --- FIM: MODIFICAÇÃO ---
+                            
                             npc['hp'] -= dano_real
                             if npc['tipo'] in ['mothership', 'boss_congelante']:
                                 npc['ia_ultimo_hit_tempo'] = agora_ms
@@ -810,8 +839,12 @@ def game_loop(bot_manager):
                         dist_sq = (target_state['x'] - proj['x'])**2 + (target_state['y'] - proj['y'])**2
                         if dist_sq < COLISAO_JOGADOR_PROJ_DIST_SQ:
                             if agora_ms - target_state.get('ultimo_hit_tempo', 0) > 150:
-                                dano_real = proj['dano']
-                                if owner_state: dano_real = owner_state['nivel_dano']
+                                # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
+                                dano_real = proj['dano'] # O projétil já tem o dano real
+                                if owner_state: 
+                                    dano_real = DANO_POR_NIVEL[owner_state['nivel_dano']]
+                                # --- FIM: MODIFICAÇÃO ---
+
                                 reducao_percent = min(target_state['nivel_escudo'] * s.REDUCAO_DANO_POR_NIVEL, 75)
                                 dano_reduzido = dano_real * (1 - reducao_percent / 100.0)
                                 target_state['hp'] -= dano_reduzido
@@ -899,7 +932,8 @@ def game_loop(bot_manager):
                     
                     # --- MUDANÇA: Formato agora tem 17 campos ---
                     estado_str = (
-                        f"{state['nome']}:{state['x']:.1f}:{state['y']:.1f}:{state['angulo']:.0f}:{state['hp']:.1f}:{state['max_hp']}:{state['pontos']}:{regen_status}"
+                        f"{state['nome']}:{state['x']:.1f}:{state['y']:.1f}:{state['angulo']:.0f}:{state['hp']:.1f}:{state['max_hp']:.1f}" # <-- .1f para max_hp
+                        f":{state['pontos']}:{regen_status}"
                         f":{state['pontos_upgrade_disponiveis']}:{state['total_upgrades_feitos']}"
                         f":{state['nivel_motor']}:{state['nivel_dano']}:{state['nivel_max_vida']}"
                         f":{state['nivel_escudo']}:{state['nivel_aux']}"
@@ -975,7 +1009,9 @@ def handle_client(conn, addr):
         spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_atuais)
         
         nivel_max_vida_inicial = 1
-        max_hp_inicial = 4 + nivel_max_vida_inicial
+        # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
+        max_hp_inicial = VIDA_POR_NIVEL[nivel_max_vida_inicial]
+        # --- FIM: MODIFICAÇÃO ---
         
         player_state = {
             'conn': conn, 'nome': nome_jogador, 'is_bot': False, 
@@ -984,7 +1020,7 @@ def handle_client(conn, addr):
             'teclas': { 'w': False, 'a': False, 's': False, 'd': False, 'space': False },
             'alvo_mouse': None, 'alvo_lock': None, 
             'ultimo_tiro_tempo': 0, 'cooldown_tiro': COOLDOWN_TIRO, 
-            'max_hp': max_hp_inicial, 'hp': float(max_hp_inicial), 
+            'max_hp': float(max_hp_inicial), 'hp': float(max_hp_inicial), 
             'ultimo_hit_tempo': 0, 'pontos': 0, 
             'esta_regenerando': False, 'ultimo_tick_regeneracao': 0,
             'pontos_upgrade_disponiveis': 0, 'total_upgrades_feitos': 0,
@@ -1024,7 +1060,9 @@ def handle_client(conn, addr):
                             spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_atuais)
                             player_state['x'] = spawn_x; player_state['y'] = spawn_y
                             nivel_max_vida_inicial = 1
-                            max_hp_inicial = 4 + nivel_max_vida_inicial
+                            # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
+                            max_hp_inicial = VIDA_POR_NIVEL[nivel_max_vida_inicial]
+                            # --- FIM: MODIFICAÇÃO ---
                             player_state['hp'] = max_hp_inicial
                             player_state['max_hp'] = max_hp_inicial
                             player_state['alvo_lock'] = None
@@ -1255,5 +1293,15 @@ if __name__ == "__main__":
     if not hasattr(s, 'CUSTOS_AUXILIARES'):
         print("[AVISO] 'CUSTOS_AUXILIARES' não encontrada. A usar valor padrão [1, 2, 3, 4].")
         s.CUSTOS_AUXILIARES = [1, 2, 3, 4]
+
+    # --- INÍCIO: MODIFICAÇÃO (Verificações) ---
+    if not hasattr(s, 'DANO_POR_NIVEL') or len(s.DANO_POR_NIVEL) < (s.MAX_NIVEL_DANO + 1):
+        print(f"[AVISO] 'DANO_POR_NIVEL' inválido/ausente. A usar valores padrão.")
+        s.DANO_POR_NIVEL = [0, 0.7, 0.9, 1.2, 1.4, 1.6] # Fallback
+    
+    if not hasattr(s, 'VIDA_POR_NIVEL') or len(s.VIDA_POR_NIVEL) < 6: # Checa se tem pelo menos 6 níveis (0-5)
+        print(f"[AVISO] 'VIDA_POR_NIVEL' inválido/ausente. A usar valores padrão.")
+        s.VIDA_POR_NIVEL = [0, 5, 6, 8, 9, 10] # Fallback
+    # --- FIM: MODIFICAÇÃO ---
 
     iniciar_servidor()

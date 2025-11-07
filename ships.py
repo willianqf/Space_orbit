@@ -448,6 +448,13 @@ class Nave(pygame.sprite.Sprite):
                 print(f"[{self.nome}] Nível máximo de auxiliares atingido!")
         
         elif tipo == "max_health":
+            # --- INÍCIO: CORREÇÃO CRASH (Nível Máx. Vida) ---
+            # Verifica se já estamos no nível 5 (índice 5 da lista)
+            if self.nivel_max_vida >= len(VIDA_POR_NIVEL) - 1:
+                print(f"[{self.nome}] Nível máximo de Vida Máx. atingido!")
+                return False # Retorna Falso para o bot saber que falhou
+            # --- FIM: CORREÇÃO ---
+            
             if self.pontos_upgrade_disponiveis >= custo_upgrade_atual:
                 self.pontos_upgrade_disponiveis -= custo_upgrade_atual
                 self.total_upgrades_feitos += 1
@@ -715,5 +722,8 @@ class NaveBot(Nave):
                  self.comprar_upgrade("escudo")
             elif self.nivel_dano < MAX_NIVEL_DANO:
                  self.comprar_upgrade("dano")
-            else: 
+            # --- INÍCIO: CORREÇÃO CRASH (Bot AI Offline) ---
+            # Verifica se o nível atual é MENOR que o índice máximo (len-1)
+            elif self.nivel_max_vida < len(VIDA_POR_NIVEL) - 1:
                  self.comprar_upgrade("max_health")
+            # --- FIM: CORREÇÃO ---
