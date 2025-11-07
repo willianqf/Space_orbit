@@ -897,14 +897,19 @@ while rodando:
                         # Nossa nave ainda existe no servidor.
                         jogador_esta_vivo_espectador = True 
                     else:
-                        # OFFLINE: "Mata" o jogador para removê-lo da lógica de alvo.
+                        # OFFLINE: "Mata" o jogador (vida=0) para removê-lo 
+                        # da lógica de alvos e do ranking.
                         nave_player.vida_atual = 0 
-                        jogador_esta_vivo_espectador = False # Estamos agora "mortos"
+                        
+                        # MAS, definimos esta flag como True para que a UI
+                        # saiba que foi voluntário e NÃO mostre "Você Morreu!".
+                        jogador_esta_vivo_espectador = True 
                         
                     alvo_espectador = None # Começa em modo livre
                     alvo_espectador_nome = None
                     espectador_dummy_alvo.posicao = nave_player.posicao.copy()
-
+                
+                ####
                 elif ui.RECT_BOTAO_RESPAWN_PAUSA.collidepoint(mouse_pos):
                     # Só funciona se o jogador estiver morto
                     if nave_player.vida_atual <= 0:
@@ -916,12 +921,13 @@ while rodando:
                         # O estado_jogo mudará para "JOGANDO"
                 
                 elif ui.RECT_BOTAO_VOLTAR_NAVE.collidepoint(mouse_pos):
-                    if jogador_esta_vivo_espectador: # Só funciona se entramos vivos (online)
-                         print("Voltando à nave...")
-                         estado_jogo = "JOGANDO"
-                         jogador_esta_vivo_espectador = False
-                         alvo_espectador = None
-                         alvo_espectador_nome = None
+                    # Esta ação agora é "Respawnar" (seja morto ou vivo espectando)
+                    if jogador_esta_vivo_espectador: 
+                        print("Respawnando (voluntário) via menu de pausa...")
+                        if client_socket:
+                            enviar_input_servidor("RESPAWN_ME")
+                        else:
+                            respawn_player_offline(nave_player)
 
                 # Lógica de Bots (offline)
                 if not client_socket:
@@ -1315,11 +1321,38 @@ while rodando:
             grupo_projeteis_inimigos.update()
             
             if estado_jogo == "JOGANDO":
-                if len(grupo_obstaculos) < s.MAX_OBSTACULOS: spawnar_obstaculo(nave_player.posicao)
-                contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership, MinionCongelante, BossCongelante))) 
-                if contagem_inimigos_normais < s.MAX_INIMIGOS: spawnar_inimigo_aleatorio(nave_player.posicao)
-                if len(grupo_motherships) < s.MAX_MOTHERSHIPS: spawnar_mothership(nave_player.posicao)
-                if len(grupo_boss_congelante) < s.MAX_BOSS_CONGELANTE: spawnar_boss_congelante(nave_player.posicao)
+                # 1. Cria uma lista de todas as "âncoras" de spawn (entidades aliadas vivas)
+                lista_spawn_anchors = []
+                
+                # Adiciona o jogador se ele estiver vivo E jogando (não espectando)
+                if nave_player.vida_atual > 0 and not jogador_esta_vivo_espectador:
+                    lista_spawn_anchors.append(nave_player)
+                    
+                # Adiciona todos os bots vivos
+                lista_spawn_anchors.extend([bot for bot in grupo_bots if bot.vida_atual > 0])
+
+                # 2. Se houver qualquer entidade ativa, usa uma delas como referência
+                if lista_spawn_anchors:
+                    # Escolhe uma âncora aleatória (para que o spawn não siga sempre a mesma entidade)
+                    ponto_referencia = random.choice(lista_spawn_anchors).posicao
+                    
+                    # 3. Spawna entidades usando o ponto de referência
+                    if len(grupo_obstaculos) < s.MAX_OBSTACULOS: 
+                        spawnar_obstaculo(ponto_referencia)
+                    
+                    contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership, MinionCongelante, BossCongelante))) 
+                    
+                    if contagem_inimigos_normais < s.MAX_INIMIGOS: 
+                        spawnar_inimigo_aleatorio(ponto_referencia)
+                    
+                    if len(grupo_motherships) < s.MAX_MOTHERSHIPS: 
+                        spawnar_mothership(ponto_referencia)
+                    
+                    if len(grupo_boss_congelante) < s.MAX_BOSS_CONGELANTE: 
+                        spawnar_boss_congelante(ponto_referencia)
+                
+                # (Se a lista_spawn_anchors estiver vazia, o spawn para, o que é correto)
+                # --- FIM DA MODIFICAÇÃO ---
             
             # --- INÍCIO: MODIFICAÇÃO (Só checa colisão se vivo) ---
             if estado_jogo == "JOGANDO":
@@ -1733,8 +1766,15 @@ while rodando:
         jogador_visivel = False
         if estado_jogo == "JOGANDO":
             jogador_visivel = True
-        elif estado_jogo == "ESPECTADOR" and jogador_esta_vivo_espectador: # Se entrou vivo (online)
-            jogador_visivel = True
+        elif estado_jogo == "ESPECTADOR" and jogador_esta_vivo_espectador:
+            # Se estamos espectando vivos, só queremos desenhar nossa nave
+            # se estivermos no modo online (onde ela ainda existe no servidor).
+            # Se estivermos offline, "jogador_esta_vivo_espectador" significa
+            # que entramos voluntariamente, e NÃO queremos desenhar a nave.
+            if client_socket:
+                 jogador_visivel = True # Online: sim, desenhe
+            else:
+                 jogador_visivel = False # Offline: não, não desenhe
 
         if jogador_visivel: 
             nave_player.desenhar(tela, camera, client_socket) 

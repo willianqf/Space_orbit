@@ -300,10 +300,12 @@ def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos,
     
     # Botão 1: "Voltar à Nave" (Se vivo, modo espectador) ou "Respawnar" (Se morto)
     if jogador_esta_vivo_espectador:
-        pygame.draw.rect(surface, BRANCO, RECT_BOTAO_VOLTAR_NAVE, border_radius=5)
-        texto_surf = FONT_PADRAO.render("Voltar à Nave", True, PRETO)
-        texto_rect = texto_surf.get_rect(center=RECT_BOTAO_VOLTAR_NAVE.center)
-        surface.blit(texto_surf, texto_rect)
+            pygame.draw.rect(surface, BRANCO, RECT_BOTAO_VOLTAR_NAVE, border_radius=5)
+            # --- LINHA A SER ALTERADA ---
+            texto_surf = FONT_PADRAO.render("Respawnar", True, PRETO) # <-- MUDADO DE "Voltar à Nave"
+            # --- FIM DA ALTERAÇÃO ---
+            texto_rect = texto_surf.get_rect(center=RECT_BOTAO_VOLTAR_NAVE.center)
+            surface.blit(texto_surf, texto_rect)
     elif jogador_esta_morto:
         pygame.draw.rect(surface, BRANCO, RECT_BOTAO_RESPAWN_PAUSA, border_radius=5)
         texto_surf = FONT_PADRAO.render("Respawnar", True, PRETO)
@@ -481,7 +483,10 @@ def desenhar_hud(surface, nave, estado_jogo):
         surface.blit(texto_surf, texto_rect)
 
 
-def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height, online_players, meu_nome_rede):
+# --- MODIFICAÇÃO 1: Mudar a assinatura da função ---
+def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height, online_players, meu_nome_rede, 
+                         alvo_camera_atual, camera_zoom):
+# --- FIM DA MODIFICAÇÃO 1 ---
     fundo_mini = pygame.Surface((MINIMAP_WIDTH, MINIMAP_HEIGHT), pygame.SRCALPHA)
     fundo_mini.fill(MINIMAP_FUNDO)
     surface.blit(fundo_mini, (MINIMAP_POS_X, MINIMAP_POS_Y))
@@ -494,6 +499,38 @@ def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height,
         map_x = max(MINIMAP_POS_X + 1, min(map_x, MINIMAP_POS_X + MINIMAP_WIDTH - 2))
         map_y = max(MINIMAP_POS_Y + 1, min(map_y, MINIMAP_POS_Y + MINIMAP_HEIGHT - 2))
         return (map_x, map_y)
+
+    # --- MODIFICAÇÃO 2: Adicionar lógica da visão ampla ---
+    # --- INÍCIO DA NOVA LÓGICA DE ZOOM (VISÃO AMPLA) ---
+    if camera_zoom < 1.0 and alvo_camera_atual: # Se o zoom "amplo" estiver ativo
+        # Calcula o tamanho da visão da câmera no mundo
+        largura_tela, altura_tela = surface.get_size()
+        view_width_mundo = largura_tela / camera_zoom
+        view_height_mundo = altura_tela / camera_zoom
+        
+        # Posição do centro da câmera (que é o alvo)
+        cam_center_pos = alvo_camera_atual.posicao
+        
+        # Top-left da visão no mundo
+        view_top_left_mundo = pygame.math.Vector2(
+            cam_center_pos.x - (view_width_mundo / 2),
+            cam_center_pos.y - (view_height_mundo / 2)
+        )
+
+        # Converte para posições do minimapa
+        view_top_left_mini = get_pos_minimapa(view_top_left_mundo)
+        
+        # Calcula largura e altura no minimapa
+        view_width_mini = int(view_width_mundo * ratio_x)
+        view_height_mini = int(view_height_mundo * ratio_y)
+        
+        # Desenha o retângulo da visão
+        rect_visao = pygame.Rect(view_top_left_mini[0], view_top_left_mini[1], view_width_mini, view_height_mini)
+        pygame.draw.rect(surface, BRANCO, rect_visao, 1) # Desenha uma caixa branca
+    
+    # --- FIM DA NOVA LÓGICA DE ZOOM ---
+    # --- FIM DA MODIFICAÇÃO 2 ---
+
     if online_players:
         for nome, state in online_players.items():
             if nome == meu_nome_rede:
@@ -505,7 +542,7 @@ def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height,
             pygame.draw.circle(surface, LARANJA_BOT, get_pos_minimapa(bot.posicao), 2)
     
     # --- INÍCIO: MODIFICAÇÃO (Não desenha jogador morto no minimapa) ---
-    if estado_jogo != "GAME_OVER" and player.vida_atual > 0:
+    if estado_jogo == "JOGANDO" and player.vida_atual > 0:
     # --- FIM: MODIFICAÇÃO ---
         pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(player.posicao), 3)
 

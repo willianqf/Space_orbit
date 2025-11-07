@@ -653,34 +653,35 @@ class NaveBot(Nave):
         self.lidar_com_tiros(grupo_projeteis_bots, player_ref.posicao)
         self.processar_upgrades_ia()
         
-        # --- INÍCIO DA MODIFICAÇÃO (Correção Bug 1 e 3) ---
+        # --- INÍCIO DA MODIFICAÇÃO (Correção da lógica de regeneração) ---
         
-        limite_hp_regenerar = self.max_vida * 0.8
+        estado_cerebro = self.cerebro.estado_ia
         
-        # Verifica os estados da IA que proíbem a regeneração
-        esta_fugindo = self.cerebro.estado_ia == "FUGINDO"
-        esta_evitando_borda = self.cerebro.estado_ia == "EVITANDO_BORDA"
+        # Condições para INICIAR a regeneração:
+        # A IA decidiu que deve regenerar (REGENERANDO_NA_BORDA)
+        # OU a IA está VAGANDO e com HP baixo (o que a faz parar)
         
-        # Condições para iniciar a regeneração:
-        # 1. Não tem alvo (parou de atacar)
-        # 2. NÃO está fugindo (Prioridade de Fuga)
-        # 3. NÃO está ativamente tentando sair da borda (Prioridade de Borda)
-        # 4. A vida está abaixo de 80%
-        # 5. Não está regenerando ainda
-        if (self.alvo_selecionado is None and 
-            not esta_fugindo and 
-            not esta_evitando_borda and # <-- ADICIONADO: Esta é a correção do Spam
-            self.vida_atual < limite_hp_regenerar and 
-            not self.esta_regenerando):
+        esta_tentando_parar_para_regen = (estado_cerebro == "VAGANDO" and self.vida_atual < (self.max_vida * 0.8))
+        esta_parado_na_borda = (estado_cerebro == "REGENERANDO_NA_BORDA")
+
+        # Se o cérebro quer parar para regenerar, E não tem alvo, E não está regenerando
+        if (esta_tentando_parar_para_regen or esta_parado_na_borda) and \
+           self.alvo_selecionado is None and \
+           not self.esta_regenerando:
             
-            # Se todas as condições passarem, force o bot a parar (estado VAGANDO)
-            # para permitir que a regeneração comece.
-            self.cerebro.estado_ia = "VAGANDO" 
-            self.cerebro.virando_aleatoriamente_timer = 0
-            self.quer_mover_frente = False # Garante que o input de movimento pare
-            self.posicao_alvo_mouse = None # Garante que o input de clique pare
+            # Garante que o input de movimento esteja parado
+            self.quer_mover_frente = False 
+            self.posicao_alvo_mouse = None 
              
             self.iniciar_regeneracao(grupo_efeitos_visuais_ref) #
+        
+        # Condições para PARAR a regeneração
+        # Se o cérebro NÃO está em estado de regeneração (ex: FUGINDO, ATACANDO, VAGANDO com HP cheio)
+        # OU se adquiriu um alvo (o usuário quer que atire parado)
+        elif (not esta_tentando_parar_para_regen and not esta_parado_na_borda) or \
+             (self.alvo_selecionado is not None):
+             
+             self.parar_regeneracao()
         
         # --- FIM DA MODIFICAÇÃO ---
 

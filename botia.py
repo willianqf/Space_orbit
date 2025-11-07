@@ -1,6 +1,7 @@
 # botia.py
 import pygame
 import random
+import math
 # Importa as constantes do mapa
 from settings import MAP_WIDTH, MAP_HEIGHT
 
@@ -34,6 +35,13 @@ class BotAI:
         # Sistema de detecção de "preso"
         self.posicao_anterior = pygame.math.Vector2(0, 0)
         self.frames_sem_movimento = 0
+        self.bot_wander_target = None
+        
+        # Caches de referência
+        self.player_ref_cache = None
+        self.grupo_bots_ref_cache = None
+        self.grupo_inimigos_ref_cache = None
+        self.grupo_obstaculos_ref_cache = None
 
     def update_ai(self, player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_vidas_ref):
         """ 
@@ -44,8 +52,11 @@ class BotAI:
         # --- INÍCIO DA CORREÇÃO DO BUG ---
         # Salva a referência ao grupo de vidas para que _processar_input_ia possa usá-lo
         self.grupo_vidas_ref = grupo_vidas_ref
+        self.player_ref_cache = player_ref
+        self.grupo_bots_ref_cache = grupo_bots_ref
+        self.grupo_inimigos_ref_cache = grupo_inimigos_ref
+        self.grupo_obstaculos_ref_cache = grupo_obstaculos_ref
         # --- FIM DA CORREÇÃO DO BUG ---
-        
         # Detecção de bot preso
         if self.bot.posicao.distance_to(self.posicao_anterior) < 3:
             self.frames_sem_movimento += 1
@@ -169,99 +180,106 @@ class BotAI:
         Define as intenções de movimento. A rotação agora é automática.
         """
         
-        # Reseta intenções de movimento
+        # --- 1. Resetar Intenções ---
         self.bot.quer_mover_frente = False
         self.bot.quer_mover_tras = False
-        
         self.bot.posicao_alvo_mouse = None
         
-        # Correção: Movido para o topo para que FUGIR possa usá-lo
-        LIMITE_HP_FUGIR = self.bot.max_vida * 0.20
-        
-        # === PRIORIDADE 1: EVITAR A BORDA ===
-        centro_mapa = pygame.math.Vector2(MAP_WIDTH / 2, MAP_HEIGHT / 2)
-        zona_perigo = self.dist_borda_segura
-        zona_segura_minima = self.dist_borda_segura + 200
-        em_zona_perigo = (self.bot.posicao.x < zona_perigo or self.bot.posicao.x > MAP_WIDTH - zona_perigo or
-                          self.bot.posicao.y < zona_perigo or self.bot.posicao.y > MAP_HEIGHT - zona_perigo)
-        em_zona_segura = (self.bot.posicao.x > zona_segura_minima and self.bot.posicao.x < MAP_WIDTH - zona_segura_minima and
-                          self.bot.posicao.y > zona_segura_minima and self.bot.posicao.y < MAP_HEIGHT - zona_segura_minima)
-        
-        if em_zona_perigo and self.estado_ia != "EVITANDO_BORDA":
-            self.estado_ia = "EVITANDO_BORDA"
-            self.bot.alvo_selecionado = None # Cancela a mira
+        LIMITE_HP_FUGIR = self.bot.max_vida * 0.20 # 20%
+        LIMITE_HP_REGENERAR_PERC = self.bot.max_vida * 0.8 # 80% (Threshold do VAGANDO)
+
+        # === 2. PRIORIDADE 1: FUGIR / REGENERAR NA BORDA (Se HP < 20%) ===
+        if self.bot.vida_atual <= LIMITE_HP_FUGIR:
+            
+            # Checa se está na borda
+            zona_perigo = self.dist_borda_segura
+            em_zona_perigo = (self.bot.posicao.x < zona_perigo or 
+                              self.bot.posicao.x > MAP_WIDTH - zona_perigo or
+                              self.bot.posicao.y < zona_perigo or 
+                              self.bot.posicao.y > MAP_HEIGHT - zona_perigo)
+
+            if em_zona_perigo:
+                # 2A. PARAR NA BORDA E REGENERAR
+                self.estado_ia = "REGENERANDO_NA_BORDA"
+                self.bot.posicao_alvo_mouse = None
+                self.bot.quer_mover_frente = False
+                # (A lógica de encontrar alvo abaixo vai rodar, para atirar parado)
+            
+            else:
+                # 2B. FUGIR (MOVENDO)
+                self.estado_ia = "FUGINDO"
+                
+                # Tenta encontrar o inimigo mais próximo para fugir DELE
+                alvo_ameacador_pos = None
+                dist_min = float('inf')
+                
+                # Procura Inimigos
+                if self.grupo_inimigos_ref_cache:
+                    for inimigo in self.grupo_inimigos_ref_cache:
+                        if not inimigo.groups(): continue
+                        try:
+                            dist = self.bot.posicao.distance_to(inimigo.posicao)
+                            if dist < self.distancia_scan_geral and dist < dist_min:
+                                dist_min = dist; alvo_ameacador_pos = inimigo.posicao
+                        except (ValueError, AttributeError): continue
+                
+                # Procura Players/Bots
+                if alvo_ameacador_pos is None:
+                    lista_alvos_naves = [self.player_ref_cache] + list(self.grupo_bots_ref_cache.sprites())
+                    for alvo in lista_alvos_naves:
+                        if alvo == self.bot or not alvo.groups() or alvo.vida_atual <= 0: 
+                            continue
+                        try:
+                            dist = self.bot.posicao.distance_to(alvo.posicao)
+                            if dist < self.distancia_scan_geral and dist < dist_min:
+                                dist_min = dist; alvo_ameacador_pos = alvo.posicao
+                        except (ValueError, AttributeError): continue
+
+                if alvo_ameacador_pos:
+                    # Foge do alvo
+                    vec_x = alvo_ameacador_pos.x - self.bot.posicao.x
+                    vec_y = alvo_ameacador_pos.y - self.bot.posicao.y
+                    dist_fuga = math.sqrt(vec_x**2 + vec_y**2) + 1e-6
+                    ponto_fuga_x = self.bot.posicao.x - (vec_x / dist_fuga) * 500 # Foge 500px
+                    ponto_fuga_y = self.bot.posicao.y - (vec_y / dist_fuga) * 500
+                    self.bot.posicao_alvo_mouse = pygame.math.Vector2(ponto_fuga_x, ponto_fuga_y)
+                else:
+                    # Foge para o wander target (se não houver inimigos)
+                    self.bot.posicao_alvo_mouse = self.bot_wander_target
+            
+            self.bot.alvo_selecionado = None # Limpa a mira (para de seguir)
+            
+        # === 3. PRIORIDADE 2: EVITAR A BORDA (Se HP ALTO) ===
+        elif self.estado_ia != "EVITANDO_BORDA": # Só checa se não estiver FUGINDO
+            centro_mapa = pygame.math.Vector2(MAP_WIDTH / 2, MAP_HEIGHT / 2)
+            zona_perigo = self.dist_borda_segura
+            em_zona_perigo = (self.bot.posicao.x < zona_perigo or self.bot.posicao.x > MAP_WIDTH - zona_perigo or
+                              self.bot.posicao.y < zona_perigo or self.bot.posicao.y > MAP_HEIGHT - zona_perigo)
+            
+            if em_zona_perigo:
+                self.estado_ia = "EVITANDO_BORDA"
+                self.bot.alvo_selecionado = None # Cancela a mira
         
         if self.estado_ia == "EVITANDO_BORDA":
+            zona_segura_minima = self.dist_borda_segura + 200
+            em_zona_segura = (self.bot.posicao.x > zona_segura_minima and self.bot.posicao.x < MAP_WIDTH - zona_segura_minima and
+                              self.bot.posicao.y > zona_segura_minima and self.bot.posicao.y < MAP_HEIGHT - zona_segura_minima)
             if em_zona_segura:
                 self.estado_ia = "VAGANDO"
             else:
+                centro_mapa = pygame.math.Vector2(MAP_WIDTH / 2, MAP_HEIGHT / 2)
                 self.bot.posicao_alvo_mouse = centro_mapa
-            return
+            return # EVITAR BORDA (com HP alto) tem prioridade sobre atacar
 
-        # === PRIORIDADE 2: FUGIR ===
-        is_alvo_ameaca = self.bot.alvo_selecionado and type(self.bot.alvo_selecionado).__name__ not in ['Obstaculo', 'VidaColetavel']
+        # === 4. LÓGICA DE ALVO (Se não estiver FUGINDO/EVITANDO) ===
+        if self.estado_ia not in ["FUGINDO", "REGENERANDO_NA_BORDA"]:
+            # (Se HP baixo, _encontrar_alvo VAI para COLETANDO)
+            if (self.bot.alvo_selecionado is None or not self.bot.alvo_selecionado.groups()):
+                lista_alvos_naves = [self.player_ref_cache] + list(self.grupo_bots_ref_cache.sprites())
+                self._encontrar_alvo(self.grupo_inimigos_ref_cache, self.grupo_obstaculos_ref_cache, lista_alvos_naves, self.grupo_vidas_ref)
         
-        if (self.bot.vida_atual <= LIMITE_HP_FUGIR and is_alvo_ameaca) or self.estado_ia == "FUGINDO":
-            self.estado_ia = "FUGINDO" 
-            alvo = self.bot.alvo_selecionado
-            
-            # Se o alvo morreu ou desapareceu ENQUANTO fugimos, pare de fugir.
-            if not (alvo and alvo.groups()):
-                self.estado_ia = "VAGANDO" # Mude para VAGANDO
-                self.bot.posicao_alvo_mouse = None # Pare de se mover
-                self.bot.alvo_selecionado = None
-                return # Saia da lógica da IA deste frame
-                
-            try:
-                direcao_alvo_vec = (alvo.posicao - self.bot.posicao)
-                distancia_alvo = direcao_alvo_vec.length()
-                
-                # Se o inimigo desistiu (muito longe), pare de fugir e regenere
-                if distancia_alvo > self.distancia_scan_geral:
-                    self.estado_ia = "VAGANDO" # Mude para VAGANDO
-                    self.bot.posicao_alvo_mouse = None # Pare de se mover
-                    self.bot.alvo_selecionado = None
-                    return # Saia da lógica da IA deste frame
-
-                if direcao_alvo_vec.length() > 0:
-                    
-                    # Lógica NOVA: Fugir para o canto mais distante do ATACANTE
-                    # (Adicionando uma margem de 100px para não ficar "preso" na borda exata)
-                    cantos = [
-                        pygame.math.Vector2(100, 100),
-                        pygame.math.Vector2(MAP_WIDTH - 100, 100), 
-                        pygame.math.Vector2(100, MAP_HEIGHT - 100), 
-                        pygame.math.Vector2(MAP_WIDTH - 100, MAP_HEIGHT - 100)
-                    ]
-                    
-                    canto_mais_longe = None
-                    max_dist_canto_sq = -1
-                    
-                    # Encontra o canto mais longe do atacante
-                    for canto in cantos:
-                        dist_sq = canto.distance_squared_to(alvo.posicao)
-                        if dist_sq > max_dist_canto_sq:
-                            max_dist_canto_sq = dist_sq
-                            canto_mais_longe = canto
-                            
-                    # Verifica a distância até o canto de fuga
-                    dist_do_canto = self.bot.posicao.distance_to(canto_mais_longe)
-
-                    # Se o bot já chegou perto o suficiente do canto (150 pixels)
-                    if dist_do_canto < 150:
-                        print(f"[{self.bot.nome}] Chegou ao ponto de fuga. Parando de fugir.")
-                        self.estado_ia = "VAGANDO" # Para de fugir
-                        self.bot.posicao_alvo_mouse = None # Para de se mover
-                        self.bot.alvo_selecionado = None # Limpa o alvo
-                    else:
-                        # Se ainda não chegou, continua indo para o canto
-                        self.bot.posicao_alvo_mouse = canto_mais_longe
-                
-                return # Saia da lógica se estava fugindo
-            except ValueError:
-                self.estado_ia = "VAGANDO"; return
-
-        # === PRIORIDADE 3: COLETAR VIDA ===
+        # === 5. PROCESSAR ESTADOS DE COMBATE/VAGANDO ===
+        
         if self.estado_ia == "COLETANDO": 
             vida_perto = None
             dist_min = self.distancia_scan_geral
@@ -269,10 +287,12 @@ class BotAI:
             if self.grupo_vidas_ref:
                 for vida in self.grupo_vidas_ref: 
                      if not vida.groups() or not hasattr(vida, 'posicao'): continue
-                     dist = self.bot.posicao.distance_to(vida.posicao)
-                     if dist < dist_min:
-                         dist_min = dist
-                         vida_perto = vida
+                     try:
+                         dist = self.bot.posicao.distance_to(vida.posicao)
+                         if dist < dist_min:
+                             dist_min = dist
+                             vida_perto = vida
+                     except ValueError: pass
             
             if vida_perto:
                 self.bot.posicao_alvo_mouse = vida_perto.posicao
@@ -280,7 +300,6 @@ class BotAI:
                 self.estado_ia = "VAGANDO" # Acabou a vida
             return
 
-        # === PRIORIDADE 4: CAÇAR (Movimento Natural) ===
         if self.estado_ia == "CAÇANDO":
             alvo = self.bot.alvo_selecionado
             if not (alvo and alvo.groups()):
@@ -295,7 +314,6 @@ class BotAI:
             except ValueError:
                 self.estado_ia = "VAGANDO"
 
-        # === PRIORIDADE 5: ATACAR (ÓRBITA COM MIRA TRAVADA) ===
         if self.estado_ia == "ATACANDO":
             alvo = self.bot.alvo_selecionado
             if not (alvo and alvo.groups()):
@@ -328,32 +346,38 @@ class BotAI:
             except ValueError:
                 self.estado_ia = "VAGANDO"
 
-        # === PRIORIDADE 6: VAGAR (Default) ===
-        if self.estado_ia == "VAGANDO":
+        if self.estado_ia == "VAGANDO" or self.estado_ia == "REGENERANDO_NA_BORDA":
             
-            # --- INÍCIO DA MODIFICAÇÃO (Correção Bug 2) ---
+            # Se estiver regenerando (parado na borda) OU
+            # Se estiver vagando E com HP baixo (tentando parar para regenerar)
+            if self.estado_ia == "REGENERANDO_NA_BORDA" or \
+               (self.estado_ia == "VAGANDO" and self.bot.vida_atual < LIMITE_HP_REGENERAR_PERC):
+                
+                # Fica parado (não seta 'posicao_alvo_mouse')
+                # A lógica em NaveBot.update (ships.py) vai iniciar a regeneração.
+                pass
             
-            # Define o limite de HP que o bot TENTA regenerar (o mesmo de ships.py)
-            limite_hp_para_regenerar = self.bot.max_vida * 0.8
+            else:
+                # Estado VAGANDO com HP alto
+                # --- LÓGICA DE VAGAR (WANDER) ---
+                chegou_perto = False
+                if self.bot_wander_target:
+                    try:
+                        if self.bot.posicao.distance_to(self.bot_wander_target) < 100:
+                            chegou_perto = True
+                    except ValueError:
+                        chegou_perto = True
+                
+                if self.bot_wander_target is None or chegou_perto:
+                    map_margin = 100
+                    target_x = random.randint(map_margin, MAP_WIDTH - map_margin)
+                    target_y = random.randint(map_margin, MAP_HEIGHT - map_margin)
+                    self.bot_wander_target = pygame.math.Vector2(target_x, target_y)
+                
+                self.bot.posicao_alvo_mouse = self.bot_wander_target
             
-            # O Bot só deve tentar andar se:
-            # 1. NÃO estiver regenerando (verificação do 'ships.py')
-            # 2. E sua vida estiver ACIMA do limite de regeneração
-            if not self.bot.esta_regenerando and self.bot.vida_atual >= limite_hp_para_regenerar:
-                self.bot.quer_mover_frente = True
-            
-            # Se estiver regenerando, ou se tiver vida baixa (e deveria estar regenerando),
-            # 'quer_mover_frente' continuará False, fazendo o bot ficar parado.
-            
-            # --- FIM DA MODIFICAÇÃO ---
-
-            if self.virando_aleatoriamente_timer > 0:
-                if self.direcao_virada_aleatoria == "esquerda": self.bot.quer_virar_esquerda = True
-                else: self.bot.quer_virar_direita = True
-                self.virando_aleatoriamente_timer -= 1
-            elif random.random() < 0.01:
-                self.virando_aleatoriamente_timer = random.randint(30, 90)
-                self.direcao_virada_aleatoria = random.choice(["esquerda", "direita"])
+            # Se estiver regenerando ou com vida baixa, a IA não define
+            # 'posicao_alvo_mouse', fazendo o bot parar (correto).
 
     def resetar_ia(self):
         """ Chamado quando o bot morre/respawna. """
