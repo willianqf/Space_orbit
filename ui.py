@@ -278,72 +278,9 @@ def desenhar_tela_nome(surface, nome_jogador_atual, input_nome_ativo, dificuldad
     texto_botao_rect = texto_botao.get_rect(center=RECT_LOGIN_BOTAO.center)
     surface.blit(texto_botao, texto_botao_rect)
 
-# --- INÍCIO: MODIFICAÇÃO (Assinatura de desenhar_pause) ---
-def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos, 
-                   jogador_esta_morto=False, jogador_esta_vivo_espectador=False,
-                   is_online=False): # <-- MODIFICADO
+# --- INÍCIO: MODIFICAÇÃO (Remoção da função desenhar_pause) ---
+# A função 'desenhar_pause' (linhas 309-380 do arquivo original) foi removida.
 # --- FIM: MODIFICAÇÃO ---
-    
-    fundo_overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
-    fundo_overlay.fill(PRETO_TRANSPARENTE_PAUSA)
-    surface.blit(fundo_overlay, (0, 0))
-    
-    # Desenha o fundo do painel
-    pygame.draw.rect(surface, CINZA_LOJA_FUNDO, RECT_PAUSE_FUNDO, border_radius=10)
-    pygame.draw.rect(surface, BRANCO, RECT_PAUSE_FUNDO, 2, border_radius=10)
-    
-    # Título "PAUSADO"
-    texto_titulo = FONT_TITULO.render("PAUSADO", True, BRANCO)
-    titulo_rect = texto_titulo.get_rect(midtop=(RECT_PAUSE_FUNDO.centerx, RECT_PAUSE_FUNDO.top + 15))
-    surface.blit(texto_titulo, titulo_rect)
-
-    # --- INÍCIO: MODIFICAÇÃO (Lógica dos Botões de Pausa Unificados) ---
-    
-    # Botão 1: "Respawnar" (Se morto OU vivo-espectador)
-    if jogador_esta_vivo_espectador or jogador_esta_morto:
-        pygame.draw.rect(surface, BRANCO, RECT_BOTAO_RESPAWN_PAUSA, border_radius=5)
-        texto_surf = FONT_PADRAO.render("Respawnar", True, PRETO)
-        texto_rect = texto_surf.get_rect(center=RECT_BOTAO_RESPAWN_PAUSA.center)
-        surface.blit(texto_surf, texto_rect)
-
-    # Botão 2: "Modo Espectador" (Se vivo, não espectador)
-    if not jogador_esta_vivo_espectador and not jogador_esta_morto:
-        pygame.draw.rect(surface, BRANCO, RECT_BOTAO_ESPECTADOR, border_radius=5)
-        texto_surf = FONT_PADRAO.render("Modo Espectador", True, PRETO)
-        texto_rect = texto_surf.get_rect(center=RECT_BOTAO_ESPECTADOR.center)
-        surface.blit(texto_surf, texto_rect)
-
-    # Botão 3: "Voltar ao Menu" (Sempre visível)
-    pygame.draw.rect(surface, BRANCO, RECT_BOTAO_VOLTAR_MENU, border_radius=5)
-    texto_voltar_menu_surf = FONT_PADRAO.render("Voltar ao Menu", True, PRETO)
-    texto_voltar_menu_rect = texto_voltar_menu_surf.get_rect(center=RECT_BOTAO_VOLTAR_MENU.center)
-    surface.blit(texto_voltar_menu_surf, texto_voltar_menu_rect)
-
-    # --- FIM: MODIFICAÇÃO ---
-    
-    # --- INÍCIO: MODIFICAÇÃO (Ocultar Controles de Bot se Online) ---
-    if not is_online:
-        cor_menos = BRANCO if max_bots_atual > 0 else CINZA_BOTAO_DESLIGADO
-        pygame.draw.rect(surface, cor_menos, RECT_BOTAO_BOT_MENOS, border_radius=5)
-        texto_menos = FONT_TITULO.render("-", True, PRETO)
-        menos_rect = texto_menos.get_rect(center=RECT_BOTAO_BOT_MENOS.center)
-        surface.blit(texto_menos, menos_rect)
-        
-        texto_contagem = FONT_PADRAO.render(f"Max Bots: {max_bots_atual} (Ativos: {num_bots_ativos})", True, BRANCO)
-        contagem_rect = texto_contagem.get_rect(center=RECT_TEXTO_BOTS.center)
-        surface.blit(texto_contagem, contagem_rect)
-        
-        cor_mais = BRANCO if max_bots_atual < max_bots_limite else CINZA_BOTAO_DESLIGADO
-        pygame.draw.rect(surface, cor_mais, RECT_BOTAO_BOT_MAIS, border_radius=5)
-        texto_mais = FONT_TITULO.render("+", True, PRETO)
-        mais_rect = texto_mais.get_rect(center=RECT_BOTAO_BOT_MAIS.center)
-        surface.blit(texto_mais, mais_rect)
-    # --- FIM: MODIFICAÇÃO ---
-
-    # Texto "ESC para Voltar"
-    texto_voltar = FONT_PADRAO.render("ESC para Voltar", True, BRANCO)
-    voltar_rect = texto_voltar.get_rect(center=RECT_TEXTO_VOLTAR.center)
-    surface.blit(texto_voltar, voltar_rect)
 
 
 def desenhar_loja(surface, nave, largura_tela, altura_tela, client_socket=None):

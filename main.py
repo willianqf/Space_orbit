@@ -26,6 +26,9 @@ from ships import (Player, NaveBot, NaveAuxiliar, Nave, set_global_ship_referenc
                    tocar_som_posicional) 
 # Importa as funções e Rects da UI
 import ui
+# --- INÍCIO DA ADIÇÃO ---
+from pause_menu import PauseMenu
+# --- FIM DA ADIÇÃO ---
 
 # 2. Inicialização do Pygame e Tela
 pygame.mixer.pre_init(44100, -16, 2, 512)
@@ -302,7 +305,7 @@ def network_listener_thread(sock):
         global estado_jogo, jogador_esta_vivo_espectador, alvo_espectador, alvo_espectador_nome, espectador_dummy_alvo
         estado_jogo = "ESPECTADOR"
         nave_player.vida_atual = 0 # Garante que o jogador está "morto" localmente
-        jogador_esta_vivo_espectador = False
+        jogador_esta_vivo_espectador = True # <--- CORRIGIDO (Mantém True)
         alvo_espectador = None
         alvo_espectador_nome = None
         espectador_dummy_alvo.posicao = nave_player.posicao.copy()
@@ -590,7 +593,9 @@ def resetar_para_menu():
     """ Reseta o jogo de volta ao menu, fechando conexões. """
     global estado_jogo
     # --- INÍCIO: MODIFICAÇÃO (Resetar Espectador) ---
-    global jogador_esta_vivo_espectador, alvo_espectador, alvo_espectador_nome
+    global jogador_esta_vivo_espectador, alvo_espectador, alvo_espectador_nome, jogador_pediu_para_espectar
+    
+    jogador_pediu_para_espectar = False # <--- CORREÇÃO BUG 4
     jogador_esta_vivo_espectador = False
     alvo_espectador = None
     alvo_espectador_nome = None
@@ -702,8 +707,81 @@ def processar_cheat(comando, nave):
         print(f"[CHEAT] Comando desconhecido: '{comando_limpo}'")
     variavel_texto_terminal = ""
 
+# --- INÍCIO: NOVA FUNÇÃO HELPER (CICLAR ALVO) ---
+def ciclar_alvo_espectador(avancar=True):
+    """
+    Encontra e define o próximo alvo de espectador (Online ou Offline).
+    Usado por 'REQ_SPECTATOR' e pelas teclas Q/E.
+    """
+    global alvo_espectador, alvo_espectador_nome, camera
+    
+    camera.set_zoom(1.0) # Sai do modo zoom ao ciclar
+    
+    lista_alvos_vivos = []
+    lista_nomes_alvos_vivos = [] # for online
+    
+    if client_socket:
+        with network_state_lock:
+            # Ordena por nome para consistência
+            nomes_ordenados = sorted(online_players_states.keys())
+            for nome in nomes_ordenados:
+                state = online_players_states[nome]
+                if state.get('hp', 0) > 0:
+                    # Adiciona jogador se vivo
+                    lista_alvos_vivos.append({'nome': nome, 'state': state})
+                    lista_nomes_alvos_vivos.append(nome)
+    else: # Offline
+        # Adiciona jogador se estiver vivo (spectate voluntário)
+        if jogador_esta_vivo_espectador and nave_player.vida_atual > 0:
+             lista_alvos_vivos.append(nave_player)
+        # Adiciona bots vivos
+        lista_alvos_vivos.extend([bot for bot in grupo_bots if bot.vida_atual > 0])
+
+    if not lista_alvos_vivos:
+        print("[Espectador] Nenhum alvo vivo para ciclar.")
+        alvo_espectador = None
+        alvo_espectador_nome = None
+        return # No targets, do nothing
+        
+    # Encontrar índice atual
+    current_index = -1
+    if client_socket and alvo_espectador_nome:
+        if alvo_espectador_nome in lista_nomes_alvos_vivos:
+            current_index = lista_nomes_alvos_vivos.index(alvo_espectador_nome)
+    elif not client_socket and alvo_espectador:
+        if alvo_espectador in lista_alvos_vivos:
+            current_index = lista_alvos_vivos.index(alvo_espectador)
+    
+    # Calcular novo índice
+    if avancar: # Próximo
+        current_index += 1
+        if current_index >= len(lista_alvos_vivos):
+            current_index = 0 # Wrap around
+    else: # Anterior
+        current_index -= 1
+        if current_index < 0:
+            current_index = len(lista_alvos_vivos) - 1 # Wrap around
+            
+    # Definir novo alvo
+    if client_socket:
+        novo_alvo_dict = lista_alvos_vivos[current_index]
+        alvo_espectador_nome = novo_alvo_dict['nome']
+        alvo_espectador = None
+        print(f"[Espectador] Seguindo (Online): {alvo_espectador_nome}")
+    else:
+        novo_alvo_sprite = lista_alvos_vivos[current_index]
+        alvo_espectador = novo_alvo_sprite
+        alvo_espectador_nome = None
+        print(f"[Espectador] Seguindo (Offline): {alvo_espectador.nome}")
+# --- FIM: NOVA FUNÇÃO HELPER ---
+
+
 # 10. Recalcula Posições Iniciais da UI (após inicializar Pygame)
 ui.recalculate_ui_positions(LARGURA_TELA, ALTURA_TELA)
+
+# --- INÍCIO DA ADIÇÃO ---
+pause_manager = PauseMenu()
+# --- FIM DA ADIÇÃO ---
 
 
 # --- LOOP PRINCIPAL DO JOGO ---
@@ -892,86 +970,70 @@ while rodando:
                             # --- FIM: MODIFICAÇÃO ---
                             nave_player.alvo_selecionado = alvo_clicado
         
-        # --- INÍCIO: MODIFICAÇÃO (Estado PAUSE) ---
+        # --- INÍCIO: SUBSTITUIÇÃO (Estado PAUSE) ---
         elif estado_jogo == "PAUSE":
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE: 
-                    # Se estava espectador (vivo ou morto), volta para espectador
-                    if jogador_esta_vivo_espectador or nave_player.vida_atual <= 0:
-                        estado_jogo = "ESPECTADOR"
-                    else:
-                        estado_jogo = "JOGANDO"
-                    print("Jogo Retomado.")
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                mouse_pos = pygame.mouse.get_pos()
-                
-                if ui.RECT_BOTAO_VOLTAR_MENU.collidepoint(mouse_pos):
-                    resetar_para_menu()
-                
-                elif ui.RECT_BOTAO_ESPECTADOR.collidepoint(mouse_pos):
-                    print("Entrando no modo espectador (voluntário)...")
-                    # estado_jogo = "ESPECTADOR" # <-- REMOVA ESTA LINHA (não mude ainda)
-                    
-                    if client_socket:
-                        jogador_pediu_para_espectar = True  # <--- ADICIONE
-                        
-                        enviar_input_servidor("ENTER_SPECTATOR")
-                        # O servidor vai quebrar a conexão.
-                        # A network_listener_thread vai parar.
-                        estado_jogo = "JOGANDO" # Volta ao jogo para esperar a desconexão
-                    else:
-                        # OFFLINE: (Lógica offline está correta)
-                        nave_player.vida_atual = 0 
-                        estado_jogo = "ESPECTADOR"
-                        jogador_esta_vivo_espectador = True
-                        
-                        alvo_espectador = None 
-                        alvo_espectador_nome = None
-                        espectador_dummy_alvo.posicao = nave_player.posicao.copy()
-                        
-                    alvo_espectador = None # Começa em modo livre
+            
+            # Delega o evento para a classe PauseMenu
+            is_online = (client_socket is not None)
+            action = pause_manager.handle_event(event, is_online)
+
+            if action == "RESUME_GAME":
+                # Se estava espectador (vivo ou morto), volta para espectador
+                if jogador_esta_vivo_espectador or nave_player.vida_atual <= 0:
+                    estado_jogo = "ESPECTADOR"
+                else:
+                    estado_jogo = "JOGANDO"
+                print("Jogo Retomado.")
+            
+            elif action == "GOTO_MENU":
+                resetar_para_menu()
+
+            elif action == "REQ_SPECTATOR":
+                print("Entrando no modo espectador (voluntário)...")
+                if client_socket:
+                    jogador_pediu_para_espectar = True
+                    jogador_esta_vivo_espectador = True # Define imediatamente
+                    enviar_input_servidor("ENTER_SPECTATOR")
+                    estado_jogo = "JOGANDO" # Espera a desconexão
+                else:
+                    # Offline
+                    nave_player.vida_atual = 0 
+                    estado_jogo = "ESPECTADOR"
+                    jogador_esta_vivo_espectador = True
+                    alvo_espectador = None 
                     alvo_espectador_nome = None
                     espectador_dummy_alvo.posicao = nave_player.posicao.copy()
                 
-                ####
-                
-                elif ui.RECT_BOTAO_RESPAWN_PAUSA.collidepoint(mouse_pos):
-                    # Só funciona se o jogador estiver morto
-                    if nave_player.vida_atual <= 0:
-                        print("Respawnando via menu de pausa...")
-                        if client_socket:
-                            enviar_input_servidor("RESPAWN_ME")
-                        else:
-                            respawn_player_offline(nave_player)
-                        # O estado_jogo mudará para "JOGANDO"
-                
-                elif ui.RECT_BOTAO_VOLTAR_NAVE.collidepoint(mouse_pos):
-                    # Esta ação agora é "Respawnar" (seja morto ou vivo espectando)
-                    if jogador_esta_vivo_espectador: 
-                        print("Respawnando (voluntário) via menu de pausa...")
-                        if client_socket:
-                            enviar_input_servidor("RESPAWN_ME")
-                        else:
-                            respawn_player_offline(nave_player)
+                ciclar_alvo_espectador(avancar=True) # <-- CORREÇÃO BUG 2: Segue alvo
 
-                # Lógica de Bots (offline)
-                if not client_socket:
-                    if ui.RECT_BOTAO_BOT_MENOS.collidepoint(mouse_pos):
-                        if max_bots_atual > 0:
-                            max_bots_atual -= 1
-                            print(f"Máximo de Bots reduzido para: {max_bots_atual}")
-                            if len(grupo_bots) > max_bots_atual:
-                                 try:
-                                     bot_para_remover = random.choice(grupo_bots.sprites())
-                                     bot_para_remover.kill()
-                                     print(f"Bot {bot_para_remover.nome} removido.")
-                                 except IndexError:
-                                     pass
-                    elif ui.RECT_BOTAO_BOT_MAIS.collidepoint(mouse_pos):
-                        if max_bots_atual < s.MAX_BOTS_LIMITE_SUPERIOR:
-                            max_bots_atual += 1
-                            print(f"Máximo de Bots aumentado para: {max_bots_atual}")
-        # --- FIM: MODIFICAÇÃO (Estado PAUSE) ---
+            elif action == "REQ_RESPAWN":
+                # Só funciona se o jogador estiver morto ou espectando vivo
+                if nave_player.vida_atual <= 0 or jogador_esta_vivo_espectador:
+                    print("Respawnando via menu de pausa...")
+                    if client_socket:
+                        enviar_input_servidor("RESPAWN_ME")
+                        # O estado mudará para JOGANDO quando a rede confirmar
+                    else:
+                        respawn_player_offline(nave_player)
+                        # O respawn_player_offline já define estado_jogo = "JOGANDO"
+
+            elif action == "BOT_MENOS":
+                if max_bots_atual > 0:
+                    max_bots_atual -= 1
+                    print(f"Máximo de Bots reduzido para: {max_bots_atual}")
+                    if len(grupo_bots) > max_bots_atual:
+                         try:
+                             bot_para_remover = random.choice(grupo_bots.sprites())
+                             bot_para_remover.kill()
+                             print(f"Bot {bot_para_remover.nome} removido.")
+                         except IndexError:
+                             pass
+                             
+            elif action == "BOT_MAIS":
+                if max_bots_atual < s.MAX_BOTS_LIMITE_SUPERIOR:
+                    max_bots_atual += 1
+                    print(f"Máximo de Bots aumentado para: {max_bots_atual}")
+        # --- FIM: SUBSTITUIÇÃO (Estado PAUSE) ---
 
         elif estado_jogo == "LOJA":
             if event.type == pygame.KEYDOWN and event.key == pygame.K_v: estado_jogo = "JOGANDO"; print("Fechando loja...")
@@ -1027,63 +1089,10 @@ while rodando:
                      alvo_espectador_nome = None
                 
                 # --- LÓGICA DE CICLAGEM (Q/E) ---
+                # --- INÍCIO: SUBSTITUIÇÃO (Usa nova função) ---
                 elif event.key == pygame.K_e or event.key == pygame.K_q:
-                    camera.set_zoom(1.0) # Sai do modo zoom ao ciclar
-                    
-                    lista_alvos_vivos = []
-                    lista_nomes_alvos_vivos = [] # for online
-                    
-                    if client_socket:
-                        with network_state_lock:
-                            # Ordena por nome para consistência
-                            nomes_ordenados = sorted(online_players_states.keys())
-                            for nome in nomes_ordenados:
-                                state = online_players_states[nome]
-                                if state.get('hp', 0) > 0:
-                                    # Adiciona jogador se vivo
-                                    lista_alvos_vivos.append({'nome': nome, 'state': state})
-                                    lista_nomes_alvos_vivos.append(nome)
-                    else: # Offline
-                        # Adiciona jogador se estiver vivo (spectate voluntário)
-                        if jogador_esta_vivo_espectador and nave_player.vida_atual > 0:
-                             lista_alvos_vivos.append(nave_player)
-                        # Adiciona bots vivos
-                        lista_alvos_vivos.extend([bot for bot in grupo_bots if bot.vida_atual > 0])
-
-                    if not lista_alvos_vivos:
-                        print("[Espectador] Nenhum alvo vivo para ciclar.")
-                        continue # No targets, do nothing
-                        
-                    # Encontrar índice atual
-                    current_index = -1
-                    if client_socket and alvo_espectador_nome:
-                        if alvo_espectador_nome in lista_nomes_alvos_vivos:
-                            current_index = lista_nomes_alvos_vivos.index(alvo_espectador_nome)
-                    elif not client_socket and alvo_espectador:
-                        if alvo_espectador in lista_alvos_vivos:
-                            current_index = lista_alvos_vivos.index(alvo_espectador)
-                    
-                    # Calcular novo índice
-                    if event.key == pygame.K_e: # Próximo
-                        current_index += 1
-                        if current_index >= len(lista_alvos_vivos):
-                            current_index = 0 # Wrap around
-                    elif event.key == pygame.K_q: # Anterior
-                        current_index -= 1
-                        if current_index < 0:
-                            current_index = len(lista_alvos_vivos) - 1 # Wrap around
-                            
-                    # Definir novo alvo
-                    if client_socket:
-                        novo_alvo_dict = lista_alvos_vivos[current_index]
-                        alvo_espectador_nome = novo_alvo_dict['nome']
-                        alvo_espectador = None
-                        print(f"[Espectador] Seguindo (Online): {alvo_espectador_nome}")
-                    else:
-                        novo_alvo_sprite = lista_alvos_vivos[current_index]
-                        alvo_espectador = novo_alvo_sprite
-                        alvo_espectador_nome = None
-                        print(f"[Espectador] Seguindo (Offline): {alvo_espectador.nome}")
+                    ciclar_alvo_espectador(avancar=(event.key == pygame.K_e))
+                # --- FIM: SUBSTITUIÇÃO ---
             
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos_tela = pygame.mouse.get_pos()
@@ -1095,6 +1104,7 @@ while rodando:
                     
                     if client_socket:
                         enviar_input_servidor("RESPAWN_ME")
+                        # O estado mudará para JOGANDO quando a rede confirmar
                     else:
                         respawn_player_offline(nave_player)
                         # respawn_player_offline já define estado_jogo = "JOGANDO"
@@ -1219,7 +1229,7 @@ while rodando:
     # --- FIM: MODIFICAÇÃO (Lógica da Câmera) ---
 
 
-    if estado_jogo not in ["MENU", "PAUSE", "GET_NAME", "GET_SERVER_INFO"]:
+    if estado_jogo not in ["MENU", "GET_NAME", "GET_SERVER_INFO"]:
         # camera.update(nave_player) # <--- REMOVIDO (Movido para cima)
 
         if client_socket:
@@ -1235,13 +1245,17 @@ while rodando:
                     
                     nova_vida = my_state.get('hp', nave_player.vida_atual)
                     
-                    if estado_jogo == "ESPECTADOR" and not jogador_esta_vivo_espectador and nova_vida > 0:
+                    # --- INÍCIO: CORREÇÃO RESPAWN ONLINE (BUG 2 e 3) ---
+                    # Detecta respawn se estiver em PAUSA ou ESPECTADOR, morto, e a nova vida for positiva
+                    if (estado_jogo == "ESPECTADOR" or estado_jogo == "PAUSE") and nave_player.vida_atual <= 0 and nova_vida > 0:
                         print("[CLIENTE] Respawn detectado! Voltando ao jogo.")
-                        estado_jogo = "JOGANDO"
+                        estado_jogo = "JOGANDO" # <-- ISTO FECHA O MENU DE PAUSA
                         nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
-                        jogador_esta_vivo_espectador = True # Não estamos mais espectando vivos
-                        alvo_espectador_nome = None # Limpa alvo
-                        camera.set_zoom(1.0) # Garante reset do zoom
+                        jogador_esta_vivo_espectador = False # Reseta a flag
+                        jogador_pediu_para_espectar = False  # Reseta a flag
+                        alvo_espectador_nome = None 
+                        camera.set_zoom(1.0)
+                    # --- FIM: CORREÇÃO RESPAWN ONLINE ---
 
 
                     if nova_vida < nave_player.vida_atual:
@@ -1297,17 +1311,30 @@ while rodando:
                     nave_player.nivel_aux = num_aux_servidor
                     nave_player.max_vida = 4 + nave_player.nivel_max_vida
 
+                    # --- INÍCIO: CORREÇÃO "VOCÊ MORREU" (BUG 1) ---
                     if nave_player.vida_atual <= 0 and estado_jogo == "JOGANDO":
-                        estado_jogo = "ESPECTADOR" 
-                        jogador_esta_vivo_espectador = False 
-                        alvo_espectador = None 
-                        alvo_espectador_nome = None
-                        espectador_dummy_alvo.posicao = nave_player.posicao.copy() 
-                        
-                        print("[CLIENTE] Você morreu! Entrando em modo espectador.")
-                        enviar_input_servidor("W_UP"); enviar_input_servidor("A_UP")
-                        enviar_input_servidor("S_UP"); enviar_input_servidor("D_UP")
-                        enviar_input_servidor("SPACE_UP")
+                        # Se o jogador NÃO pediu para espectar, é uma morte normal
+                        if not jogador_pediu_para_espectar:
+                            estado_jogo = "ESPECTADOR"
+                            jogador_esta_vivo_espectador = False 
+                            alvo_espectador = None
+                            alvo_espectador_nome = None
+                            espectador_dummy_alvo.posicao = nave_player.posicao.copy()
+                            
+                            print("[CLIENTE] Você morreu! Entrando em modo espectador.")
+                            enviar_input_servidor("W_UP"); enviar_input_servidor("A_UP")
+                            enviar_input_servidor("S_UP"); enviar_input_servidor("D_UP")
+                            enviar_input_servidor("SPACE_UP")
+                        else:
+                            # O jogador *pediu* para espectar (a flag já é True).
+                            # Apenas muda o estado do jogo para ESPECTADOR 
+                            # e deixa a flag 'jogador_esta_vivo_espectador' como True.
+                            estado_jogo = "ESPECTADOR"
+                            jogador_esta_vivo_espectador = True 
+                            alvo_espectador = None
+                            alvo_espectador_nome = None
+                            espectador_dummy_alvo.posicao = nave_player.posicao.copy()
+                    # --- FIM: CORREÇÃO "VOCÊ MORREU" ---
             
             if estado_jogo != "ESPECTADOR":
                 nave_player.rect.center = nave_player.posicao
@@ -1871,11 +1898,13 @@ while rodando:
             ui.desenhar_ranking(tela, top_5, nave_player)
 
         # Overlays 
+        # --- INÍCIO: SUBSTITUIÇÃO (Desenho do Menu de Pausa) ---
         if estado_jogo == "PAUSE":
-            ui.desenhar_pause(tela, max_bots_atual, s.MAX_BOTS_LIMITE_SUPERIOR, len(grupo_bots), 
-                              nave_player.vida_atual <= 0, # jogador_esta_morto
-                              jogador_esta_vivo_espectador,
-                              client_socket is not None)
+            pause_manager.draw(tela, max_bots_atual, s.MAX_BOTS_LIMITE_SUPERIOR, len(grupo_bots),
+                               nave_player.vida_atual <= 0, # jogador_esta_morto
+                               jogador_esta_vivo_espectador,
+                               client_socket is not None)
+        # --- FIM: SUBSTITUIÇÃO ---
             
         elif estado_jogo == "LOJA":
             ui.desenhar_loja(tela, nave_player, LARGURA_TELA, ALTURA_TELA, client_socket)
