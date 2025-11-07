@@ -10,7 +10,9 @@ BTN_MENU_W, BTN_MENU_H = 250, 50
 BTN_REINICIAR_W, BTN_REINICIAR_H = 200, 50
 BTN_HUD_UPGRADE_W, BTN_HUD_UPGRADE_H = 100, 30
 TERMINAL_H = 35
-PAUSE_PANEL_W, PAUSE_PANEL_H = 350, 250
+# --- INÍCIO: MODIFICAÇÃO (Tamanho Painel Pausa) ---
+PAUSE_PANEL_W, PAUSE_PANEL_H = 350, 400 # Aumentado para caber novos botões
+# --- FIM: MODIFICAÇÃO ---
 BTN_PAUSE_CTRL_W, BTN_PAUSE_CTRL_H = 40, 40
 
 # --- Bloco da Tela de Nome (Login) ---
@@ -28,9 +30,13 @@ CONNECT_BTN_W, CONNECT_BTN_H = 200, 50
 MINIMAP_WIDTH = 150 
 MINIMAP_HEIGHT = 150 
 
-# --- INÍCIO DA ADIÇÃO (Botão Regenerar) ---
+# --- (Botão Regenerar - Sem alteração) ---
 BTN_HUD_REGEN_W, BTN_HUD_REGEN_H = 160, 30
-# --- FIM DA ADIÇÃO ---
+
+# --- INÍCIO: MODIFICAÇÃO (Novos Tamanhos de Botão de Pausa) ---
+BTN_PAUSA_MENU_W, BTN_PAUSA_MENU_H = 250, 40
+# --- FIM: MODIFICAÇÃO ---
+
 
 # Rects (inicializados com tamanho, posição será definida depois)
 RECT_TERMINAL_INPUT = pygame.Rect(0, 0, 0, TERMINAL_H)
@@ -46,14 +52,19 @@ RECT_BOTAO_MULTIPLAYER = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
 RECT_BOTAO_SAIR = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
 MINIMAP_RECT = pygame.Rect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT)
 RECT_LOGO_MENU = pygame.Rect(0, 0, 0, 0)
-# Rects Pausa
+
+# --- INÍCIO: MODIFICAÇÃO (Novos Rects Pausa) ---
 RECT_PAUSE_FUNDO = pygame.Rect(0, 0, PAUSE_PANEL_W, PAUSE_PANEL_H)
 RECT_TEXTO_BOTS = pygame.Rect(0, 0, 200, 40)
 RECT_BOTAO_BOT_MENOS = pygame.Rect(0, 0, BTN_PAUSE_CTRL_W, BTN_PAUSE_CTRL_H)
 RECT_BOTAO_BOT_MAIS = pygame.Rect(0, 0, BTN_PAUSE_CTRL_W, BTN_PAUSE_CTRL_H)
-RECT_BOTAO_VOLTAR_MENU = pygame.Rect(0, 0, 200, 40)
+RECT_BOTAO_VOLTAR_MENU = pygame.Rect(0, 0, BTN_PAUSA_MENU_W, BTN_PAUSA_MENU_H)
+RECT_BOTAO_ESPECTADOR = pygame.Rect(0, 0, BTN_PAUSA_MENU_W, BTN_PAUSA_MENU_H)
+RECT_BOTAO_VOLTAR_NAVE = pygame.Rect(0, 0, BTN_PAUSA_MENU_W, BTN_PAUSA_MENU_H)
+RECT_BOTAO_RESPAWN_PAUSA = pygame.Rect(0, 0, BTN_PAUSA_MENU_W, BTN_PAUSA_MENU_H)
 RECT_TEXTO_VOLTAR = pygame.Rect(0, 0, 200, 30)
-RECT_BOTAO_VOLTAR_MENU = pygame.Rect(0, 0, BTN_REINICIAR_W, BTN_REINICIAR_H)
+# --- FIM: MODIFICAÇÃO ---
+
 # Rects Login
 RECT_LOGIN_PAINEL = pygame.Rect(0, 0, LOGIN_PANEL_W, LOGIN_PANEL_H)
 RECT_LOGIN_INPUT = pygame.Rect(0, 0, LOGIN_INPUT_W, LOGIN_INPUT_H)
@@ -67,9 +78,8 @@ RECT_CONNECT_NOME = pygame.Rect(0, 0, CONNECT_INPUT_W, CONNECT_INPUT_H)
 RECT_CONNECT_IP = pygame.Rect(0, 0, CONNECT_INPUT_W, CONNECT_INPUT_H)
 RECT_CONNECT_BOTAO = pygame.Rect(0, 0, CONNECT_BTN_W, CONNECT_BTN_H)
 
-# --- INÍCIO DA ADIÇÃO (Rect Regenerar) ---
+# --- (Rect Regenerar - Sem alteração) ---
 RECT_BOTAO_REGEN_HUD = pygame.Rect(0, 0, BTN_HUD_REGEN_W, BTN_HUD_REGEN_H)
-# --- FIM DA ADIÇÃO ---
 
 
 # Variáveis para guardar posições calculadas
@@ -81,15 +91,15 @@ def recalculate_ui_positions(w, h):
     global RECT_BOTAO_MOTOR, RECT_BOTAO_DANO, RECT_BOTAO_AUX, RECT_BOTAO_MAX_HP, RECT_BOTAO_ESCUDO
     global RECT_BOTAO_REINICIAR, RECT_BOTAO_UPGRADE_HUD
     global RECT_BOTAO_JOGAR_OFF, RECT_BOTAO_MULTIPLAYER, RECT_BOTAO_SAIR
-    global RECT_PAUSE_FUNDO, RECT_TEXTO_BOTS, RECT_BOTAO_BOT_MENOS, RECT_BOTAO_BOT_MAIS, RECT_TEXTO_VOLTAR, RECT_BOTAO_VOLTAR_MENU
-    global RECT_BOTAO_VOLTAR_MENU, RECT_TEXTO_VOLTAR
+    # --- INÍCIO: MODIFICAÇÃO (Globais Pausa) ---
+    global RECT_PAUSE_FUNDO, RECT_TEXTO_BOTS, RECT_BOTAO_BOT_MENOS, RECT_BOTAO_BOT_MAIS
+    global RECT_BOTAO_VOLTAR_MENU, RECT_BOTAO_ESPECTADOR, RECT_BOTAO_VOLTAR_NAVE
+    global RECT_BOTAO_RESPAWN_PAUSA, RECT_TEXTO_VOLTAR
+    # --- FIM: MODIFICAÇÃO ---
     global RECT_LOGIN_PAINEL, RECT_LOGIN_INPUT, RECT_LOGIN_BOTAO
     global RECT_LOGIN_DIFICULDADE_TEXT, RECT_LOGIN_DIFICULDADE_LEFT, RECT_LOGIN_DIFICULDADE_RIGHT
     global RECT_CONNECT_PAINEL, RECT_CONNECT_NOME, RECT_CONNECT_IP, RECT_CONNECT_BOTAO
-    
-    # --- INÍCIO DA ADIÇÃO (Global Regenerar) ---
     global RECT_BOTAO_REGEN_HUD
-    # --- FIM DA ADIÇÃO ---
 
     # Minimapa
     MINIMAP_POS_X = w - MINIMAP_WIDTH - 10
@@ -100,10 +110,8 @@ def recalculate_ui_positions(w, h):
     RECT_TERMINAL_INPUT.width = w - 20
     RECT_TERMINAL_INPUT.bottomleft = (10, h - 10)
     
-    # --- INÍCIO DA ADIÇÃO (Posição Botão Regenerar) ---
-    # Posiciona acima do terminal
+    # Posição Botão Regenerar
     RECT_BOTAO_REGEN_HUD.bottomleft = (10, RECT_TERMINAL_INPUT.top - 10)
-    # --- FIM DA ADIÇÃO ---
 
     # Botões da Loja (Centralizados)
     btn_y_start_loja = 180
@@ -139,19 +147,45 @@ def recalculate_ui_positions(w, h):
     menu_btn_spacing = 70
     RECT_BOTAO_JOGAR_OFF.topleft = (menu_btn_x, menu_btn_y_start)
     RECT_BOTAO_MULTIPLAYER.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing)
+    # --- INÍCIO: CORREÇÃO DO ERRO ---
     RECT_BOTAO_SAIR.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing * 2)
+    # --- FIM: CORREÇÃO DO ERRO ---
 
-    # Posições do Menu de Pausa (Centralizado)
+    # --- INÍCIO: MODIFICAÇÃO (Posições do Menu de Pausa) ---
     RECT_PAUSE_FUNDO.center = (w // 2, h // 2)
+    
+    # Posição Y inicial para os botões
     base_y_pause = RECT_PAUSE_FUNDO.top + 60
-    spacing_pause_items = 25
-    spacing_pause_buttons = 15
-    RECT_BOTAO_VOLTAR_MENU.midtop = (RECT_PAUSE_FUNDO.centerx, base_y_pause)
-    y_pos_bots = RECT_BOTAO_VOLTAR_MENU.bottom + spacing_pause_items
+    # Espaçamento vertical entre os botões
+    spacing_pause_items = 15
+    # Espaçamento entre o botão e o texto
+    btn_height_with_spacing = BTN_PAUSA_MENU_H + spacing_pause_items 
+    
+    # Posições dos botões (de cima para baixo)
+    y_pos_voltar_nave = base_y_pause
+    RECT_BOTAO_VOLTAR_NAVE.midtop = (RECT_PAUSE_FUNDO.centerx, y_pos_voltar_nave)
+    
+    y_pos_respawn = y_pos_voltar_nave
+    RECT_BOTAO_RESPAWN_PAUSA.midtop = (RECT_PAUSE_FUNDO.centerx, y_pos_respawn)
+    
+    y_pos_espectador = y_pos_voltar_nave + btn_height_with_spacing
+    RECT_BOTAO_ESPECTADOR.midtop = (RECT_PAUSE_FUNDO.centerx, y_pos_espectador)
+    
+    y_pos_voltar_menu = y_pos_espectador + btn_height_with_spacing
+    RECT_BOTAO_VOLTAR_MENU.midtop = (RECT_PAUSE_FUNDO.centerx, y_pos_voltar_menu)
+    
+    # Controles de Bots (abaixo dos botões principais)
+    y_pos_bots = RECT_BOTAO_VOLTAR_MENU.bottom + 25 # Mais espaço
     RECT_TEXTO_BOTS.midtop = (RECT_PAUSE_FUNDO.centerx, y_pos_bots)
-    RECT_BOTAO_BOT_MENOS.midright = (RECT_TEXTO_BOTS.left - spacing_pause_buttons, RECT_TEXTO_BOTS.centery)
-    RECT_BOTAO_BOT_MAIS.midleft = (RECT_TEXTO_BOTS.right + spacing_pause_buttons, RECT_TEXTO_BOTS.centery)
+    
+    spacing_pause_buttons_ctrl = 15 # Espaçamento dos botões +/-
+    RECT_BOTAO_BOT_MENOS.midright = (RECT_TEXTO_BOTS.left - spacing_pause_buttons_ctrl, RECT_TEXTO_BOTS.centery)
+    RECT_BOTAO_BOT_MAIS.midleft = (RECT_TEXTO_BOTS.right + spacing_pause_buttons_ctrl, RECT_TEXTO_BOTS.centery)
+    
+    # Texto "ESC" na parte inferior
     RECT_TEXTO_VOLTAR.midbottom = (RECT_PAUSE_FUNDO.centerx, RECT_PAUSE_FUNDO.bottom - 20)
+    # --- FIM: MODIFICAÇÃO ---
+
     
     # Posições da Tela de Nome (Login)
     RECT_LOGIN_PAINEL.center = (w // 2, h // 2)
@@ -244,39 +278,77 @@ def desenhar_tela_nome(surface, nome_jogador_atual, input_nome_ativo, dificuldad
     texto_botao_rect = texto_botao.get_rect(center=RECT_LOGIN_BOTAO.center)
     surface.blit(texto_botao, texto_botao_rect)
 
-def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos):
+# --- INÍCIO: MODIFICAÇÃO (Assinatura de desenhar_pause) ---
+def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos, 
+                   jogador_esta_morto=False, jogador_esta_vivo_espectador=False):
+# --- FIM: MODIFICAÇÃO ---
+    
     fundo_overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
     fundo_overlay.fill(PRETO_TRANSPARENTE_PAUSA)
     surface.blit(fundo_overlay, (0, 0))
+    
+    # Desenha o fundo do painel
     pygame.draw.rect(surface, CINZA_LOJA_FUNDO, RECT_PAUSE_FUNDO, border_radius=10)
     pygame.draw.rect(surface, BRANCO, RECT_PAUSE_FUNDO, 2, border_radius=10)
+    
+    # Título "PAUSADO"
     texto_titulo = FONT_TITULO.render("PAUSADO", True, BRANCO)
     titulo_rect = texto_titulo.get_rect(midtop=(RECT_PAUSE_FUNDO.centerx, RECT_PAUSE_FUNDO.top + 15))
     surface.blit(texto_titulo, titulo_rect)
+
+    # --- INÍCIO: MODIFICAÇÃO (Lógica dos Botões de Pausa) ---
+    
+    # Botão 1: "Voltar à Nave" (Se vivo, modo espectador) ou "Respawnar" (Se morto)
+    if jogador_esta_vivo_espectador:
+        pygame.draw.rect(surface, BRANCO, RECT_BOTAO_VOLTAR_NAVE, border_radius=5)
+        texto_surf = FONT_PADRAO.render("Voltar à Nave", True, PRETO)
+        texto_rect = texto_surf.get_rect(center=RECT_BOTAO_VOLTAR_NAVE.center)
+        surface.blit(texto_surf, texto_rect)
+    elif jogador_esta_morto:
+        pygame.draw.rect(surface, BRANCO, RECT_BOTAO_RESPAWN_PAUSA, border_radius=5)
+        texto_surf = FONT_PADRAO.render("Respawnar", True, PRETO)
+        texto_rect = texto_surf.get_rect(center=RECT_BOTAO_RESPAWN_PAUSA.center)
+        surface.blit(texto_surf, texto_rect)
+
+    # Botão 2: "Modo Espectador" (Se vivo, não espectador)
+    if not jogador_esta_vivo_espectador and not jogador_esta_morto:
+        pygame.draw.rect(surface, BRANCO, RECT_BOTAO_ESPECTADOR, border_radius=5)
+        texto_surf = FONT_PADRAO.render("Modo Espectador", True, PRETO)
+        texto_rect = texto_surf.get_rect(center=RECT_BOTAO_ESPECTADOR.center)
+        surface.blit(texto_surf, texto_rect)
+
+    # Botão 3: "Voltar ao Menu" (Sempre visível)
+    pygame.draw.rect(surface, BRANCO, RECT_BOTAO_VOLTAR_MENU, border_radius=5)
+    texto_voltar_menu_surf = FONT_PADRAO.render("Voltar ao Menu", True, PRETO)
+    texto_voltar_menu_rect = texto_voltar_menu_surf.get_rect(center=RECT_BOTAO_VOLTAR_MENU.center)
+    surface.blit(texto_voltar_menu_surf, texto_voltar_menu_rect)
+
+    # --- FIM: MODIFICAÇÃO ---
+    
+    # Controles de Bots
     cor_menos = BRANCO if max_bots_atual > 0 else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_menos, RECT_BOTAO_BOT_MENOS, border_radius=5)
     texto_menos = FONT_TITULO.render("-", True, PRETO)
     menos_rect = texto_menos.get_rect(center=RECT_BOTAO_BOT_MENOS.center)
     surface.blit(texto_menos, menos_rect)
+    
     texto_contagem = FONT_PADRAO.render(f"Max Bots: {max_bots_atual} (Ativos: {num_bots_ativos})", True, BRANCO)
     contagem_rect = texto_contagem.get_rect(center=RECT_TEXTO_BOTS.center)
     surface.blit(texto_contagem, contagem_rect)
+    
     cor_mais = BRANCO if max_bots_atual < max_bots_limite else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_mais, RECT_BOTAO_BOT_MAIS, border_radius=5)
     texto_mais = FONT_TITULO.render("+", True, PRETO)
     mais_rect = texto_mais.get_rect(center=RECT_BOTAO_BOT_MAIS.center)
     surface.blit(texto_mais, mais_rect)
-    pygame.draw.rect(surface, BRANCO, RECT_BOTAO_VOLTAR_MENU, border_radius=5)
-    texto_voltar_menu_surf = FONT_PADRAO.render("Voltar ao Menu", True, PRETO)
-    texto_voltar_menu_rect = texto_voltar_menu_surf.get_rect(center=RECT_BOTAO_VOLTAR_MENU.center)
-    surface.blit(texto_voltar_menu_surf, texto_voltar_menu_rect)
+
+    # Texto "ESC para Voltar"
     texto_voltar = FONT_PADRAO.render("ESC para Voltar", True, BRANCO)
     voltar_rect = texto_voltar.get_rect(center=RECT_TEXTO_VOLTAR.center)
     surface.blit(texto_voltar, voltar_rect)
 
-# --- INÍCIO: MODIFICAÇÃO (Adicionar client_socket como parâmetro) ---
+
 def desenhar_loja(surface, nave, largura_tela, altura_tela, client_socket=None):
-# --- FIM: MODIFICAÇÃO ---
     fundo_loja = pygame.Surface((largura_tela, altura_tela), pygame.SRCALPHA)
     fundo_loja.fill(CINZA_LOJA_FUNDO)
     surface.blit(fundo_loja, (0, 0))
@@ -309,12 +381,10 @@ def desenhar_loja(surface, nave, largura_tela, altura_tela, client_socket=None):
     else: txt_dano = f"Dano Nv. {nave.nivel_dano} (MAX)"
     draw_text_on_button(RECT_BOTAO_DANO, txt_dano, FONT_PADRAO, PRETO)
     
-    # --- INÍCIO: MODIFICAÇÃO (Ler auxiliares do servidor ou localmente) ---
     if client_socket:
         num_ativos = nave.nivel_aux # Lê o número do estado sincronizado
     else:
         num_ativos = len(nave.grupo_auxiliares_ativos) # Lê os sprites locais
-    # --- FIM: MODIFICAÇÃO ---
 
     max_aux = len(nave.lista_todas_auxiliares) # Assume 4
     if num_ativos < max_aux:
@@ -342,6 +412,11 @@ def desenhar_loja(surface, nave, largura_tela, altura_tela, client_socket=None):
     surface.blit(texto_fechar, (largura_tela // 2 - texto_fechar.get_width() // 2, altura_tela - 60))
 
 def desenhar_hud(surface, nave, estado_jogo):
+    # --- INÍCIO: MODIFICAÇÃO (Não desenha HUD no modo espectador) ---
+    if estado_jogo == "ESPECTADOR":
+        return
+    # --- FIM: MODIFICAÇÃO ---
+
     pos_x_detalhes = 10
     pos_y_atual_detalhes = 10
     hud_line_height = FONT_HUD.get_height() + 5
@@ -352,7 +427,10 @@ def desenhar_hud(surface, nave, estado_jogo):
     texto_vida = FONT_HUD.render(f"Vida: {vida_display} / {nave.max_vida}", True, VERDE_VIDA)
     surface.blit(texto_vida, (pos_x_detalhes, pos_y_atual_detalhes))
     pos_y_atual_detalhes += hud_line_height
-    if estado_jogo != "GAME_OVER":
+    
+    # --- INÍCIO: MODIFICAÇÃO (Não desenha se estiver morto) ---
+    if estado_jogo != "GAME_OVER" and nave.vida_atual > 0:
+    # --- FIM: MODIFICAÇÃO ---
         cor_pts_upgrade = AMARELO_BOMBA if nave.pontos_upgrade_disponiveis > 0 else BRANCO
         texto_pts_up = FONT_HUD.render(f"Pts Upgrade: {nave.pontos_upgrade_disponiveis}", True, cor_pts_upgrade)
         surface.blit(texto_pts_up, (pos_x_detalhes, pos_y_atual_detalhes))
@@ -374,22 +452,17 @@ def desenhar_hud(surface, nave, estado_jogo):
         surface.blit(texto_escudo, (pos_x_detalhes, pos_y_atual_detalhes))
         pos_y_atual_detalhes += line_spacing_detalhes
         
-        # --- INÍCIO: MODIFICAÇÃO (Ler auxiliares do servidor ou localmente) ---
-        # (Esta lógica é idêntica à da loja, mas pode ser simplificada
-        #  assumindo que 'client_socket' não é passado para 'desenhar_hud')
-        if hasattr(nave, 'nivel_aux'): # Se o atributo existe (online)
+        if hasattr(nave, 'nivel_aux'): 
             num_aux = nave.nivel_aux
-        else: # Fallback para offline
+        else: 
             num_aux = len(nave.grupo_auxiliares_ativos)
-        # --- FIM: MODIFICAÇÃO ---
             
         max_aux = len(nave.lista_todas_auxiliares)
         texto_aux = FONT_HUD_DETALHES.render(f"Auxiliares: {num_aux}/{max_aux}", True, BRANCO)
         surface.blit(texto_aux, (pos_x_detalhes, pos_y_atual_detalhes))
         pos_y_atual_detalhes += line_spacing_detalhes
 
-        # --- INÍCIO DA ADIÇÃO (Desenhar Botão Regenerar) ---
-        # (getattr é usado para evitar erro se 'nave' não tiver o atributo ainda)
+        # Desenhar Botão Regenerar
         is_regenerando = getattr(nave, 'esta_regenerando', False) 
         
         if is_regenerando:
@@ -400,14 +473,12 @@ def desenhar_hud(surface, nave, estado_jogo):
             texto_botao = "Vida Cheia"
         else:
             cor_botao = BRANCO
-            texto_botao = "Regenerar Vida (R)" # Adicionando (R) como dica de tecla
+            texto_botao = "Regenerar Vida (R)"
             
         pygame.draw.rect(surface, cor_botao, RECT_BOTAO_REGEN_HUD, border_radius=5)
-        # Usando FONT_RANKING (16) que é um pouco menor e cabe bem
         texto_surf = FONT_RANKING.render(texto_botao, True, PRETO) 
         texto_rect = texto_surf.get_rect(center=RECT_BOTAO_REGEN_HUD.center)
         surface.blit(texto_surf, texto_rect)
-        # --- FIM DA ADIÇÃO ---
 
 
 def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height, online_players, meu_nome_rede):
@@ -432,7 +503,10 @@ def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height,
     else:
         for bot in bots:
             pygame.draw.circle(surface, LARANJA_BOT, get_pos_minimapa(bot.posicao), 2)
-    if estado_jogo != "GAME_OVER":
+    
+    # --- INÍCIO: MODIFICAÇÃO (Não desenha jogador morto no minimapa) ---
+    if estado_jogo != "GAME_OVER" and player.vida_atual > 0:
+    # --- FIM: MODIFICAÇÃO ---
         pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(player.posicao), 3)
 
 def desenhar_ranking(surface, lista_top_5, nave_player):
@@ -468,15 +542,21 @@ def desenhar_terminal(surface, texto_atual, largura_tela, altura_tela):
     texto_renderizado = FONT_TERMINAL.render(f"> {texto_atual}{cursor}", True, BRANCO)
     surface.blit(texto_renderizado, (RECT_TERMINAL_INPUT.x + 10, RECT_TERMINAL_INPUT.y + (RECT_TERMINAL_INPUT.height - texto_renderizado.get_height()) // 2))
 
+# --- INÍCIO: MODIFICAÇÃO (desenhar_game_over) ---
+# Esta função agora é chamada no estado ESPECTADOR se o jogador estiver morto
 def desenhar_game_over(surface, largura_tela, altura_tela):
-    fundo_escuro = pygame.Surface((largura_tela, altura_tela), pygame.SRCALPHA)
-    fundo_escuro.fill(CINZA_LOJA_FUNDO)
-    surface.blit(fundo_escuro, (0, 0))
+    # Não desenha mais o fundo escuro, pois o jogo está visível por baixo
+    
+    # Desenha o texto "Você Morreu!"
     texto_game_over = FONT_TITULO.render("Você Morreu!", True, VERMELHO_VIDA_FUNDO)
     surface.blit(texto_game_over, (largura_tela // 2 - texto_game_over.get_width() // 2, altura_tela // 2 - 50))
+    
+    # Desenha o botão "Reiniciar"
     pygame.draw.rect(surface, BRANCO, RECT_BOTAO_REINICIAR, border_radius=5)
-    texto_botao = FONT_PADRAO.render("Reiniciar", True, PRETO)
+    texto_botao = FONT_PADRAO.render("Respawnar", True, PRETO) # Texto mudado
     surface.blit(texto_botao, (RECT_BOTAO_REINICIAR.centerx - texto_botao.get_width() // 2, RECT_BOTAO_REINICIAR.centery - texto_botao.get_height() // 2))
+# --- FIM: MODIFICAÇÃO ---
+
 
 def desenhar_tela_conexao(surface, nome_str, ip_str, input_ativo_key):
     surface.fill(PRETO)

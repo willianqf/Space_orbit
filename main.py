@@ -126,6 +126,18 @@ grupo_explosoes = grupo_efeitos_visuais
 nave_player = Player(s.MAP_WIDTH // 2, s.MAP_HEIGHT // 2, nome=nome_jogador_input)
 grupo_player.add(nave_player)
 
+# --- INÍCIO: MODIFICAÇÃO (Variáveis de Espectador) ---
+alvo_espectador = None # Sprite (offline)
+alvo_espectador_nome = None # String (online)
+# Dummy sprite para a câmera livre
+espectador_dummy_alvo = pygame.sprite.Sprite() 
+espectador_dummy_alvo.posicao = pygame.math.Vector2(s.MAP_WIDTH // 2, s.MAP_HEIGHT // 2)
+espectador_dummy_alvo.rect = pygame.Rect(0, 0, 1, 1) # Câmera precisa de um rect
+# Esta flag agora rastreia se entramos no modo espectador ENQUANTO VIVOS (relevante para online)
+jogador_esta_vivo_espectador = False 
+# --- FIM: MODIFICAÇÃO ---
+
+
 # --- (Globais de rastreamento online - Sem alterações) ---
 online_projectile_ids_last_frame = set()
 online_npcs_last_frame = {}
@@ -187,9 +199,9 @@ def network_listener_thread(sock):
                     for player_data in player_data_list:
                         if not player_data: continue 
                         
-                        # --- INÍCIO: MUDANÇA (Espera 17 partes com STATUS) ---
+                        # --- (Formato de 17 partes já esperado) ---
                         parts_player = player_data.split(':')
-                        if len(parts_player) == 17: # 8 campos base + 7 campos de upgrade + 2 campos de status
+                        if len(parts_player) == 17: 
                             try:
                                 nome = parts_player[0]
                                 new_player_states[nome] = {
@@ -207,7 +219,6 @@ def network_listener_thread(sock):
                                     'nivel_max_vida': int(parts_player[12]),
                                     'nivel_escudo': int(parts_player[13]),
                                     'nivel_aux': int(parts_player[14]),
-                                    # Novos campos de Status
                                     'is_lento': bool(int(parts_player[15])),
                                     'is_congelado': bool(int(parts_player[16])),
                                 }
@@ -215,9 +226,7 @@ def network_listener_thread(sock):
                                 print(f"Erro ao processar dados do jogador: {parts_player}")
                                 pass
                         else:
-                             # Não imprime mais o erro
-                            pass 
-                        # --- FIM: MUDANÇA ---
+                             pass 
                         
                     new_projectiles_list = []
                     proj_data_list = payload_proj.split(';')
@@ -225,20 +234,19 @@ def network_listener_thread(sock):
                     for proj_data in proj_data_list:
                         if not proj_data: continue
                         
-                        # --- INÍCIO: MUDANÇA (Espera 5 partes com TIPO_PROJ) ---
+                        # --- (Formato de 5 partes já esperado) ---
                         parts_proj = proj_data.split(':')
-                        if len(parts_proj) == 5: # ID:X:Y:TIPO:TIPO_PROJ
+                        if len(parts_proj) == 5: 
                             try:
                                 new_projectiles_list.append(
                                     {'id': parts_proj[0], 
                                      'x': float(parts_proj[1]), 
                                      'y': float(parts_proj[2]), 
-                                     'tipo': parts_proj[3], # 'player' ou 'npc'
-                                     'tipo_proj': parts_proj[4]} # 'normal', 'teleguiado', 'congelante', etc.
+                                     'tipo': parts_proj[3], 
+                                     'tipo_proj': parts_proj[4]} 
                                 )
                             except ValueError:
                                 pass 
-                        # --- FIM: MUDANÇA ---
 
                     new_npc_states = {}
                     npc_data_list = payload_npcs.split(';')
@@ -246,13 +254,13 @@ def network_listener_thread(sock):
                     for npc_data in npc_data_list:
                         if not npc_data: continue
                         
-                        # --- MUDANÇA: O formato (8 partes) já suporta minions ---
+                        # --- (Formato de 8 partes já esperado) ---
                         parts_npc = npc_data.split(':')
                         if len(parts_npc) == 8: 
                             try:
                                 npc_id = parts_npc[0]
                                 new_npc_states[npc_id] = {
-                                    'tipo': parts_npc[1], # 'bomba', 'minion_mothership', etc.
+                                    'tipo': parts_npc[1], 
                                     'x': float(parts_npc[2]),
                                     'y': float(parts_npc[3]),
                                     'angulo': float(parts_npc[4]),
@@ -262,7 +270,6 @@ def network_listener_thread(sock):
                                 }
                             except ValueError:
                                 pass 
-                        # --- FIM MUDANÇA ---
 
                     with network_state_lock:
                         online_players_states.clear()
@@ -289,7 +296,7 @@ def network_listener_thread(sock):
     listener_thread_running = False
     if estado_jogo != "MENU":
          print("[Thread de Rede] A regressar ao Menu Principal.")
-         estado_jogo = "MENU"
+         estado_jogo = "MENU" # --- MODIFICAÇÃO: Força volta ao Menu ---
 
 
 def tentar_conectar(ip, porta, nome):
@@ -402,6 +409,15 @@ def fechar_conexao():
 def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"): 
     """ Prepara o jogo, limpando grupos e resetando o jogador. """
     global estado_jogo, nave_player, max_bots_atual, dificuldade_jogo_atual
+    # --- INÍCIO: MODIFICAÇÃO (Resetar Espectador) ---
+    global jogador_esta_vivo_espectador, alvo_espectador, alvo_espectador_nome
+    
+    jogador_esta_vivo_espectador = False
+    alvo_espectador = None
+    alvo_espectador_nome = None
+    camera.set_zoom(1.0) # Garante que o zoom seja resetado
+    # --- FIM: MODIFICAÇÃO ---
+
 
     print("Reiniciando o Jogo...")
     
@@ -434,15 +450,14 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
             online_players_states.clear()
             online_projectiles.clear()
             online_npcs.clear() 
-            # --- INÍCIO: MUDANÇA (Estado inicial com 17 campos) ---
+            # --- (Estado inicial de 17 campos já esperado) ---
             online_players_states[MEU_NOME_REDE] = {
                 'x': spawn_x, 'y': spawn_y, 'angulo': 0, 'hp': 5.0, 'max_hp': 5, 'pontos': 0, 'esta_regenerando': False,
                 'pontos_upgrade_disponiveis': 0, 'total_upgrades_feitos': 0,
                 'nivel_motor': 1, 'nivel_dano': 1, 'nivel_max_vida': 1,
                 'nivel_escudo': 0, 'nivel_aux': 0,
-                'is_lento': False, 'is_congelado': False # Adiciona os novos status
+                'is_lento': False, 'is_congelado': False 
             }
-            # --- FIM: MUDANÇA ---
     else:
         print("Spawnando em posição aleatória (Modo Offline)...")
         margem_spawn = 100
@@ -476,7 +491,7 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     nave_player.posicao_alvo_mouse = None
     nave_player.ultimo_hit_tempo = 0
     nave_player.tempo_fim_lentidao = 0
-    nave_player.tempo_fim_congelamento = 0 # --- MUDANÇA ---
+    nave_player.tempo_fim_congelamento = 0 
     nave_player.rastro_particulas = []
     
     nave_player.parar_regeneracao() 
@@ -496,6 +511,13 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
 
 def respawn_player_offline(nave):
     global estado_jogo
+    # --- INÍCIO: MODIFICAÇÃO (Resetar Espectador) ---
+    global jogador_esta_vivo_espectador, alvo_espectador
+    jogador_esta_vivo_espectador = False
+    alvo_espectador = None
+    camera.set_zoom(1.0) # Garante que o zoom seja resetado
+    # --- FIM: MODIFICAÇÃO ---
+    
     print("Respawnando jogador (Offline)...")
 
     pos_referencia_bots = [bot.posicao for bot in grupo_bots]
@@ -535,7 +557,7 @@ def respawn_player_offline(nave):
     nave.posicao_alvo_mouse = None
     nave.ultimo_hit_tempo = 0
     nave.tempo_fim_lentidao = 0
-    nave.tempo_fim_congelamento = 0 # --- MUDANÇA ---
+    nave.tempo_fim_congelamento = 0 
     nave.rastro_particulas = []
     
     nave.parar_regeneracao() 
@@ -547,6 +569,13 @@ def respawn_player_offline(nave):
 def resetar_para_menu():
     """ Reseta o jogo de volta ao menu, fechando conexões. """
     global estado_jogo
+    # --- INÍCIO: MODIFICAÇÃO (Resetar Espectador) ---
+    global jogador_esta_vivo_espectador, alvo_espectador, alvo_espectador_nome
+    jogador_esta_vivo_espectador = False
+    alvo_espectador = None
+    alvo_espectador_nome = None
+    camera.set_zoom(1.0) # Garante que o zoom seja resetado
+    # --- FIM: MODIFICAÇÃO ---
     
     print("Voltando ao Menu Principal...")
     
@@ -662,15 +691,17 @@ while rodando:
     # 11. Tratamento de Eventos
     
     agora = pygame.time.get_ticks() 
+    
+    # --- INÍCIO: MODIFICAÇÃO (Usa nova função da câmera para clique) ---
     if estado_jogo == "JOGANDO" and client_socket and agora > nave_player.tempo_spawn_protecao_input:
         mouse_buttons = pygame.mouse.get_pressed()
         if mouse_buttons[0]: 
             mouse_pos_tela = pygame.mouse.get_pos()
             if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela) and not ui.RECT_BOTAO_REGEN_HUD.collidepoint(mouse_pos_tela):
-                camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
-                mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0],
-                                                      mouse_pos_tela[1] + camera_world_topleft[1])
+                # Usa a nova função da câmera
+                mouse_pos_mundo = camera.get_mouse_world_pos(mouse_pos_tela)
                 enviar_input_servidor(f"CLICK_MOVE|{int(mouse_pos_mundo.x)}|{int(mouse_pos_mundo.y)}")
+    # --- FIM: MODIFICAÇÃO ---
             
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -809,51 +840,107 @@ while rodando:
                             enviar_input_servidor("TOGGLE_REGEN")
                         else: # Modo offline
                             nave_player.toggle_regeneracao(grupo_efeitos_visuais)
+                    
+                    # --- INÍCIO: MODIFICAÇÃO (Clique esquerdo offline) ---
+                    elif not client_socket and agora > nave_player.tempo_spawn_protecao_input:
+                        mouse_pos_mundo = camera.get_mouse_world_pos(mouse_pos_tela)
+                        nave_player.posicao_alvo_mouse = mouse_pos_mundo
+                        nave_player.quer_mover_frente = False 
+                        nave_player.quer_mover_tras = False
+                    # --- FIM: MODIFICAÇÃO ---
+
                 
                 elif event.button == 3: # Direito (RMB)
                     if agora > nave_player.tempo_spawn_protecao_input:
-                        camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
-                        mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0],
-                                                              mouse_pos_tela[1] + camera_world_topleft[1])
+                        # --- INÍCIO: MODIFICAÇÃO (Usa nova função da câmera) ---
+                        mouse_pos_mundo = camera.get_mouse_world_pos(mouse_pos_tela)
+                        # --- FIM: MODIFICAÇÃO ---
+                        
                         if client_socket:
                             enviar_input_servidor(f"CLICK_TARGET|{int(mouse_pos_mundo.x)}|{int(mouse_pos_mundo.y)}")
                         else:
                             alvo_clicado = None
-                            # --- MUDANÇA: Agora bots estão no grupo 'grupo_bots' ---
                             todos_alvos_clicaveis = list(grupo_inimigos) + list(grupo_bots) + list(grupo_obstaculos)
-                            # --- FIM MUDANÇA ---
+                            
+                            # --- INÍCIO: MODIFICAÇÃO (Lógica de clique mais precisa) ---
+                            dist_min_sq = (s.TARGET_CLICK_SIZE / 2)**2
                             for alvo in todos_alvos_clicaveis:
-                                target_click_rect = pygame.Rect(0, 0, s.TARGET_CLICK_SIZE, s.TARGET_CLICK_SIZE)
-                                target_click_rect.center = alvo.posicao
-                                if target_click_rect.collidepoint(mouse_pos_mundo):
+                                dist_sq = alvo.posicao.distance_squared_to(mouse_pos_mundo)
+                                if dist_sq < dist_min_sq:
+                                    dist_min_sq = dist_sq
                                     alvo_clicado = alvo
-                                    break
+                            # --- FIM: MODIFICAÇÃO ---
                             nave_player.alvo_selecionado = alvo_clicado
-                
+        
+        # --- INÍCIO: MODIFICAÇÃO (Estado PAUSE) ---
         elif estado_jogo == "PAUSE":
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE: estado_jogo = "JOGANDO"; print("Jogo Retomado.")
+                if event.key == pygame.K_ESCAPE: 
+                    # Se estava espectador (vivo ou morto), volta para espectador
+                    if jogador_esta_vivo_espectador or nave_player.vida_atual <= 0:
+                        estado_jogo = "ESPECTADOR"
+                    else:
+                        estado_jogo = "JOGANDO"
+                    print("Jogo Retomado.")
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mouse_pos = pygame.mouse.get_pos()
                 
                 if ui.RECT_BOTAO_VOLTAR_MENU.collidepoint(mouse_pos):
                     resetar_para_menu()
+                
+                elif ui.RECT_BOTAO_ESPECTADOR.collidepoint(mouse_pos):
+                    print("Entrando no modo espectador (voluntário)...")
+                    estado_jogo = "ESPECTADOR"
                     
-                if ui.RECT_BOTAO_BOT_MENOS.collidepoint(mouse_pos):
-                    if max_bots_atual > 0:
-                        max_bots_atual -= 1
-                        print(f"Máximo de Bots reduzido para: {max_bots_atual}")
-                        if len(grupo_bots) > max_bots_atual:
-                             try:
-                                 bot_para_remover = random.choice(grupo_bots.sprites())
-                                 bot_para_remover.kill()
-                                 print(f"Bot {bot_para_remover.nome} removido.")
-                             except IndexError:
-                                 pass
-                elif ui.RECT_BOTAO_BOT_MAIS.collidepoint(mouse_pos):
-                    if max_bots_atual < s.MAX_BOTS_LIMITE_SUPERIOR:
-                        max_bots_atual += 1
-                        print(f"Máximo de Bots aumentado para: {max_bots_atual}")
+                    if client_socket:
+                        # ONLINE: Apenas nos marca como espectador localmente.
+                        # Nossa nave ainda existe no servidor.
+                        jogador_esta_vivo_espectador = True 
+                    else:
+                        # OFFLINE: "Mata" o jogador para removê-lo da lógica de alvo.
+                        nave_player.vida_atual = 0 
+                        jogador_esta_vivo_espectador = False # Estamos agora "mortos"
+                        
+                    alvo_espectador = None # Começa em modo livre
+                    alvo_espectador_nome = None
+                    espectador_dummy_alvo.posicao = nave_player.posicao.copy()
+
+                elif ui.RECT_BOTAO_RESPAWN_PAUSA.collidepoint(mouse_pos):
+                    # Só funciona se o jogador estiver morto
+                    if nave_player.vida_atual <= 0:
+                        print("Respawnando via menu de pausa...")
+                        if client_socket:
+                            enviar_input_servidor("RESPAWN_ME")
+                        else:
+                            respawn_player_offline(nave_player)
+                        # O estado_jogo mudará para "JOGANDO"
+                
+                elif ui.RECT_BOTAO_VOLTAR_NAVE.collidepoint(mouse_pos):
+                    if jogador_esta_vivo_espectador: # Só funciona se entramos vivos (online)
+                         print("Voltando à nave...")
+                         estado_jogo = "JOGANDO"
+                         jogador_esta_vivo_espectador = False
+                         alvo_espectador = None
+                         alvo_espectador_nome = None
+
+                # Lógica de Bots (offline)
+                if not client_socket:
+                    if ui.RECT_BOTAO_BOT_MENOS.collidepoint(mouse_pos):
+                        if max_bots_atual > 0:
+                            max_bots_atual -= 1
+                            print(f"Máximo de Bots reduzido para: {max_bots_atual}")
+                            if len(grupo_bots) > max_bots_atual:
+                                 try:
+                                     bot_para_remover = random.choice(grupo_bots.sprites())
+                                     bot_para_remover.kill()
+                                     print(f"Bot {bot_para_remover.nome} removido.")
+                                 except IndexError:
+                                     pass
+                    elif ui.RECT_BOTAO_BOT_MAIS.collidepoint(mouse_pos):
+                        if max_bots_atual < s.MAX_BOTS_LIMITE_SUPERIOR:
+                            max_bots_atual += 1
+                            print(f"Máximo de Bots aumentado para: {max_bots_atual}")
+        # --- FIM: MODIFICAÇÃO (Estado PAUSE) ---
 
         elif estado_jogo == "LOJA":
             if event.type == pygame.KEYDOWN and event.key == pygame.K_v: estado_jogo = "JOGANDO"; print("Fechando loja...")
@@ -886,36 +973,245 @@ while rodando:
                 else:
                     if len(variavel_texto_terminal) < 50: variavel_texto_terminal += event.unicode
 
-        elif estado_jogo == "GAME_OVER":
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                mouse_pos = pygame.mouse.get_pos()
-                if ui.RECT_BOTAO_REINICIAR.collidepoint(mouse_pos):
+        # --- INÍCIO: MODIFICAÇÃO (Estado ESPECTADOR) ---
+        elif estado_jogo == "ESPECTADOR":
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE: 
+                    estado_jogo = "PAUSE"; print("Jogo Pausado (do modo Espectador).")
+                    camera.set_zoom(1.0) # Reseta o zoom ao pausar
+                
+                # --- LÓGICA DE ZOOM (Z) ---
+                elif event.key == pygame.K_z:
+                     # Se 'Z' for pressionado, alterna o zoom
+                     if camera.zoom < 1.0:
+                         camera.set_zoom(1.0)
+                         print("[Espectador] Zoom Normal.")
+                     else:
+                         zoom_w = LARGURA_TELA / s.MAP_WIDTH
+                         zoom_h = ALTURA_TELA / s.MAP_HEIGHT
+                         camera.set_zoom(min(zoom_w, zoom_h))
+                         print("[Espectador] Visão do Mapa Ativada.")
+                     # Ao ativar/desativar zoom, força o modo livre
+                     alvo_espectador = None
+                     alvo_espectador_nome = None
+                
+                # --- LÓGICA DE CICLAGEM (Q/E) ---
+                elif event.key == pygame.K_e or event.key == pygame.K_q:
+                    camera.set_zoom(1.0) # Sai do modo zoom ao ciclar
+                    
+                    lista_alvos_vivos = []
+                    lista_nomes_alvos_vivos = [] # for online
+                    
+                    if client_socket:
+                        with network_state_lock:
+                            # Ordena por nome para consistência
+                            nomes_ordenados = sorted(online_players_states.keys())
+                            for nome in nomes_ordenados:
+                                state = online_players_states[nome]
+                                if state.get('hp', 0) > 0:
+                                    # Adiciona jogador se vivo
+                                    lista_alvos_vivos.append({'nome': nome, 'state': state})
+                                    lista_nomes_alvos_vivos.append(nome)
+                    else: # Offline
+                        # Adiciona jogador se estiver vivo (spectate voluntário)
+                        if jogador_esta_vivo_espectador and nave_player.vida_atual > 0:
+                             lista_alvos_vivos.append(nave_player)
+                        # Adiciona bots vivos
+                        lista_alvos_vivos.extend([bot for bot in grupo_bots if bot.vida_atual > 0])
+
+                    if not lista_alvos_vivos:
+                        print("[Espectador] Nenhum alvo vivo para ciclar.")
+                        continue # No targets, do nothing
+                        
+                    # Encontrar índice atual
+                    current_index = -1
+                    if client_socket and alvo_espectador_nome:
+                        if alvo_espectador_nome in lista_nomes_alvos_vivos:
+                            current_index = lista_nomes_alvos_vivos.index(alvo_espectador_nome)
+                    elif not client_socket and alvo_espectador:
+                        if alvo_espectador in lista_alvos_vivos:
+                            current_index = lista_alvos_vivos.index(alvo_espectador)
+                    
+                    # Calcular novo índice
+                    if event.key == pygame.K_e: # Próximo
+                        current_index += 1
+                        if current_index >= len(lista_alvos_vivos):
+                            current_index = 0 # Wrap around
+                    elif event.key == pygame.K_q: # Anterior
+                        current_index -= 1
+                        if current_index < 0:
+                            current_index = len(lista_alvos_vivos) - 1 # Wrap around
+                            
+                    # Definir novo alvo
+                    if client_socket:
+                        novo_alvo_dict = lista_alvos_vivos[current_index]
+                        alvo_espectador_nome = novo_alvo_dict['nome']
+                        alvo_espectador = None
+                        print(f"[Espectador] Seguindo (Online): {alvo_espectador_nome}")
+                    else:
+                        novo_alvo_sprite = lista_alvos_vivos[current_index]
+                        alvo_espectador = novo_alvo_sprite
+                        alvo_espectador_nome = None
+                        print(f"[Espectador] Seguindo (Offline): {alvo_espectador.nome}")
+            
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_pos_tela = pygame.mouse.get_pos()
+                
+                # 1. Checar Botão de Respawn (só se estiver morto)
+                if (not jogador_esta_vivo_espectador and 
+                    nave_player.vida_atual <= 0 and 
+                    ui.RECT_BOTAO_REINICIAR.collidepoint(mouse_pos_tela)):
+                    
                     if client_socket:
                         enviar_input_servidor("RESPAWN_ME")
                     else:
                         respawn_player_offline(nave_player)
+                        # respawn_player_offline já define estado_jogo = "JOGANDO"
+
+                # 2. Checar Clique para Seguir (Botão Esquerdo)
+                elif event.button == 1:
+                    camera.set_zoom(1.0) # Sai do modo zoom
+                    mouse_pos_mundo = camera.get_mouse_world_pos(mouse_pos_tela)
+                    
+                    alvo_clicado_sprite = None
+                    alvo_clicado_nome = None
+
+                    if client_socket:
+                        with network_state_lock:
+                            dist_min_sq = (s.TARGET_CLICK_SIZE * 2)**2
+                            for nome, state in online_players_states.items():
+                                if state.get('hp', 0) <= 0: continue
+                                dist_sq = (state['x'] - mouse_pos_mundo.x)**2 + (state['y'] - mouse_pos_mundo.y)**2
+                                if dist_sq < dist_min_sq:
+                                    dist_min_sq = dist_sq
+                                    alvo_clicado_nome = nome
+                        if alvo_clicado_nome:
+                            print(f"[Espectador] Seguindo (Online): {alvo_clicado_nome}")
+                            alvo_espectador_nome = alvo_clicado_nome
+                            alvo_espectador = None
+                    
+                    else: # Modo Offline
+                        alvos_offline_vivos = []
+                        if jogador_esta_vivo_espectador:
+                             alvos_offline_vivos.append(nave_player)
+                        alvos_offline_vivos.extend([bot for bot in grupo_bots if bot.vida_atual > 0])
+                        
+                        dist_min_sq = (s.TARGET_CLICK_SIZE * 2)**2
+                        for alvo in alvos_offline_vivos:
+                            dist_sq = alvo.posicao.distance_squared_to(mouse_pos_mundo)
+                            if dist_sq < dist_min_sq:
+                                dist_min_sq = dist_sq
+                                alvo_clicado_sprite = alvo
+                        
+                        if alvo_clicado_sprite:
+                            print(f"[Espectador] Seguindo (Offline): {alvo_clicado_sprite.nome}")
+                            alvo_espectador = alvo_clicado_sprite
+                            alvo_espectador_nome = None
+
+                # 3. Checar Modo Livre (Botão Direito)
+                elif event.button == 3:
+                    print("[Espectador] Modo Câmera Livre.")
+                    camera.set_zoom(1.0) # Sai do modo zoom
+                    alvo_espectador = None
+                    alvo_espectador_nome = None
+        # --- FIM: MODIFICAÇÃO ---
 
 
     # 12. Lógica de Atualização
+    
+    # --- INÍCIO: MODIFICAÇÃO (Lógica da Câmera) ---
+    alvo_camera_final = None
+
+    if estado_jogo == "ESPECTADOR":
+        target_found = False
+        
+        # 1. Se zoom do mapa está ativo, ignora alvos e foca no centro
+        if camera.zoom < 1.0:
+            espectador_dummy_alvo.posicao.x = s.MAP_WIDTH / 2
+            espectador_dummy_alvo.posicao.y = s.MAP_HEIGHT / 2
+            alvo_camera_final = espectador_dummy_alvo
+            target_found = True
+        
+        # 2. Tenta seguir alvo online (se houver)
+        elif client_socket and alvo_espectador_nome:
+            with network_state_lock:
+                state = online_players_states.get(alvo_espectador_nome)
+                if state and state.get('hp', 0) > 0:
+                    espectador_dummy_alvo.posicao = espectador_dummy_alvo.posicao.lerp(
+                        pygame.math.Vector2(state['x'], state['y']), 0.5
+                    )
+                    alvo_camera_final = espectador_dummy_alvo
+                    target_found = True
+                else:
+                    alvo_espectador_nome = None # Alvo morreu ou desconectou
+
+        # 3. Tenta seguir alvo offline (se houver)
+        elif not client_socket and alvo_espectador:
+            if alvo_espectador.groups() and alvo_espectador.vida_atual > 0:
+                alvo_camera_final = alvo_espectador # Segue o sprite diretamente
+                target_found = True
+            else:
+                alvo_espectador = None # Alvo morreu
+
+        # 4. Modo Câmera Livre (Zoom 1.0)
+        if not target_found:
+            alvo_espectador = None
+            alvo_espectador_nome = None
+            
+            # Movimentação livre com WASD
+            teclas = pygame.key.get_pressed()
+            velocidade_espectador = 20 
+            
+            if teclas[pygame.K_w] or teclas[pygame.K_UP]: 
+                espectador_dummy_alvo.posicao.y -= velocidade_espectador
+            if teclas[pygame.K_s] or teclas[pygame.K_DOWN]: 
+                espectador_dummy_alvo.posicao.y += velocidade_espectador
+            if teclas[pygame.K_a] or teclas[pygame.K_LEFT]: 
+                espectador_dummy_alvo.posicao.x -= velocidade_espectador
+            if teclas[pygame.K_d] or teclas[pygame.K_RIGHT]: 
+                espectador_dummy_alvo.posicao.x += velocidade_espectador
+            
+            # Limita ao Mapa
+            meia_largura_tela = LARGURA_TELA / (2 * camera.zoom) # Ajusta pela tela
+            meia_altura_tela = ALTURA_TELA / (2 * camera.zoom)
+            espectador_dummy_alvo.posicao.x = max(meia_largura_tela, min(espectador_dummy_alvo.posicao.x, s.MAP_WIDTH - meia_largura_tela))
+            espectador_dummy_alvo.posicao.y = max(meia_altura_tela, min(espectador_dummy_alvo.posicao.y, s.MAP_HEIGHT - meia_altura_tela))
+
+            alvo_camera_final = espectador_dummy_alvo
+    
+    else: # JOGANDO, PAUSE, MENU, etc.
+         camera.set_zoom(1.0) # Garante que o zoom está 1.0
+         alvo_camera_final = nave_player # Câmera padrão segue o jogador
+    
+    # Atualiza a câmera com o alvo decidido
+    camera.update(alvo_camera_final)
+    # --- FIM: MODIFICAÇÃO (Lógica da Câmera) ---
+
+
     if estado_jogo not in ["MENU", "PAUSE", "GET_NAME", "GET_SERVER_INFO"]:
-        camera.update(nave_player)
+        # camera.update(nave_player) # <--- REMOVIDO (Movido para cima)
 
         if client_socket:
             with network_state_lock:
                 my_state = online_players_states.get(MEU_NOME_REDE)
                 if my_state:
                     nova_pos = pygame.math.Vector2(my_state['x'], my_state['y'])
-                    if nave_player.vida_atual > 0:
+                    
+                    if estado_jogo == "JOGANDO" and nave_player.vida_atual > 0:
                         nave_player.posicao = nave_player.posicao.lerp(nova_pos, 0.4) 
                     
                     nave_player.angulo = my_state['angulo']
                     
                     nova_vida = my_state.get('hp', nave_player.vida_atual)
                     
-                    if nave_player.vida_atual <= 0 and nova_vida > 0 and estado_jogo == "GAME_OVER":
+                    if estado_jogo == "ESPECTADOR" and not jogador_esta_vivo_espectador and nova_vida > 0:
                         print("[CLIENTE] Respawn detectado! Voltando ao jogo.")
                         estado_jogo = "JOGANDO"
                         nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
+                        jogador_esta_vivo_espectador = False # Não estamos mais espectando vivos
+                        alvo_espectador_nome = None # Limpa alvo
+                        camera.set_zoom(1.0) # Garante reset do zoom
+
 
                     if nova_vida < nave_player.vida_atual:
                          nave_player.ultimo_hit_tempo = pygame.time.get_ticks()
@@ -926,7 +1222,7 @@ while rodando:
                     elif not is_server_regenerando and nave_player.esta_regenerando:
                         nave_player.parar_regeneracao()
                          
-                    # --- INÍCIO: SINCRONIZAR ESTADO LOCAL COM SERVIDOR ---
+                    # --- (Sincronização de Estado Local - Sem alterações) ---
                     nave_player.vida_atual = nova_vida
                     nave_player.max_vida = my_state.get('max_hp', nave_player.max_vida)
                     nave_player.pontos = my_state.get('pontos', nave_player.pontos)
@@ -938,20 +1234,13 @@ while rodando:
                     nave_player.nivel_max_vida = my_state.get('nivel_max_vida', 1)
                     nave_player.nivel_escudo = my_state.get('nivel_escudo', 0)
                     
-                    # --- MUDANÇA: Sincroniza status de lento/congelado ---
                     agora = pygame.time.get_ticks()
                     if my_state.get('is_lento', False):
-                        # Define o tempo de lentidão para 1 segundo no futuro
-                        # (Isso garante que o efeito visual apareça)
                         nave_player.tempo_fim_lentidao = agora + 1000 
                     
                     if my_state.get('is_congelado', False):
-                        # Define o tempo de congelamento
                         nave_player.tempo_fim_congelamento = agora + 1000
-                    # --- FIM MUDANÇA ---
                     
-                    
-                    # --- (Sincronização de Auxiliares - Sem alterações) ---
                     num_aux_servidor = my_state.get('nivel_aux', 0)
                     num_aux_local = len(nave_player.grupo_auxiliares_ativos)
 
@@ -975,38 +1264,45 @@ while rodando:
                             print("Resetando sprites auxiliares (Respawn)")
                     
                     nave_player.nivel_aux = num_aux_servidor
-                    # --- FIM: SINCRONIZAÇÃO DE AUXILIARES VISUAIS ---
-                    
                     nave_player.max_vida = 4 + nave_player.nivel_max_vida
-                    # --- FIM: SINCRONIZAR ESTADO ---
 
-
-                    if nave_player.vida_atual <= 0 and estado_jogo != "GAME_OVER":
-                        estado_jogo = "GAME_OVER"
-                        print("[CLIENTE] Você morreu!")
+                    if nave_player.vida_atual <= 0 and estado_jogo == "JOGANDO":
+                        estado_jogo = "ESPECTADOR" 
+                        jogador_esta_vivo_espectador = False 
+                        alvo_espectador = None 
+                        alvo_espectador_nome = None
+                        espectador_dummy_alvo.posicao = nave_player.posicao.copy() 
+                        
+                        print("[CLIENTE] Você morreu! Entrando em modo espectador.")
                         enviar_input_servidor("W_UP"); enviar_input_servidor("A_UP")
                         enviar_input_servidor("S_UP"); enviar_input_servidor("D_UP")
                         enviar_input_servidor("SPACE_UP")
             
-            nave_player.rect.center = nave_player.posicao
-            
-            # (nave_player.update() NÃO é chamado no modo online)
+            if estado_jogo != "ESPECTADOR":
+                nave_player.rect.center = nave_player.posicao
             
 
         
+        # --- INÍCIO: MODIFICAÇÃO (lista_alvos_naves) ---
+        lista_alvos_naves = []
+        # Só adiciona o jogador se ele estiver vivo E não estiver espectando vivo
+        if nave_player.vida_atual > 0 and not jogador_esta_vivo_espectador:
+            lista_alvos_naves.append(nave_player)
+        # Só adiciona bots vivos
+        lista_alvos_naves.extend([bot for bot in grupo_bots if bot.vida_atual > 0])
+        # --- FIM: MODIFICAÇÃO ---
+
         if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
-            lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + [nave_player] + list(grupo_bots)
-        else: # (PAUSE, GAME_OVER, etc.)
+            # lista_todos_alvos_para_aux = lista_alvos_naves + list(grupo_inimigos) + list(grupo_obstaculos) # <-- BUG de lógica antiga
+             lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + [nave_player] + list(grupo_bots)
+        else: 
             lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + list(grupo_bots)
 
 
         # --- LÓGICA DE JOGO OFFLINE ---
         if client_socket is None: 
             
-            if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
-                lista_alvos_naves = [nave_player] + list(grupo_bots)
-            else: # (PAUSE, GAME_OVER, etc.)
-                lista_alvos_naves = list(grupo_bots)
+            # (lista_alvos_naves já foi definida acima)
 
             if estado_jogo == "JOGANDO" and len(grupo_bots) < max_bots_atual: 
                 spawnar_bot(nave_player.posicao, dificuldade_jogo_atual)
@@ -1020,12 +1316,14 @@ while rodando:
             
             if estado_jogo == "JOGANDO":
                 if len(grupo_obstaculos) < s.MAX_OBSTACULOS: spawnar_obstaculo(nave_player.posicao)
-                contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership, MinionCongelante, BossCongelante))) # <-- MUDANÇA
+                contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership, MinionCongelante, BossCongelante))) 
                 if contagem_inimigos_normais < s.MAX_INIMIGOS: spawnar_inimigo_aleatorio(nave_player.posicao)
                 if len(grupo_motherships) < s.MAX_MOTHERSHIPS: spawnar_mothership(nave_player.posicao)
                 if len(grupo_boss_congelante) < s.MAX_BOSS_CONGELANTE: spawnar_boss_congelante(nave_player.posicao)
             
+            # --- INÍCIO: MODIFICAÇÃO (Só checa colisão se vivo) ---
             if estado_jogo == "JOGANDO":
+            # --- FIM: MODIFICAÇÃO ---
                 colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_obstaculos, True, True)
                 for _, obst_list in colisoes.items():
                     for obst in obst_list: 
@@ -1038,7 +1336,7 @@ while rodando:
                             nave_player.ganhar_pontos(inimigo.pontos_por_morte);
                             if isinstance(inimigo, (InimigoMothership, BossCongelante)):
                                 if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
-                                if isinstance(inimigo, BossCongelante): inimigo.grupo_minions_congelantes.empty() # --- MUDANÇA ---
+                                if isinstance(inimigo, BossCongelante): inimigo.grupo_minions_congelantes.empty() 
                                 if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
                                     tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
                             else:
@@ -1068,7 +1366,7 @@ while rodando:
                             owner_do_tiro.ganhar_pontos(inimigo.pontos_por_morte);
                             if isinstance(inimigo, (InimigoMothership, BossCongelante)):
                                 if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
-                                if isinstance(inimigo, BossCongelante): inimigo.grupo_minions_congelantes.empty() # --- MUDANÇA ---
+                                if isinstance(inimigo, BossCongelante): inimigo.grupo_minions_congelantes.empty() 
                                 if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
                                     tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
                             else:
@@ -1110,7 +1408,7 @@ while rodando:
                         bot.ganhar_pontos(inimigo.pontos_por_morte)
                         if isinstance(inimigo, (InimigoMothership, BossCongelante)):
                             if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
-                            if isinstance(inimigo, BossCongelante): inimigo.grupo_minions_congelantes.empty() # --- MUDANÇA ---
+                            if isinstance(inimigo, BossCongelante): inimigo.grupo_minions_congelantes.empty() 
                             if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
                                 tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
                         else:
@@ -1120,7 +1418,8 @@ while rodando:
         for bot in grupo_bots: 
             bot.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_bots, estado_jogo, nave_player, client_socket)
         
-        nave_player.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_player, estado_jogo, nave_player, client_socket)
+        if nave_player.vida_atual > 0:
+            nave_player.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_player, estado_jogo, nave_player, client_socket)
         
         grupo_efeitos_visuais.update() 
 
@@ -1136,31 +1435,41 @@ while rodando:
         colisoes_proj_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_inimigos, False)
         for proj in colisoes_proj_inimigo_player:
             if isinstance(proj, ProjetilCongelante):
-                nave_player.aplicar_congelamento(s.DURACAO_CONGELAMENTO) # --- MUDANÇA: Nome da função corrigido ---
+                nave_player.aplicar_congelamento(s.DURACAO_CONGELAMENTO) 
             elif isinstance(proj, ProjetilTeleguiadoLento):
                 nave_player.aplicar_lentidao(6000)
             else:
                 if nave_player.foi_atingido(1, estado_jogo, proj.posicao):
-                     estado_jogo = "GAME_OVER"
+                    estado_jogo = "ESPECTADOR"
+                    jogador_esta_vivo_espectador = False
+                    alvo_espectador = None
+                    espectador_dummy_alvo.posicao = nave_player.posicao.copy()
             proj.kill()
         
         colisoes_proj_bot_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_bots, True)
         for proj in colisoes_proj_bot_player:
             if proj.owner != nave_player: 
                 if nave_player.foi_atingido(proj.dano, estado_jogo, proj.posicao):
-                     estado_jogo = "GAME_OVER" 
+                     estado_jogo = "ESPECTADOR" 
+                     jogador_esta_vivo_espectador = False
+                     alvo_espectador = None
+                     espectador_dummy_alvo.posicao = nave_player.posicao.copy()
 
         colisoes_ram_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_inimigos, False)
         for inimigo in colisoes_ram_inimigo_player:
             dano = 1 if not isinstance(inimigo, InimigoBomba) else inimigo.DANO_EXPLOSAO
             if nave_player.foi_atingido(dano, estado_jogo, inimigo.posicao):
-                estado_jogo = "GAME_OVER"
+                estado_jogo = "ESPECTADOR"
+                jogador_esta_vivo_espectador = False
+                alvo_espectador = None
+                espectador_dummy_alvo.posicao = nave_player.posicao.copy()
+                
             morreu = inimigo.foi_atingido(1)
             if morreu:
                 nave_player.ganhar_pontos(inimigo.pontos_por_morte)
                 if isinstance(inimigo, (InimigoMothership, BossCongelante)):
                     if isinstance(inimigo, InimigoMothership): inimigo.grupo_minions.empty()
-                    if isinstance(inimigo, BossCongelante): inimigo.grupo_minions_congelantes.empty() # --- MUDANÇA ---
+                    if isinstance(inimigo, BossCongelante): inimigo.grupo_minions_congelantes.empty() 
                     if tocar_som_posicional and s.SOM_EXPLOSAO_BOSS:
                         tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
                 else:
@@ -1170,7 +1479,10 @@ while rodando:
         colisoes_ram_bot_player = pygame.sprite.spritecollide(nave_player, grupo_bots, False)
         for bot in colisoes_ram_bot_player:
             if nave_player.foi_atingido(1, estado_jogo, bot.posicao):
-                estado_jogo = "GAME_OVER"
+                estado_jogo = "ESPECTADOR"
+                jogador_esta_vivo_espectador = False
+                alvo_espectador = None
+                espectador_dummy_alvo.posicao = nave_player.posicao.copy()
             bot.foi_atingido(1, estado_jogo, nave_player.posicao)
 
     # 13. Desenho
@@ -1185,11 +1497,14 @@ while rodando:
     
     else: 
         tela.fill(s.PRETO)
+        
+        # --- INÍCIO: MODIFICAÇÃO (Parallax segue a câmera) ---
+        pos_camera = alvo_camera_final.posicao
         for pos_base, raio, parallax_fator in lista_estrelas:
-            pos_jogador = nave_player.posicao
-            pos_tela_x = (pos_base.x - (pos_jogador.x * parallax_fator)) % LARGURA_TELA
-            pos_tela_y = (pos_base.y - (pos_jogador.y * parallax_fator)) % ALTURA_TELA
+            pos_tela_x = (pos_base.x - (pos_camera.x * parallax_fator)) % LARGURA_TELA
+            pos_tela_y = (pos_base.y - (pos_camera.y * parallax_fator)) % ALTURA_TELA
             pygame.draw.circle(tela, s.CORES_ESTRELAS[raio - 1], (int(pos_tela_x), int(pos_tela_y)), raio)
+        # --- FIM: MODIFICAÇÃO ---
 
         # Sprites do Jogo
         for obst in grupo_obstaculos: tela.blit(obst.image, camera.apply(obst.rect))
@@ -1209,7 +1524,6 @@ while rodando:
             
             for proj in new_projectiles:
                 pos_som = pygame.math.Vector2(proj['x'], proj['y'])
-                # --- MUDANÇA: Tocar som baseado no tipo de projétil ---
                 tipo_som = proj.get('tipo_proj', 'normal')
                 som_a_tocar = None
                 vol_base = 0.4
@@ -1218,10 +1532,10 @@ while rodando:
                     if tipo_som == 'congelante':
                         som_a_tocar = s.SOM_TIRO_CONGELANTE
                         vol_base = VOLUME_BASE_TIRO_CONGELANTE
-                    elif tipo_som == 'teleguiado_lento': # Som do atordoador (usando simples por enquanto)
+                    elif tipo_som == 'teleguiado_lento': 
                         som_a_tocar = s.SOM_TIRO_INIMIGO_SIMPLES
                         vol_base = VOLUME_BASE_TIRO_INIMIGO
-                    else: # 'normal', 'tiro_rapido', etc.
+                    else: 
                         som_a_tocar = s.SOM_TIRO_INIMIGO_SIMPLES
                         vol_base = VOLUME_BASE_TIRO_INIMIGO
                 else: # 'player'
@@ -1229,31 +1543,23 @@ while rodando:
                     vol_base = VOLUME_BASE_TIRO_PLAYER
                 
                 tocar_som_posicional(som_a_tocar, pos_som, nave_player.posicao, vol_base)
-                # --- FIM MUDANÇA ---
 
             current_npc_ids = set(online_npcs_copy.keys())
             dead_npc_states = [npc for npc_id, npc in online_npcs_last_frame.items() if npc_id not in current_npc_ids]
             
             for npc in dead_npc_states:
                 pos_npc = pygame.math.Vector2(npc['x'], npc['y'])
-                # --- INÍCIO DA MODIFICAÇÃO: Explosão Maior (100) para 'bomba' ---
-                
-                
                 tamanho_padrao_explosao = npc['tamanho'] // 2 + 5
                 
                 if npc['tipo'] == 'bomba':
-                    # O tamanho da bomba (tamanho) é 25. Somamos 75 para dar 100.
                     tamanho_padrao_explosao = npc['tamanho'] + 75 
                 
                 explosao = Explosao(pos_npc, tamanho_padrao_explosao)
                 
-                # --- MUDANÇA: Tocar som de explosão de Boss ---
                 if npc['tipo'] in ['mothership', 'boss_congelante']:
                     tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
                 else:
                     tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
-                # --- FIM MUDANÇA ---
-
 
             current_player_names = set(online_players_copy.keys())
             dead_player_states = [player for name, player in online_players_last_frame.items() if name not in current_player_names]
@@ -1265,15 +1571,15 @@ while rodando:
                  tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_player, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
 
             for nome, state in online_players_copy.items():
-                if nome == MEU_NOME_REDE:
+                # --- MODIFICAÇÃO: Não desenha nosso "fantasma" se estivermos mortos ---
+                if nome == MEU_NOME_REDE and estado_jogo == "ESPECTADOR" and not jogador_esta_vivo_espectador:
                     continue 
+                    
                 if state.get('hp', 0) <= 0:
                     continue 
                     
-                # --- MUDANÇA: Desenha Bots com cor diferente ---
                 imagem_base_outro = nave_player.imagem_original
-                if "Bot_" in nome: # Se é um bot
-                    # (Precisamos recriar a imagem do bot aqui)
+                if "Bot_" in nome: 
                     temp_surf = pygame.Surface((40, 40), pygame.SRCALPHA)
                     centro_x = 20; centro_y = 20;
                     ponto_topo = (centro_x, centro_y - 15); ponto_base_esq = (centro_x - 15, centro_y + 15); ponto_base_dir = (centro_x + 15, centro_y + 15)
@@ -1281,17 +1587,14 @@ while rodando:
                     ponta_largura = 4; ponta_altura = 8;
                     pygame.draw.rect(temp_surf, s.PONTA_NAVE, (ponto_topo[0] - ponta_largura / 2, ponto_topo[1] - ponta_altura, ponta_largura, ponta_altura))
                     imagem_base_outro = temp_surf
-                # --- FIM MUDANÇA ---
                     
                 img_rotacionada = pygame.transform.rotate(imagem_base_outro, state['angulo'])
                 pos_rect = img_rotacionada.get_rect(center=(state['x'], state['y']))
                 
-                # --- MUDANÇA: Aplica efeito de congelado/lento em outros ---
                 if state.get('is_congelado', False):
                     img_rotacionada.fill(s.AZUL_CONGELANTE, special_flags=pygame.BLEND_RGB_ADD)
                 elif state.get('is_lento', False):
                     img_rotacionada.fill(s.ROXO_TIRO_LENTO, special_flags=pygame.BLEND_RGB_MULT)
-                # --- FIM MUDANÇA ---
                 
                 tela.blit(img_rotacionada, camera.apply(pos_rect))
                 
@@ -1325,8 +1628,7 @@ while rodando:
             for proj_dict in online_projectiles_copy: 
                 x, y, tipo, tipo_proj = proj_dict['x'], proj_dict['y'], proj_dict['tipo'], proj_dict['tipo_proj']
                 
-                # --- MUDANÇA: Desenha projéteis com cores corretas ---
-                cor = s.VERMELHO_TIRO # Padrão
+                cor = s.VERMELHO_TIRO 
                 raio = 5
                 
                 if tipo == 'npc':
@@ -1336,17 +1638,20 @@ while rodando:
                     elif tipo_proj == 'teleguiado_lento':
                         cor = s.ROXO_TIRO_LENTO
                         raio = 5
-                    else: # normal, rapido, etc.
+                    else: 
                         cor = s.LARANJA_TIRO_INIMIGO
                         raio = 4
                 elif tipo == 'player':
-                    # (Aqui você pode adicionar lógica se o projétil do player mudar de cor)
                     cor = s.VERMELHO_TIRO
                     raio = 5
                 
-                pos_tela = camera.apply(pygame.Rect(x, y, 0, 0)).topleft
-                pygame.draw.circle(tela, cor, pos_tela, raio) 
-                # --- FIM MUDANÇA ---
+                # --- INÍCIO: MODIFICAÇÃO (Usa camera.apply para projéteis) ---
+                # Isso corrige o zoom para projéteis
+                rect_proj = pygame.Rect(x-raio, y-raio, raio*2, raio*2)
+                rect_proj_tela = camera.apply(rect_proj)
+                # Desenha o círculo no centro do rect escalado
+                pygame.draw.circle(tela, cor, rect_proj_tela.center, max(1, int(raio * camera.zoom))) 
+                # --- FIM: MODIFICAÇÃO ---
             
             for npc_id, state in online_npcs_copy.items():
                 tamanho = state.get('tamanho', 30) 
@@ -1354,7 +1659,6 @@ while rodando:
                 base_img = pygame.Surface((tamanho, tamanho), pygame.SRCALPHA)
                 cor = s.VERMELHO_PERSEGUIDOR 
                 
-                # --- MUDANÇA: Desenha os novos tipos de NPC ---
                 if tipo == 'boss_congelante':
                     cor = s.AZUL_CONGELANTE
                     centro = tamanho // 2
@@ -1374,7 +1678,6 @@ while rodando:
                     ponto_base_esq = (centro - tamanho / 2, centro + tamanho / 2)
                     ponto_base_dir = (centro + tamanho / 2, centro + tamanho / 2)
                     pygame.draw.polygon(base_img, cor, [ponto_topo, ponto_base_esq, ponto_base_dir])
-                # --- FIM MUDANÇA ---
                 elif tipo == 'bomba':
                     cor = s.AMARELO_BOMBA
                     base_img.fill(cor)
@@ -1390,7 +1693,7 @@ while rodando:
                 elif tipo == 'rapido':
                     cor = s.LARANJA_RAPIDO
                     base_img.fill(cor)
-                else: # 'perseguidor'
+                else: 
                     base_img.fill(cor)
                     
                 img_rotacionada = pygame.transform.rotate(base_img, state['angulo'])
@@ -1413,9 +1716,12 @@ while rodando:
                     pygame.draw.rect(tela, s.VERDE_VIDA, camera.apply(rect_vida_mundo))
         else:
             # Modo Offline: Desenha os bots e inimigos locais
-            for inimigo in grupo_inimigos: inimigo.desenhar_vida(tela, camera); tela.blit(inimigo.image, camera.apply(inimigo.rect))
+            for inimigo in grupo_inimigos: 
+                inimigo.desenhar_vida(tela, camera)
+                tela.blit(inimigo.image, camera.apply(inimigo.rect))
             for bot in grupo_bots:
-                bot.desenhar(tela, camera); bot.desenhar_vida(tela, camera)
+                bot.desenhar(tela, camera)
+                bot.desenhar_vida(tela, camera)
                 bot.desenhar_nome(tela, camera)
                 for aux in bot.grupo_auxiliares_ativos: aux.desenhar(tela, camera)
             
@@ -1423,59 +1729,113 @@ while rodando:
             for proj in grupo_projeteis_bots: tela.blit(proj.image, camera.apply(proj.rect))
             for proj in grupo_projeteis_inimigos: tela.blit(proj.image, camera.apply(proj.rect))
         
-        # Desenha o nosso jogador (Sempre)
-        if estado_jogo != "GAME_OVER": 
-            # --- MUDANÇA: Desenha efeitos de status no jogador ---
-            nave_player.desenhar(tela, camera, client_socket) # Passa o client_socket
-            # --- FIM MUDANÇA ---
+        # --- INÍCIO: MODIFICAÇÃO (Desenho do Jogador) ---
+        jogador_visivel = False
+        if estado_jogo == "JOGANDO":
+            jogador_visivel = True
+        elif estado_jogo == "ESPECTADOR" and jogador_esta_vivo_espectador: # Se entrou vivo (online)
+            jogador_visivel = True
+
+        if jogador_visivel: 
+            nave_player.desenhar(tela, camera, client_socket) 
             nave_player.desenhar_vida(tela, camera)
             nave_player.desenhar_nome(tela, camera)
             
             for aux in nave_player.grupo_auxiliares_ativos: aux.desenhar(tela, camera)
+        # --- FIM: MODIFICAÇÃO ---
         
         for efeito in grupo_efeitos_visuais:
             if isinstance(efeito, NaveRegeneradora):
                 efeito.desenhar(tela, camera)
             else: 
-                efeito.draw(tela, camera)
+                efeito.draw(tela, camera) # Explosões
 
-        ui.desenhar_hud(tela, nave_player, estado_jogo)
+        # --- INÍCIO: MODIFICAÇÃO (Desenho de UI) ---
         
-        online_players_copy = {}
-        if client_socket:
-             with network_state_lock:
-                 online_players_copy = online_players_states.copy()
+        if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
+             ui.desenhar_hud(tela, nave_player, estado_jogo)
         
-        ui.desenhar_minimapa(tela, nave_player, grupo_bots, estado_jogo, s.MAP_WIDTH, s.MAP_HEIGHT, online_players_copy, MEU_NOME_REDE)
-        
-        if client_socket:
-            class RankingEntry:
-                def __init__(self, nome, pontos):
-                    self.nome = nome
-                    self.pontos = pontos
-            lista_ranking = []
-            for nome, state in online_players_copy.items():
-                lista_ranking.append(RankingEntry(nome, state.get('pontos', 0)))
-            lista_ordenada = sorted(lista_ranking, key=lambda entry: entry.pontos, reverse=True)
-            top_5 = lista_ordenada[:5]
-        else:
-            if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
-                todos_os_jogadores = [nave_player] + list(grupo_bots.sprites())
-            else: 
-                todos_os_jogadores = list(grupo_bots.sprites()) 
-            lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
-        
-        ui.desenhar_ranking(tela, top_5, nave_player)
+        if estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", "ESPECTADOR"]:
+            online_players_copy = {}
+            if client_socket:
+                 with network_state_lock:
+                     online_players_copy = online_players_states.copy()
+            
+            # --- MODIFICAÇÃO: Passa o 'alvo_camera_final' para o minimapa ---
+            ui.desenhar_minimapa(tela, nave_player, grupo_bots, estado_jogo, s.MAP_WIDTH, s.MAP_HEIGHT, 
+                                 online_players_copy, MEU_NOME_REDE, alvo_camera_final, camera.zoom)
+            
+            if client_socket:
+                class RankingEntry:
+                    def __init__(self, nome, pontos):
+                        self.nome = nome
+                        self.pontos = pontos
+                lista_ranking = []
+                for nome, state in online_players_copy.items():
+                    lista_ranking.append(RankingEntry(nome, state.get('pontos', 0)))
+                lista_ordenada = sorted(lista_ranking, key=lambda entry: entry.pontos, reverse=True)
+                top_5 = lista_ordenada[:5]
+            else:
+                todos_os_jogadores = []
+                if nave_player.vida_atual > 0: # Só inclui player no ranking se vivo
+                    todos_os_jogadores.append(nave_player)
+                todos_os_jogadores.extend(list(grupo_bots.sprites())) 
+                
+                lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
+            
+            ui.desenhar_ranking(tela, top_5, nave_player)
 
         # Overlays 
         if estado_jogo == "PAUSE":
-            ui.desenhar_pause(tela, max_bots_atual, s.MAX_BOTS_LIMITE_SUPERIOR, len(grupo_bots))
+            ui.desenhar_pause(tela, max_bots_atual, s.MAX_BOTS_LIMITE_SUPERIOR, len(grupo_bots), 
+                              nave_player.vida_atual <= 0, # jogador_esta_morto
+                              jogador_esta_vivo_espectador)
+            
         elif estado_jogo == "LOJA":
             ui.desenhar_loja(tela, nave_player, LARGURA_TELA, ALTURA_TELA, client_socket)
+            
         elif estado_jogo == "TERMINAL":
             ui.desenhar_terminal(tela, variavel_texto_terminal, LARGURA_TELA, ALTURA_TELA)
-        elif estado_jogo == "GAME_OVER":
-            ui.desenhar_game_over(tela, LARGURA_TELA, ALTURA_TELA)
+            
+        elif estado_jogo == "ESPECTADOR":
+            # 1. Desenha UI de "GAME OVER" (botão de respawn) SE morto
+            if nave_player.vida_atual <= 0 and not jogador_esta_vivo_espectador:
+                 ui.desenhar_game_over(tela, LARGURA_TELA, ALTURA_TELA)
+            
+            # 2. Desenha o texto de status do espectador
+            texto_titulo_spec = s.FONT_TITULO.render("MODO ESPECTADOR", True, s.BRANCO)
+            pos_x_spec = 10
+            pos_y_spec = 10
+            tela.blit(texto_titulo_spec, (pos_x_spec, pos_y_spec))
+            pos_y_spec += texto_titulo_spec.get_height() + 5
+            
+            nome_alvo_hud = None
+            if alvo_espectador_nome: # Online
+                nome_alvo_hud = alvo_espectador_nome
+            elif alvo_espectador: # Offline
+                nome_alvo_hud = alvo_espectador.nome
+            
+            if camera.zoom < 1.0:
+                 texto_alvo = s.FONT_HUD.render("Visão do Mapa (Z)", True, s.AMARELO_BOMBA)
+            elif nome_alvo_hud:
+                texto_alvo = s.FONT_HUD.render(f"Seguindo: {nome_alvo_hud}", True, s.VERDE_VIDA)
+            else:
+                texto_alvo = s.FONT_HUD.render("Câmera Livre (WASD)", True, s.AZUL_NAVE)
+            tela.blit(texto_alvo, (pos_x_spec, pos_y_spec))
+            pos_y_spec += texto_alvo.get_height() + 2
+            
+            texto_ajuda1 = s.FONT_HUD_DETALHES.render("Q/E: Ciclar Alvos | Z: Visão Mapa", True, s.BRANCO)
+            tela.blit(texto_ajuda1, (pos_x_spec, pos_y_spec))
+            pos_y_spec += texto_ajuda1.get_height() + 2
+            
+            texto_ajuda2 = s.FONT_HUD_DETALHES.render("LMB: Seguir Alvo | RMB: Câmera Livre", True, s.BRANCO)
+            tela.blit(texto_ajuda2, (pos_x_spec, pos_y_spec))
+            pos_y_spec += texto_ajuda2.get_height() + 2
+            
+            texto_ajuda3 = s.FONT_HUD_DETALHES.render("ESC: Menu de Pausa", True, s.BRANCO)
+            tela.blit(texto_ajuda3, (pos_x_spec, pos_y_spec))
+        # --- FIM: MODIFICAÇÃO (Desenho de UI) ---
+
 
     # 14. Atualiza a Tela e Controla FPS
     
