@@ -14,21 +14,17 @@ import settings as s
 from camera import Camera
 from projectiles import Projetil, ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento, ProjetilCongelante, ProjetilTeleguiadoJogador
 from entities import Obstaculo, NaveRegeneradora 
-from effects import Explosao 
-
-# Importa as classes de inimigos
 from enemies import (InimigoPerseguidor, InimigoAtiradorRapido, InimigoBomba, InimigoMinion,
                      InimigoMothership, InimigoRapido, InimigoTiroRapido, InimigoAtordoador,
                      BossCongelante, MinionCongelante, 
                      set_global_enemy_references)
-# Importa as classes de naves
 from ships import (Player, NaveBot, NaveAuxiliar, Nave, set_global_ship_references, 
                    tocar_som_posicional) 
-# Importa as funções e Rects da UI
 import ui
-# --- INÍCIO DA ADIÇÃO ---
 from pause_menu import PauseMenu
-# --- FIM DA ADIÇÃO ---
+# --- INÍCIO: MODIFICAÇÃO (Importar VIDA_POR_NIVEL) ---
+from settings import VIDA_POR_NIVEL
+# --- FIM: MODIFICAÇÃO ---
 
 # 2. Inicialização do Pygame e Tela
 pygame.mixer.pre_init(44100, -16, 2, 512)
@@ -512,7 +508,9 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     nave_player.nivel_escudo = 0
     nave_player.nivel_aux = 0 
     nave_player.velocidade_movimento_base = 4 + (nave_player.nivel_motor * 0.5)
-    nave_player.max_vida = 4 + nave_player.nivel_max_vida
+    # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
+    nave_player.max_vida = VIDA_POR_NIVEL[nave_player.nivel_max_vida] # 4 + nave_player.nivel_max_vida
+    # --- FIM: MODIFICAÇÃO ---
     nave_player.vida_atual = nave_player.max_vida
     nave_player.pontos_upgrade_disponiveis = 0
     nave_player.total_upgrades_feitos = 0
@@ -578,7 +576,9 @@ def respawn_player_offline(nave):
     nave.nivel_escudo = 0
     nave.nivel_aux = 0 
     nave.velocidade_movimento_base = 4 + (nave.nivel_motor * 0.5)
-    nave.max_vida = 4 + nave.nivel_max_vida
+    # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
+    nave.max_vida = VIDA_POR_NIVEL[nave.nivel_max_vida] # 4 + nave.nivel_max_vida
+    # --- FIM: MODIFICAÇÃO ---
     nave.vida_atual = nave.max_vida
     nave.pontos_upgrade_disponiveis = 0
     nave.total_upgrades_feitos = 0
@@ -1329,7 +1329,13 @@ while rodando:
                             print("Resetando sprites auxiliares (Respawn)")
                     
                     nave_player.nivel_aux = num_aux_servidor
-                    nave_player.max_vida = 4 + nave_player.nivel_max_vida
+                    # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
+                    # Garante que a vida máxima seja atualizada se o nível mudar
+                    if nave_player.nivel_max_vida > 0 and nave_player.nivel_max_vida < len(VIDA_POR_NIVEL):
+                        nave_player.max_vida = VIDA_POR_NIVEL[nave_player.nivel_max_vida]
+                    else: # Fallback para o estado do servidor se o nível for inválido
+                        nave_player.max_vida = my_state.get('max_hp', nave_player.max_vida)
+                    # --- FIM: MODIFICAÇÃO ---
 
                     # --- INÍCIO: CORREÇÃO "VOCÊ MORREU" (BUG 1) ---
                     if nave_player.vida_atual <= 0 and estado_jogo == "JOGANDO":
@@ -1400,7 +1406,7 @@ while rodando:
             #    (lista_alvos_naves já contém o jogador vivo (não espectador) e bots vivos)
             lista_spawn_anchors = lista_alvos_naves
 
-            # 2. Se houver qualquer entidade aliada ativa, usa uma delas como referência
+            # 2. Se houver qualquer entidade aliada ativa, usa uma dela como referência
             if lista_spawn_anchors:
                 # Escolhe uma âncora aleatória (para que o spawn não siga sempre a mesma entidade)
                 ponto_referencia_sprite = random.choice(lista_spawn_anchors)
@@ -1437,10 +1443,12 @@ while rodando:
                 for _, obst_list in colisoes.items():
                     for obst in obst_list: 
                         nave_player.ganhar_pontos(obst.pontos_por_morte)
+                
+                # --- INÍCIO: MODIFICAÇÃO (Correção Bug de Dano Offline) ---
                 colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_inimigos, True, False)
-                for _, inim_list in colisoes.items():
+                for proj, inim_list in colisoes.items(): # <-- USA 'proj'
                     for inimigo in inim_list:
-                        morreu = inimigo.foi_atingido(nave_player.nivel_dano)
+                        morreu = inimigo.foi_atingido(proj.dano) # <-- USA 'proj.dano'
                         if morreu:
                             nave_player.ganhar_pontos(inimigo.pontos_por_morte);
                             if isinstance(inimigo, (InimigoMothership, BossCongelante)):
@@ -1451,6 +1459,8 @@ while rodando:
                             else:
                                 if tocar_som_posicional and s.SOM_EXPLOSAO_NPC:
                                     tocar_som_posicional(s.SOM_EXPLOSAO_NPC, inimigo.posicao, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+                # --- FIM: MODIFICAÇÃO ---
+                
                 colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_bots, True, False)
                 for proj, bot_list in colisoes.items():
                     for bot in bot_list:
@@ -1663,7 +1673,7 @@ while rodando:
                 if npc['tipo'] == 'bomba':
                     tamanho_padrao_explosao = npc['tamanho'] + 75 
                 
-                explosao = Explosao(pos_npc, tamanho_padrao_explosao)
+                explosao = explosao(pos_npc, tamanho_padrao_explosao)
                 
                 if npc['tipo'] in ['mothership', 'boss_congelante']:
                     tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
@@ -1675,7 +1685,7 @@ while rodando:
             
             for player in dead_player_states:
                  pos_player = pygame.math.Vector2(player['x'], player['y'])
-                 explosao = Explosao(pos_player, 30 // 2 + 10) 
+                 explosao = explosao(pos_player, 30 // 2 + 10) 
                  grupo_explosoes.add(explosao)
                  tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_player, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
 

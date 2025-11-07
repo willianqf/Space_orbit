@@ -70,10 +70,19 @@ REGEN_TICK_RATE = 2000 # 2000ms = 2 segundos
 # --- FIM DA ADIÇÃO ---
 
 # 4. Constantes da Loja
-MAX_TOTAL_UPGRADES = 12
+# --- INÍCIO: MODIFICAÇÃO (Limite de Upgrades) ---
+MAX_TOTAL_UPGRADES = 10 
+# --- FIM: MODIFICAÇÃO ---
 PONTOS_LIMIARES_PARA_UPGRADE = [100, 250, 500]
 PONTOS_SCORE_PARA_MUDAR_LIMIAR = [500, 2000]
 CUSTOS_AUXILIARES = [1, 2, 3, 4]
+
+# --- INÍCIO: MODIFICAÇÃO (Novas Progressões) ---
+# Define o dano real para cada nível (Nível 0 é dummy)
+DANO_POR_NIVEL = [0, 0.7, 0.9, 1.2, 1.4, 1.6] 
+# Define a vida máxima real para cada nível (Nível 0 é dummy)
+VIDA_POR_NIVEL = [0, 5, 6, 8, 9, 10] 
+# --- FIM: MODIFICAÇÃO ---
 
 
 # 5. Cores

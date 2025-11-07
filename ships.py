@@ -13,7 +13,10 @@ from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, MAP_WI
                       VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAX_TOTAL_UPGRADES, MAX_DISTANCIA_SOM_AUDIVEL, PANNING_RANGE_SOM, VOLUME_BASE_TIRO_PLAYER,
                       PONTOS_LIMIARES_PARA_UPGRADE, PONTOS_SCORE_PARA_MUDAR_LIMIAR, CUSTOS_AUXILIARES, FONT_NOME_JOGADOR, BRANCO, VELOCIDADE_ROTACAO_NAVE,
                       REGEN_POR_TICK, REGEN_TICK_RATE, 
-                      ROXO_TIRO_LENTO, AZUL_CONGELANTE # --- MUDANÇA: Importar cores de status ---
+                      ROXO_TIRO_LENTO, AZUL_CONGELANTE,
+                      # --- INÍCIO: MODIFICAÇÃO (Importar novas constantes) ---
+                      DANO_POR_NIVEL, VIDA_POR_NIVEL
+                      # --- FIM: MODIFICAÇÃO ---
                       ) 
 # Importa classes necessárias
 from projectiles import Projetil, ProjetilTeleguiadoJogador
@@ -94,10 +97,13 @@ class NaveAuxiliar(pygame.sprite.Sprite):
                         self.ultimo_tiro_tempo = agora
                         radianos = math.radians(self.angulo)
                         
+                        # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
+                        dano_real_aux = DANO_POR_NIVEL[self.owner.nivel_dano]
                         proj = ProjetilTeleguiadoJogador(self.posicao.x, self.posicao.y, radianos, 
-                                                       self.owner.nivel_dano, 
+                                                       dano_real_aux, # self.owner.nivel_dano, 
                                                        owner_nave=self.owner, 
                                                        alvo_sprite=self.alvo_atual)
+                        # --- FIM: MODIFICAÇÃO ---
                         
                         grupo_projeteis_destino.add(proj)
                         tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, nave_player_ref.posicao, VOLUME_BASE_TIRO_PLAYER)
@@ -152,7 +158,10 @@ class Nave(pygame.sprite.Sprite):
         
         self.nivel_aux = 0 
         
-        self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
+        # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
+        self.max_vida = VIDA_POR_NIVEL[self.nivel_max_vida] # 4 + self.nivel_max_vida
+        # --- FIM: MODIFICAÇÃO ---
+        self.vida_atual = self.max_vida
         self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
         
         self.quer_virar_esquerda = False; self.quer_virar_direita = False; self.quer_mover_frente = False; self.quer_mover_tras = False; self.quer_atirar = False
@@ -291,13 +300,17 @@ class Nave(pygame.sprite.Sprite):
         radianos = math.radians(self.angulo); offset_ponta = self.altura / 2 + 10
         pos_x = self.posicao.x + (-math.sin(radianos) * offset_ponta); pos_y = self.posicao.y + (-math.cos(radianos) * offset_ponta)
         
+        # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
+        dano_real = DANO_POR_NIVEL[self.nivel_dano]
+        
         if self.alvo_selecionado and self.alvo_selecionado.groups():
             return ProjetilTeleguiadoJogador(pos_x, pos_y, radianos, 
-                                           self.nivel_dano, 
+                                           dano_real, # self.nivel_dano, 
                                            owner_nave=self, 
                                            alvo_sprite=self.alvo_selecionado)
         else:
-            return Projetil(pos_x, pos_y, radianos, self.nivel_dano, owner_nave=self)
+            return Projetil(pos_x, pos_y, radianos, dano_real, owner_nave=self) # self.nivel_dano, owner_nave=self)
+        # --- FIM: MODIFICAÇÃO ---
     
     def lidar_com_tiros(self, grupo_destino, pos_ouvinte=None):
         agora = pygame.time.get_ticks() 
@@ -439,7 +452,9 @@ class Nave(pygame.sprite.Sprite):
                 self.pontos_upgrade_disponiveis -= custo_upgrade_atual
                 self.total_upgrades_feitos += 1
                 self.nivel_max_vida += 1
-                self.max_vida = 4 + self.nivel_max_vida
+                # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
+                self.max_vida = VIDA_POR_NIVEL[self.nivel_max_vida] # 4 + self.nivel_max_vida
+                # --- FIM: MODIFICAÇÃO ---
                 self.vida_atual += 1 
                 self.ultimo_hit_tempo = pygame.time.get_ticks() 
                 print(f"[{self.nome}] Vida Máx. aumentada! Nível {self.nivel_max_vida}. ({self.pontos_upgrade_disponiveis} Pts Restantes)")
@@ -606,7 +621,11 @@ class NaveBot(Nave):
             self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
             self.nivel_dano = random.randint(1, MAX_NIVEL_DANO)
             self.nivel_escudo = random.randint(0, MAX_NIVEL_ESCUDO)
-            max_spawn_vida_lvl = 3; self.nivel_max_vida = random.randint(1, max_spawn_vida_lvl); self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
+            max_spawn_vida_lvl = 3; self.nivel_max_vida = random.randint(1, max_spawn_vida_lvl); 
+            # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
+            self.max_vida = VIDA_POR_NIVEL[self.nivel_max_vida] # 4 + self.nivel_max_vida
+            # --- FIM: MODIFICAÇÃO ---
+            self.vida_atual = self.max_vida
             max_aux = len(self.lista_todas_auxiliares); num_auxiliares = random.randint(0, max_aux)
             if num_auxiliares > 0:
                 for _ in range(num_auxiliares): 
@@ -633,7 +652,10 @@ class NaveBot(Nave):
             self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0; self.nivel_aux = 0
             
             self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
-            self.max_vida = 4 + self.nivel_max_vida; self.vida_atual = self.max_vida
+            # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
+            self.max_vida = VIDA_POR_NIVEL[self.nivel_max_vida] # 4 + self.nivel_max_vida
+            # --- FIM: MODIFICAÇÃO ---
+            self.vida_atual = self.max_vida
             self.alvo_selecionado = None; self.posicao_alvo_mouse = None; self.tempo_fim_lentidao = 0; self.rastro_particulas = []
             
             self.cerebro.resetar_ia()
