@@ -216,10 +216,17 @@ class ServerBotManager:
         
         if dist_sq_movido < (3**2):
             bot_state['bot_frames_sem_movimento'] += 1
-            if bot_state['bot_frames_sem_movimento'] > 30: 
-                bot_state['angulo'] += random.randint(90, 180) 
+            # --- INÍCIO DA MODIFICAÇÃO (Anti-Stuck) ---
+            # Aumentamos o limiar para 60 frames (1 segundo)
+            if bot_state['bot_frames_sem_movimento'] > 60: 
+                print(f"[LOG] [BOT] {bot_state['nome']} está preso. A forçar novo 'wander target'.")
+                # Força o bot a mudar de estado e a encontrar um novo ponto de fuga
+                bot_state['bot_estado_ia'] = "VAGANDO"
+                bot_state['alvo_lock'] = None
+                bot_state['alvo_mouse'] = None
+                bot_state['bot_wander_target'] = None # Força a recalculação na próxima
                 bot_state['bot_frames_sem_movimento'] = 0
-                bot_state['alvo_mouse'] = None 
+            # --- FIM DA MODIFICAÇÃO ---
         else:
             bot_state['bot_frames_sem_movimento'] = 0
         bot_state['bot_posicao_anterior'] = pos_atual
@@ -417,19 +424,29 @@ class ServerBotManager:
                 
                 # Se estivermos regenerando parados, NÃO orbitamos
                 if bot_state.get('bot_estado_ia') == "REGENERANDO_NA_BORDA":
-                    bot_state['alvo_mouse'] = None # Fica parado e atira
+                    bot_state['alvo_mouse'] = None # Fica parado
+                    bot_state['teclas']['w'] = False
+                    bot_state['teclas']['s'] = False
+                    bot_state['teclas']['a'] = False
                 else:
-                    # Lógica de orbitar normal
-                    ponto_movimento_x, ponto_movimento_y = bot_state['x'], bot_state['y']
-                    if dist_sq_alvo > BOT_DISTANCIA_ORBITA_MAX_SQ: 
-                        ponto_movimento_x, ponto_movimento_y = alvo_x, alvo_y
-                    elif dist_sq_alvo < BOT_DISTANCIA_ORBITA_MIN_SQ: 
-                        dist = math.sqrt(dist_sq_alvo) + 1e-6
-                        ponto_movimento_x = bot_state['x'] - (vec_x / dist) * 200
-                        ponto_movimento_y = bot_state['y'] - (vec_y / dist) * 200
-                    else:
-                        vec_orbita = pygame.math.Vector2(vec_x, vec_y).rotate(75)
-                        ponto_movimento_x = bot_state['x'] + vec_orbita.x
-                        ponto_movimento_y = bot_state['y'] + vec_orbita.y
+                    # --- INÍCIO DA NOVA LÓGICA DE ORBITAR COM TECLAS ---
+                    # O 'alvo_lock' já está a mirar no inimigo.
+                    # A IA só precisa de decidir se avança, recua ou anda de lado (strafe).
+                    bot_state['alvo_mouse'] = None # Nunca usar alvo_mouse e teclas ao mesmo tempo
                     
-                    bot_state['alvo_mouse'] = (ponto_movimento_x, ponto_movimento_y)
+                    if dist_sq_alvo > BOT_DISTANCIA_ORBITA_MAX_SQ: 
+                        # Muito longe: Avança
+                        bot_state['teclas']['w'] = True
+                        bot_state['teclas']['s'] = False
+                        bot_state['teclas']['a'] = False
+                    elif dist_sq_alvo < BOT_DISTANCIA_ORBITA_MIN_SQ: 
+                        # Muito perto: Recua
+                        bot_state['teclas']['w'] = False
+                        bot_state['teclas']['s'] = True
+                        bot_state['teclas']['a'] = False
+                    else:
+                        # Distância correta: Anda de lado (Strafe Esquerdo)
+                        bot_state['teclas']['w'] = False
+                        bot_state['teclas']['s'] = False
+                        bot_state['teclas']['a'] = True 
+                    # --- FIM DA NOVA LÓGICA ---

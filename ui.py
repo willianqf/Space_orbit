@@ -280,7 +280,8 @@ def desenhar_tela_nome(surface, nome_jogador_atual, input_nome_ativo, dificuldad
 
 # --- INÍCIO: MODIFICAÇÃO (Assinatura de desenhar_pause) ---
 def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos, 
-                   jogador_esta_morto=False, jogador_esta_vivo_espectador=False):
+                   jogador_esta_morto=False, jogador_esta_vivo_espectador=False,
+                   is_online=False): # <-- MODIFICADO
 # --- FIM: MODIFICAÇÃO ---
     
     fundo_overlay = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
@@ -296,17 +297,10 @@ def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos,
     titulo_rect = texto_titulo.get_rect(midtop=(RECT_PAUSE_FUNDO.centerx, RECT_PAUSE_FUNDO.top + 15))
     surface.blit(texto_titulo, titulo_rect)
 
-    # --- INÍCIO: MODIFICAÇÃO (Lógica dos Botões de Pausa) ---
+    # --- INÍCIO: MODIFICAÇÃO (Lógica dos Botões de Pausa Unificados) ---
     
-    # Botão 1: "Voltar à Nave" (Se vivo, modo espectador) ou "Respawnar" (Se morto)
-    if jogador_esta_vivo_espectador:
-            pygame.draw.rect(surface, BRANCO, RECT_BOTAO_VOLTAR_NAVE, border_radius=5)
-            # --- LINHA A SER ALTERADA ---
-            texto_surf = FONT_PADRAO.render("Respawnar", True, PRETO) # <-- MUDADO DE "Voltar à Nave"
-            # --- FIM DA ALTERAÇÃO ---
-            texto_rect = texto_surf.get_rect(center=RECT_BOTAO_VOLTAR_NAVE.center)
-            surface.blit(texto_surf, texto_rect)
-    elif jogador_esta_morto:
+    # Botão 1: "Respawnar" (Se morto OU vivo-espectador)
+    if jogador_esta_vivo_espectador or jogador_esta_morto:
         pygame.draw.rect(surface, BRANCO, RECT_BOTAO_RESPAWN_PAUSA, border_radius=5)
         texto_surf = FONT_PADRAO.render("Respawnar", True, PRETO)
         texto_rect = texto_surf.get_rect(center=RECT_BOTAO_RESPAWN_PAUSA.center)
@@ -327,22 +321,24 @@ def desenhar_pause(surface, max_bots_atual, max_bots_limite, num_bots_ativos,
 
     # --- FIM: MODIFICAÇÃO ---
     
-    # Controles de Bots
-    cor_menos = BRANCO if max_bots_atual > 0 else CINZA_BOTAO_DESLIGADO
-    pygame.draw.rect(surface, cor_menos, RECT_BOTAO_BOT_MENOS, border_radius=5)
-    texto_menos = FONT_TITULO.render("-", True, PRETO)
-    menos_rect = texto_menos.get_rect(center=RECT_BOTAO_BOT_MENOS.center)
-    surface.blit(texto_menos, menos_rect)
-    
-    texto_contagem = FONT_PADRAO.render(f"Max Bots: {max_bots_atual} (Ativos: {num_bots_ativos})", True, BRANCO)
-    contagem_rect = texto_contagem.get_rect(center=RECT_TEXTO_BOTS.center)
-    surface.blit(texto_contagem, contagem_rect)
-    
-    cor_mais = BRANCO if max_bots_atual < max_bots_limite else CINZA_BOTAO_DESLIGADO
-    pygame.draw.rect(surface, cor_mais, RECT_BOTAO_BOT_MAIS, border_radius=5)
-    texto_mais = FONT_TITULO.render("+", True, PRETO)
-    mais_rect = texto_mais.get_rect(center=RECT_BOTAO_BOT_MAIS.center)
-    surface.blit(texto_mais, mais_rect)
+    # --- INÍCIO: MODIFICAÇÃO (Ocultar Controles de Bot se Online) ---
+    if not is_online:
+        cor_menos = BRANCO if max_bots_atual > 0 else CINZA_BOTAO_DESLIGADO
+        pygame.draw.rect(surface, cor_menos, RECT_BOTAO_BOT_MENOS, border_radius=5)
+        texto_menos = FONT_TITULO.render("-", True, PRETO)
+        menos_rect = texto_menos.get_rect(center=RECT_BOTAO_BOT_MENOS.center)
+        surface.blit(texto_menos, menos_rect)
+        
+        texto_contagem = FONT_PADRAO.render(f"Max Bots: {max_bots_atual} (Ativos: {num_bots_ativos})", True, BRANCO)
+        contagem_rect = texto_contagem.get_rect(center=RECT_TEXTO_BOTS.center)
+        surface.blit(texto_contagem, contagem_rect)
+        
+        cor_mais = BRANCO if max_bots_atual < max_bots_limite else CINZA_BOTAO_DESLIGADO
+        pygame.draw.rect(surface, cor_mais, RECT_BOTAO_BOT_MAIS, border_radius=5)
+        texto_mais = FONT_TITULO.render("+", True, PRETO)
+        mais_rect = texto_mais.get_rect(center=RECT_BOTAO_BOT_MAIS.center)
+        surface.blit(texto_mais, mais_rect)
+    # --- FIM: MODIFICAÇÃO ---
 
     # Texto "ESC para Voltar"
     texto_voltar = FONT_PADRAO.render("ESC para Voltar", True, BRANCO)

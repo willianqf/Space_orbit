@@ -1094,6 +1094,15 @@ def handle_client(conn, addr):
                     elif input_str.startswith("BUY_UPGRADE|"):
                         tipo_upgrade = input_str.split('|', 1)[-1]
                         server_comprar_upgrade(player_state, tipo_upgrade)
+                        
+                    elif input_str == "ENTER_SPECTATOR":
+                        if player_state['hp'] > 0:
+                            player_state['hp'] = 0 # Define como morto primeiro
+                            print(f"[LOG] [{addr}] {player_state['nome']} entrou no modo espectador. A desconectar o cliente.")
+                            # Força o fim do loop de 'handle_client' para este jogador.
+                            # Isto irá acionar o bloco 'finally' e removê-lo.
+                            break 
+                    # --- FIM DA MODIFICAÇÃO ---
 
     except ConnectionResetError: print(f"[LOG] [{addr} - {nome_jogador}] Conexão perdida abruptamente.")
     except ConnectionError as e: print(f"[LOG] [{addr}] Erro de conexão: {e}")

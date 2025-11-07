@@ -97,6 +97,8 @@ LIMITE_MAX_IP = 24
 
 client_socket = None 
 listener_thread_running = False 
+
+jogador_pediu_para_espectar = False # <
 listener_thread_object = None 
 MEU_NOME_REDE = "" 
 online_players_states = {}
@@ -294,9 +296,26 @@ def network_listener_thread(sock):
 
     print("[Thread de Rede] Encerrada.")
     listener_thread_running = False
-    if estado_jogo != "MENU":
-         print("[Thread de Rede] A regressar ao Menu Principal.")
+    global jogador_pediu_para_espectar
+    if jogador_pediu_para_espectar:
+        print("[Thread de Rede] Desconexão por modo espectador. A entrar em espectador (offline).")
+        global estado_jogo, jogador_esta_vivo_espectador, alvo_espectador, alvo_espectador_nome, espectador_dummy_alvo
+        estado_jogo = "ESPECTADOR"
+        nave_player.vida_atual = 0 # Garante que o jogador está "morto" localmente
+        jogador_esta_vivo_espectador = False
+        alvo_espectador = None
+        alvo_espectador_nome = None
+        espectador_dummy_alvo.posicao = nave_player.posicao.copy()
+        
+        # Limpa os dados online, já que estamos offline
+        fechar_conexao() # Isto vai limpar os online_players_states
+        
+        jogador_pediu_para_espectar = False # Reseta a flag
+    
+    elif estado_jogo != "MENU":
+         print("[Thread de Rede] A regressar ao Menu Principal (Desconexão normal).")
          estado_jogo = "MENU" # --- MODIFICAÇÃO: Força volta ao Menu ---
+    # --- FIM DA MODIFICAÇÃO ---
 
 
 def tentar_conectar(ip, porta, nome):
@@ -395,9 +414,10 @@ def fechar_conexao():
         client_socket = None
     
     if listener_thread_object:
-        listener_thread_object.join(timeout=1.0) 
-        if listener_thread_object.is_alive():
-            print("[AVISO] A thread de escuta não parou.")
+        # Não podemos chamar .join() aqui, pois esta função
+        # pode ser chamada pela própria thread (causando o RuntimeError).
+        # A thread terminará sozinha quando a sua função 'run' (network_listener_thread) 
+        # chegar ao fim.
         listener_thread_object = None
         
     MEU_NOME_REDE = ""
@@ -890,26 +910,31 @@ while rodando:
                 
                 elif ui.RECT_BOTAO_ESPECTADOR.collidepoint(mouse_pos):
                     print("Entrando no modo espectador (voluntário)...")
-                    estado_jogo = "ESPECTADOR"
+                    # estado_jogo = "ESPECTADOR" # <-- REMOVA ESTA LINHA (não mude ainda)
                     
                     if client_socket:
-                        # ONLINE: Apenas nos marca como espectador localmente.
-                        # Nossa nave ainda existe no servidor.
-                        jogador_esta_vivo_espectador = True 
-                    else:
-                        # OFFLINE: "Mata" o jogador (vida=0) para removê-lo 
-                        # da lógica de alvos e do ranking.
-                        nave_player.vida_atual = 0 
+                        jogador_pediu_para_espectar = True  # <--- ADICIONE
                         
-                        # MAS, definimos esta flag como True para que a UI
-                        # saiba que foi voluntário e NÃO mostre "Você Morreu!".
-                        jogador_esta_vivo_espectador = True 
+                        enviar_input_servidor("ENTER_SPECTATOR")
+                        # O servidor vai quebrar a conexão.
+                        # A network_listener_thread vai parar.
+                        estado_jogo = "JOGANDO" # Volta ao jogo para esperar a desconexão
+                    else:
+                        # OFFLINE: (Lógica offline está correta)
+                        nave_player.vida_atual = 0 
+                        estado_jogo = "ESPECTADOR"
+                        jogador_esta_vivo_espectador = True
+                        
+                        alvo_espectador = None 
+                        alvo_espectador_nome = None
+                        espectador_dummy_alvo.posicao = nave_player.posicao.copy()
                         
                     alvo_espectador = None # Começa em modo livre
                     alvo_espectador_nome = None
                     espectador_dummy_alvo.posicao = nave_player.posicao.copy()
                 
                 ####
+                
                 elif ui.RECT_BOTAO_RESPAWN_PAUSA.collidepoint(mouse_pos):
                     # Só funciona se o jogador estiver morto
                     if nave_player.vida_atual <= 0:
@@ -1214,7 +1239,7 @@ while rodando:
                         print("[CLIENTE] Respawn detectado! Voltando ao jogo.")
                         estado_jogo = "JOGANDO"
                         nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
-                        jogador_esta_vivo_espectador = False # Não estamos mais espectando vivos
+                        jogador_esta_vivo_espectador = True # Não estamos mais espectando vivos
                         alvo_espectador_nome = None # Limpa alvo
                         camera.set_zoom(1.0) # Garante reset do zoom
 
@@ -1609,8 +1634,8 @@ while rodando:
 
             for nome, state in online_players_copy.items():
                 # --- MODIFICAÇÃO: Não desenha nosso "fantasma" se estivermos mortos ---
-                if nome == MEU_NOME_REDE and estado_jogo == "ESPECTADOR" and not jogador_esta_vivo_espectador:
-                    continue 
+                if nome == MEU_NOME_REDE:
+                    continue
                     
                 if state.get('hp', 0) <= 0:
                     continue 
@@ -1768,8 +1793,24 @@ while rodando:
         
         # --- INÍCIO: MODIFICAÇÃO (Desenho do Jogador) ---
         jogador_visivel = False
-        if estado_jogo == "JOGANDO":
-            jogador_visivel = True
+        if estado_jogo in ["JOGANDO", "PAUSE", "LOJA", "TERMINAL"]:
+            if nave_player.vida_atual > 0:
+                jogador_visivel = True
+                
+        # 2. Caso especial: Estamos a espectar online (vivo-espectador)?
+        elif estado_jogo == "ESPECTADOR" and jogador_esta_vivo_espectador:
+            # Só desenha a nossa nave se estivermos online (pois ela ainda existe no servidor)
+            if client_socket:
+                 jogador_visivel = True 
+        
+        # 3. (Se morto ou espectador offline, jogador_visivel permanece False, o que está correto)
+
+        if jogador_visivel: 
+            nave_player.desenhar(tela, camera, client_socket) 
+            nave_player.desenhar_vida(tela, camera)
+            nave_player.desenhar_nome(tela, camera)
+            
+            for aux in nave_player.grupo_auxiliares_ativos: aux.desenhar(tela, camera)
         elif estado_jogo == "ESPECTADOR" and jogador_esta_vivo_espectador:
             # Se estamos espectando vivos, só queremos desenhar nossa nave
             # se estivermos no modo online (onde ela ainda existe no servidor).
@@ -1833,7 +1874,8 @@ while rodando:
         if estado_jogo == "PAUSE":
             ui.desenhar_pause(tela, max_bots_atual, s.MAX_BOTS_LIMITE_SUPERIOR, len(grupo_bots), 
                               nave_player.vida_atual <= 0, # jogador_esta_morto
-                              jogador_esta_vivo_espectador)
+                              jogador_esta_vivo_espectador,
+                              client_socket is not None)
             
         elif estado_jogo == "LOJA":
             ui.desenhar_loja(tela, nave_player, LARGURA_TELA, ALTURA_TELA, client_socket)
