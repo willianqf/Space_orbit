@@ -43,6 +43,7 @@ MAX_TARGET_LOCK_DISTANCE_SQ = s.MAX_TARGET_LOCK_DISTANCE**2
 TARGET_CLICK_SIZE_SQ = (s.TARGET_CLICK_SIZE / 2)**2 
 REGEN_POR_TICK = s.REGEN_POR_TICK
 REGEN_TICK_RATE_MS = s.REGEN_TICK_RATE
+NPC_DETECTION_RANGE_SQ = (s.SPAWN_DIST_MAX ** 2)
 # --- FIM ---
 
 # --- (Constantes de Upgrade - Sem alterações) ---
@@ -314,6 +315,8 @@ def update_npc_logic(npc, players_pos_lista, agora_ms=0):
     for p_pos in players_pos_lista:
         try:
             dist_sq = (npc['x'] - p_pos[0])**2 + (npc['y'] - p_pos[1])**2
+            if dist_sq > NPC_DETECTION_RANGE_SQ:
+                continue # Ignora, muito longe
             if dist_sq < dist_min_sq:
                 dist_min_sq = dist_sq; alvo_pos = p_pos 
         except TypeError: continue 
@@ -469,6 +472,8 @@ def update_mothership_logic(npc, all_living_players):
         alvo_prox = None; dist_min = float('inf')
         for p in all_living_players:
             dist_sq = (p['x'] - npc['x'])**2 + (p['y'] - npc['y'])**2
+            if dist_sq > (NPC_DETECTION_RANGE_SQ * (1.5**2)): 
+                continue # Ignora, muito longe
             if dist_sq < dist_min:
                 dist_min = dist_sq; alvo_prox = p
         if alvo_prox:
@@ -508,6 +513,8 @@ def update_boss_congelante_logic(npc, all_living_players, agora_ms):
     alvo = None; dist_min = float('inf')
     for p in all_living_players:
         dist_sq = (p['x'] - npc['x'])**2 + (p['y'] - npc['y'])**2
+        if dist_sq > (NPC_DETECTION_RANGE_SQ * (1.5**2)): 
+                continue # Ignora, muito longe
         if dist_sq < dist_min:
             dist_min = dist_sq; alvo = p
     if alvo is None:
@@ -555,6 +562,8 @@ def update_minion_logic(npc, all_living_players, agora_ms):
         dist_min = float('inf')
         for p in all_living_players:
             dist_sq = (p['x'] - npc['x'])**2 + (p['y'] - npc['y'])**2
+            if dist_sq > (NPC_DETECTION_RANGE_SQ * (1.5**2)): 
+                continue # Ignora, muito longe
             if dist_sq < dist_min:
                 dist_min = dist_sq; alvo = p
     if alvo is None: return [] 

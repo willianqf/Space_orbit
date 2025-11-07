@@ -271,6 +271,7 @@ class BossCongelante(InimigoBase):
         pygame.draw.circle(self.image, self.cor, (centro, centro), centro) # self.cor já existe
         pygame.draw.circle(self.image, BRANCO, (centro, centro), centro, 2)
         self.rect = self.image.get_rect(center=self.posicao)
+        self.distancia_deteccao = s.SPAWN_DIST_MAX * 1.5
 
         # Atributos específicos
         self.velocidade = 1
@@ -323,6 +324,8 @@ class BossCongelante(InimigoBase):
             if is_player or is_active_bot:
                  try:
                      dist = self.posicao.distance_to(alvo.posicao)
+                     if dist > self.distancia_deteccao:
+                         continue # Ignora, muito longe
                      if dist < dist_min_geral:
                          dist_min_geral = dist
                          alvo_mais_proximo_geral = alvo
@@ -428,6 +431,7 @@ class InimigoPerseguidor(InimigoBase):
         super().__init__(x, y, tamanho=30, cor=VERMELHO_PERSEGUIDOR, vida=3)
         self.velocidade = 2; self.distancia_parar = 200; self.cooldown_tiro = 2000
         self.ultimo_tiro_tempo = 0; self.distancia_tiro = 500; self.pontos_por_morte = 5
+        self.distancia_deteccao = s.SPAWN_DIST_MAX
 
     def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
         alvo_mais_proximo = None; dist_min = float('inf')
@@ -447,6 +451,8 @@ class InimigoPerseguidor(InimigoBase):
             if not is_player and not is_active_bot: continue
             try: dist = self.posicao.distance_to(alvo.posicao)
             except ValueError: continue
+            if dist > self.distancia_deteccao:
+                continue # Ignora este alvo, está muito longe
             if dist < dist_min: dist_min = dist; alvo_mais_proximo = alvo
 
         if not alvo_mais_proximo:
@@ -496,6 +502,7 @@ class InimigoBomba(InimigoBase):
     def __init__(self, x, y):
         super().__init__(x, y, tamanho=25, cor=AMARELO_BOMBA, vida=1)
         self.velocidade = 3; self.DANO_EXPLOSAO = 3; self.pontos_por_morte = 3
+        self.distancia_deteccao = s.SPAWN_DIST_MAX
 
     def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
         alvo_mais_proximo = None; dist_min = float('inf')
@@ -505,6 +512,8 @@ class InimigoBomba(InimigoBase):
             if not is_player and not is_active_bot: continue
             try: dist = self.posicao.distance_to(alvo.posicao)
             except ValueError: continue
+            if dist > self.distancia_deteccao:
+                continue # Ignora este alvo, está muito longe
             if dist < dist_min: dist_min = dist; alvo_mais_proximo = alvo
 
         if not alvo_mais_proximo:
@@ -765,6 +774,7 @@ class InimigoMothership(InimigoPerseguidor):
         self.max_vida = 200; self.vida_atual = 200; self.velocidade = 1; self.pontos_por_morte = 100
         self.nome = f"Mothership {random.randint(1, 99)}"; self.estado_ia = "VAGANDO"; self.alvo_retaliacao = None
         self.distancia_despawn_minion = 1000; self.max_minions = 8; self.grupo_minions = pygame.sprite.Group()
+        self.distancia_deteccao = s.SPAWN_DIST_MAX * 1.5 # <-- ADICIONE ESTA LINHA
         # Não atira diretamente (Mothership não tem método 'atirar', o que está correto)
 
     def encontrar_atacante_mais_proximo(self, lista_alvos_naves):
@@ -775,6 +785,8 @@ class InimigoMothership(InimigoPerseguidor):
             if not is_player and not is_active_bot: continue
             try: dist = self.posicao.distance_to(alvo.posicao);
             except ValueError: continue
+            if dist > self.distancia_deteccao:
+                continue # Ignora, muito longe
             if dist < dist_min: dist_min = dist; alvo_prox = alvo
         return alvo_prox
 

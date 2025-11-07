@@ -1238,10 +1238,7 @@ while rodando:
                 pos_npc = pygame.math.Vector2(npc['x'], npc['y'])
                 # --- INÍCIO DA MODIFICAÇÃO: Explosão Maior (100) para 'bomba' ---
                 
-                # Esta é a linha original que você deve substituir:
-                # explosao = Explosao(pos_npc, npc['tamanho'] // 2 + 5)
                 
-                # Substitua pela lógica abaixo:
                 tamanho_padrao_explosao = npc['tamanho'] // 2 + 5
                 
                 if npc['tipo'] == 'bomba':

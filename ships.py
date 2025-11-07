@@ -183,8 +183,12 @@ class Nave(pygame.sprite.Sprite):
             return
         if self.esta_regenerando:
             return
+            
+        # --- INÍCIO DA MODIFICAÇÃO (Correção Bug 3) ---
+        # NÃO inicia a regeneração (visual) se o bot/player tiver intenção de se mover.
         if self.quer_mover_frente or self.quer_mover_tras or self.posicao_alvo_mouse is not None:
             return
+        # --- FIM DA MODIFICAÇÃO ---
             
         print(f"[{self.nome}] Iniciando regeneração...")
         self.esta_regenerando = True
@@ -649,12 +653,36 @@ class NaveBot(Nave):
         self.lidar_com_tiros(grupo_projeteis_bots, player_ref.posicao)
         self.processar_upgrades_ia()
         
-        if self.alvo_selecionado is None and self.vida_atual < (self.max_vida * 0.5) and not self.esta_regenerando:
-             self.cerebro.estado_ia = "VAGANDO" 
-             self.cerebro.virando_aleatoriamente_timer = 0
-             self.quer_mover_frente = False
+        # --- INÍCIO DA MODIFICAÇÃO (Correção Bug 1 e 3) ---
+        
+        limite_hp_regenerar = self.max_vida * 0.8
+        
+        # Verifica os estados da IA que proíbem a regeneração
+        esta_fugindo = self.cerebro.estado_ia == "FUGINDO"
+        esta_evitando_borda = self.cerebro.estado_ia == "EVITANDO_BORDA"
+        
+        # Condições para iniciar a regeneração:
+        # 1. Não tem alvo (parou de atacar)
+        # 2. NÃO está fugindo (Prioridade de Fuga)
+        # 3. NÃO está ativamente tentando sair da borda (Prioridade de Borda)
+        # 4. A vida está abaixo de 80%
+        # 5. Não está regenerando ainda
+        if (self.alvo_selecionado is None and 
+            not esta_fugindo and 
+            not esta_evitando_borda and # <-- ADICIONADO: Esta é a correção do Spam
+            self.vida_atual < limite_hp_regenerar and 
+            not self.esta_regenerando):
+            
+            # Se todas as condições passarem, force o bot a parar (estado VAGANDO)
+            # para permitir que a regeneração comece.
+            self.cerebro.estado_ia = "VAGANDO" 
+            self.cerebro.virando_aleatoriamente_timer = 0
+            self.quer_mover_frente = False # Garante que o input de movimento pare
+            self.posicao_alvo_mouse = None # Garante que o input de clique pare
              
-             self.iniciar_regeneracao(grupo_efeitos_visuais_ref) 
+            self.iniciar_regeneracao(grupo_efeitos_visuais_ref) #
+        
+        # --- FIM DA MODIFICAÇÃO ---
 
     def processar_upgrades_ia(self):
         if self.pontos_upgrade_disponiveis > 0 and self.total_upgrades_feitos < MAX_TOTAL_UPGRADES:
