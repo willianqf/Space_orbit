@@ -468,6 +468,8 @@ def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height,
         for nome, state in online_players.items():
             if nome == meu_nome_rede:
                 continue
+            if state.get('hp', 0) <= 0:
+                continue
             pos_vec = pygame.math.Vector2(state['x'], state['y'])
             pygame.draw.circle(surface, LARANJA_BOT, get_pos_minimapa(pos_vec), 2)
     else:

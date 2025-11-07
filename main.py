@@ -306,8 +306,17 @@ def network_listener_thread(sock):
         estado_jogo = "ESPECTADOR"
         nave_player.vida_atual = 0 # Garante que o jogador está "morto" localmente
         jogador_esta_vivo_espectador = True # <--- CORRIGIDO (Mantém True)
+        print("[Espectador] Visão do Mapa Ativada (via menu online).")
+        # Calcula o zoom para ver o mapa todo
+        zoom_w = LARGURA_TELA / s.MAP_WIDTH
+        zoom_h = ALTURA_TELA / s.MAP_HEIGHT
+        camera.set_zoom(min(zoom_w, zoom_h))
+        
+        # Garante que a câmera entre em modo livre (para focar no centro do mapa)
         alvo_espectador = None
         alvo_espectador_nome = None
+        # alvo_espectador = None
+        # alvo_espectador_nome = None
         espectador_dummy_alvo.posicao = nave_player.posicao.copy()
         
         # Limpa os dados online, já que estamos offline
@@ -1003,8 +1012,18 @@ while rodando:
                     alvo_espectador = None 
                     alvo_espectador_nome = None
                     espectador_dummy_alvo.posicao = nave_player.posicao.copy()
+                    
+                print("[Espectador] Visão do Mapa Ativada (via menu).")
+                # Calcula o zoom para ver o mapa todo
+                zoom_w = LARGURA_TELA / s.MAP_WIDTH
+                zoom_h = ALTURA_TELA / s.MAP_HEIGHT
+                camera.set_zoom(min(zoom_w, zoom_h))
                 
-                ciclar_alvo_espectador(avancar=True) # <-- CORREÇÃO BUG 2: Segue alvo
+                # Garante que a câmera entre em modo livre (para focar no centro do mapa)
+                alvo_espectador = None
+                alvo_espectador_nome = None
+                
+                
 
             elif action == "REQ_RESPAWN":
                 # Só funciona se o jogador estiver morto ou espectando vivo
@@ -1221,7 +1240,8 @@ while rodando:
             alvo_camera_final = espectador_dummy_alvo
     
     else: # JOGANDO, PAUSE, MENU, etc.
-         camera.set_zoom(1.0) # Garante que o zoom está 1.0
+         if estado_jogo != "PAUSE" and not jogador_pediu_para_espectar:
+                 camera.set_zoom(1.0) # Garante que o zoom está 1.0
          alvo_camera_final = nave_player # Câmera padrão segue o jogador
     
     # Atualiza a câmera com o alvo decidido
@@ -1884,6 +1904,8 @@ while rodando:
                         self.pontos = pontos
                 lista_ranking = []
                 for nome, state in online_players_copy.items():
+                    if state.get('hp', 0) <= 0:
+                        continue
                     lista_ranking.append(RankingEntry(nome, state.get('pontos', 0)))
                 lista_ordenada = sorted(lista_ranking, key=lambda entry: entry.pontos, reverse=True)
                 top_5 = lista_ordenada[:5]
