@@ -1308,10 +1308,12 @@ while rodando:
         # --- LÓGICA DE JOGO OFFLINE ---
         if client_socket is None: 
             
-            # (lista_alvos_naves já foi definida acima)
+            # (lista_alvos_naves já foi definida acima, contendo jogador vivo e bots vivos)
 
-            if estado_jogo == "JOGANDO" and len(grupo_bots) < max_bots_atual: 
-                spawnar_bot(nave_player.posicao, dificuldade_jogo_atual)
+            # [MODIFICADO] A lógica de spawn de bots foi movida para o bloco abaixo
+            # para que eles também spawnam perto de outros bots, e não só do jogador.
+            # if estado_jogo == "JOGANDO" and len(grupo_bots) < max_bots_atual: 
+            #    spawnar_bot(nave_player.posicao, dificuldade_jogo_atual)
 
             grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos, grupo_efeitos_visuais)
             grupo_inimigos.update(lista_alvos_naves, grupo_projeteis_inimigos, s.DESPAWN_DIST)
@@ -1320,39 +1322,41 @@ while rodando:
             grupo_projeteis_bots.update()
             grupo_projeteis_inimigos.update()
             
-            if estado_jogo == "JOGANDO":
-                # 1. Cria uma lista de todas as "âncoras" de spawn (entidades aliadas vivas)
-                lista_spawn_anchors = []
-                
-                # Adiciona o jogador se ele estiver vivo E jogando (não espectando)
-                if nave_player.vida_atual > 0 and not jogador_esta_vivo_espectador:
-                    lista_spawn_anchors.append(nave_player)
-                    
-                # Adiciona todos os bots vivos
-                lista_spawn_anchors.extend([bot for bot in grupo_bots if bot.vida_atual > 0])
+            # --- INÍCIO DA MODIFICAÇÃO (LÓGICA DE SPAWN) ---
+            
+            # 1. Define nossa lista de "âncoras" de spawn.
+            #    (lista_alvos_naves já contém o jogador vivo (não espectador) e bots vivos)
+            lista_spawn_anchors = lista_alvos_naves
 
-                # 2. Se houver qualquer entidade ativa, usa uma delas como referência
-                if lista_spawn_anchors:
-                    # Escolhe uma âncora aleatória (para que o spawn não siga sempre a mesma entidade)
-                    ponto_referencia = random.choice(lista_spawn_anchors).posicao
-                    
-                    # 3. Spawna entidades usando o ponto de referência
-                    if len(grupo_obstaculos) < s.MAX_OBSTACULOS: 
-                        spawnar_obstaculo(ponto_referencia)
-                    
-                    contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership, MinionCongelante, BossCongelante))) 
-                    
-                    if contagem_inimigos_normais < s.MAX_INIMIGOS: 
-                        spawnar_inimigo_aleatorio(ponto_referencia)
-                    
-                    if len(grupo_motherships) < s.MAX_MOTHERSHIPS: 
-                        spawnar_mothership(ponto_referencia)
-                    
-                    if len(grupo_boss_congelante) < s.MAX_BOSS_CONGELANTE: 
-                        spawnar_boss_congelante(ponto_referencia)
+            # 2. Se houver qualquer entidade aliada ativa, usa uma delas como referência
+            if lista_spawn_anchors:
+                # Escolhe uma âncora aleatória (para que o spawn não siga sempre a mesma entidade)
+                ponto_referencia_sprite = random.choice(lista_spawn_anchors)
+                ponto_referencia = ponto_referencia_sprite.posicao
                 
-                # (Se a lista_spawn_anchors estiver vazia, o spawn para, o que é correto)
-                # --- FIM DA MODIFICAÇÃO ---
+                # 3. Spawna entidades (incluindo BOTS) usando o ponto de referência
+                
+                # Spawna bots
+                if len(grupo_bots) < max_bots_atual: 
+                    spawnar_bot(ponto_referencia, dificuldade_jogo_atual)
+
+                # Spawna Obstáculos
+                if len(grupo_obstaculos) < s.MAX_OBSTACULOS: 
+                    spawnar_obstaculo(ponto_referencia)
+                
+                # Spawna Inimigos Normais
+                contagem_inimigos_normais = sum(1 for inimigo in grupo_inimigos if not isinstance(inimigo, (InimigoMinion, InimigoMothership, MinionCongelante, BossCongelante))) 
+                
+                if contagem_inimigos_normais < s.MAX_INIMIGOS: 
+                    spawnar_inimigo_aleatorio(ponto_referencia)
+                
+                # Spawna Motherships
+                if len(grupo_motherships) < s.MAX_MOTHERSHIPS: 
+                    spawnar_mothership(ponto_referencia)
+                
+                # Spawna Boss Congelante
+                if len(grupo_boss_congelante) < s.MAX_BOSS_CONGELANTE: 
+                    spawnar_boss_congelante(ponto_referencia)
             
             # --- INÍCIO: MODIFICAÇÃO (Só checa colisão se vivo) ---
             if estado_jogo == "JOGANDO":
