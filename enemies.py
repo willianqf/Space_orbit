@@ -521,6 +521,24 @@ class InimigoBomba(InimigoBase):
         try: direcao = (pos_alvo - self.posicao).normalize(); self.posicao += direcao * self.velocidade; self.rect.center = self.posicao
         except ValueError: pass
         # Não atira, explode na colisão (tratado em main.py)
+        
+    def foi_atingido(self, dano):
+            # Esta função agora substitui a de InimigoBase
+        agora = pygame.time.get_ticks()
+        
+        # Ignora a lógica de cooldown de hit; a bomba morre no primeiro toque.
+        self.vida_atual -= dano
+        self.ultimo_hit_tempo = agora
+        
+        if self.vida_atual <= 0:
+            if grupo_explosoes is not None:
+                # Usa o tamanho maior que discutimos (Tamanho 25 + 15 = 40)
+                tamanho_explosao_bomba = self.tamanho + 100 
+                explosao = Explosao(self.rect.center, tamanho_explosao_bomba)
+                grupo_explosoes.add(explosao)
+            self.kill()
+            return True
+        return False
 
 # Inimigo Rápido (Laranja)
 class InimigoRapido(InimigoPerseguidor):

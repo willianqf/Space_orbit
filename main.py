@@ -1236,8 +1236,20 @@ while rodando:
             
             for npc in dead_npc_states:
                 pos_npc = pygame.math.Vector2(npc['x'], npc['y'])
-                explosao = Explosao(pos_npc, npc['tamanho'] // 2 + 5)
-                grupo_explosoes.add(explosao)
+                # --- INÍCIO DA MODIFICAÇÃO: Explosão Maior (100) para 'bomba' ---
+                
+                # Esta é a linha original que você deve substituir:
+                # explosao = Explosao(pos_npc, npc['tamanho'] // 2 + 5)
+                
+                # Substitua pela lógica abaixo:
+                tamanho_padrao_explosao = npc['tamanho'] // 2 + 5
+                
+                if npc['tipo'] == 'bomba':
+                    # O tamanho da bomba (tamanho) é 25. Somamos 75 para dar 100.
+                    tamanho_padrao_explosao = npc['tamanho'] + 75 
+                
+                explosao = Explosao(pos_npc, tamanho_padrao_explosao)
+                
                 # --- MUDANÇA: Tocar som de explosão de Boss ---
                 if npc['tipo'] in ['mothership', 'boss_congelante']:
                     tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
