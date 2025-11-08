@@ -212,10 +212,8 @@ def network_listener_thread(sock):
                                     'x': float(parts_player[1]),
                                     'y': float(parts_player[2]),
                                     'angulo': float(parts_player[3]),
-                                    'hp': float(parts_player[4]), 
-                                    # --- INÍCIO: CORREÇÃO (ValueError int('5.0')) ---
+                                    'hp': float(parts_player[4]), # <-- Servidor envia float, mantemos float
                                     'max_hp': int(float(parts_player[5])), # Converte para float primeiro
-                                    # --- FIM: CORREÇÃO ---
                                     'pontos': int(parts_player[6]),
                                     'esta_regenerando': bool(int(parts_player[7])),
                                     'pontos_upgrade_disponiveis': int(parts_player[8]),
@@ -228,8 +226,8 @@ def network_listener_thread(sock):
                                     'is_lento': bool(int(parts_player[15])),
                                     'is_congelado': bool(int(parts_player[16])),
                                 }
-                            except ValueError:
-                                print(f"Erro ao processar dados do jogador: {parts_player}")
+                            except ValueError as e:
+                                print(f"Erro ao processar dados do jogador: {parts_player} | Erro: {e}")
                                 pass
                         else:
                              pass 
@@ -265,16 +263,22 @@ def network_listener_thread(sock):
                         if len(parts_npc) == 8: 
                             try:
                                 npc_id = parts_npc[0]
+                                
+                                # --- INÍCIO DA CORREÇÃO (PARSE DE HP) ---
+                                # O HP do NPC é enviado como float (ex: 2.3, 0.9, -0.5)
+                                # Precisamos ler como float, não int!
                                 new_npc_states[npc_id] = {
                                     'tipo': parts_npc[1], 
                                     'x': float(parts_npc[2]),
                                     'y': float(parts_npc[3]),
                                     'angulo': float(parts_npc[4]),
-                                    'hp': int(parts_npc[5]),
-                                    'max_hp': int(parts_npc[6]),
+                                    'hp': float(parts_npc[5]), # <-- MUDADO DE int() PARA float()
+                                    'max_hp': int(float(parts_npc[6])), # int(float(...)) é seguro
                                     'tamanho': int(parts_npc[7])
                                 }
-                            except ValueError:
+                                # --- FIM DA CORREÇÃO ---
+                            except ValueError as e:
+                                print(f"Erro ao processar dados do NPC: {parts_npc} | Erro: {e}")
                                 pass 
 
                     with network_state_lock:
@@ -1289,19 +1293,7 @@ while rodando:
         if client_socket:
             with network_state_lock:
                 
-                # --- INÍCIO DA CORREÇÃO (ALVO "PEGAJOSO") ---
-                if nave_player.alvo_selecionado and isinstance(nave_player.alvo_selecionado, str):
-                    target_id = nave_player.alvo_selecionado
-                    target_npc_state = online_npcs.get(target_id) # Pega o estado ATUAL do NPC
-                    
-                    if target_npc_state and target_npc_state.get('hp', 0) <= 0:
-                        print(f"[CLIENTE] Alvo NPC {target_id} está com HP <= 0. Limpando mira.")
-                        nave_player.alvo_selecionado = None
-                    elif not target_npc_state and target_id not in online_players_states:
-                         # O NPC/Player desapareceu (morte normal), limpa a mira
-                         print(f"[CLIENTE] Alvo {target_id} desapareceu. Limpando mira.")
-                         nave_player.alvo_selecionado = None
-                # --- FIM DA CORREÇÃO ---
+                # --- (Lógica de alvo "pegajoso" movida para o loop de Desenho) ---
                 
                 my_state = online_players_states.get(MEU_NOME_REDE)
                 if my_state:
@@ -1607,7 +1599,7 @@ while rodando:
             elif isinstance(proj, ProjetilTeleguiadoLento):
                 nave_player.aplicar_lentidao(6000)
             else:
-                if nave_player.foi_atingido(1, estado_jogo, proj.posicao):
+                if nave_player.foi_atingido(1, estado_jogo_atual, proj.posicao):
                     estado_jogo = "ESPECTADOR"
                     jogador_esta_vivo_espectador = False
                     alvo_espectador = None
@@ -1617,7 +1609,7 @@ while rodando:
         colisoes_proj_bot_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_bots, True)
         for proj in colisoes_proj_bot_player:
             if proj.owner != nave_player: 
-                if nave_player.foi_atingido(proj.dano, estado_jogo, proj.posicao):
+                if nave_player.foi_atingido(proj.dano, estado_jogo_atual, proj.posicao):
                      estado_jogo = "ESPECTADOR" 
                      jogador_esta_vivo_espectador = False
                      alvo_espectador = None
@@ -1626,7 +1618,7 @@ while rodando:
         colisoes_ram_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_inimigos, False)
         for inimigo in colisoes_ram_inimigo_player:
             dano = 1 if not isinstance(inimigo, InimigoBomba) else inimigo.DANO_EXPLOSAO
-            if nave_player.foi_atingido(dano, estado_jogo, inimigo.posicao):
+            if nave_player.foi_atingido(dano, estado_jogo_atual, inimigo.posicao):
                 estado_jogo = "ESPECTADOR"
                 jogador_esta_vivo_espectador = False
                 alvo_espectador = None
@@ -1646,12 +1638,12 @@ while rodando:
         
         colisoes_ram_bot_player = pygame.sprite.spritecollide(nave_player, grupo_bots, False)
         for bot in colisoes_ram_bot_player:
-            if nave_player.foi_atingido(1, estado_jogo, bot.posicao):
+            if nave_player.foi_atingido(1, estado_jogo_atual, bot.posicao):
                 estado_jogo = "ESPECTADOR"
                 jogador_esta_vivo_espectador = False
                 alvo_espectador = None
                 espectador_dummy_alvo.posicao = nave_player.posicao.copy()
-            bot.foi_atingido(1, estado_jogo, nave_player.posicao)
+            bot.foi_atingido(1, estado_jogo_atual, nave_player.posicao)
 
     # 13. Desenho
     if estado_jogo == "MENU":
@@ -1712,46 +1704,65 @@ while rodando:
                 
                 tocar_som_posicional(som_a_tocar, pos_som, nave_player.posicao, vol_base)
 
+            
+            # --- INÍCIO DA NOVA LÓGICA DE MORTE (SUBSTITUIÇÃO) ---
+            
+            # 1. Conjunto de IDs de NPCs que o servidor enviou (não inclui mortos-HP<=0)
             current_npc_ids = set(online_npcs_copy.keys())
-            dead_npc_ids = set(online_npcs_last_frame.keys()) - current_npc_ids
-            
-            # --- INÍCIO: CORREÇÃO BUG 2 (NPCs Invisíveis) ---
-            # Limpa referências a NPCs mortos ANTES de desenhar
-            # Remove alvo_selecionado se for um NPC morto
-            if nave_player.alvo_selecionado:
-                # Verifica se o alvo é um NPC (string ID) e se morreu
-                if isinstance(nave_player.alvo_selecionado, str):
-                    if nave_player.alvo_selecionado in dead_npc_ids:
-                        print(f"[CLIENTE] Alvo NPC {nave_player.alvo_selecionado} morreu. Limpando mira.")
-                        nave_player.alvo_selecionado = None
-            # --- FIM: CORREÇÃO BUG 2 ---
-            
-            for npc_id in dead_npc_ids:
-                npc = online_npcs_last_frame[npc_id]
-                pos_npc = pygame.math.Vector2(npc['x'], npc['y'])
-                tamanho_padrao_explosao = npc['tamanho'] // 2 + 5
-                
-                if npc['tipo'] == 'bomba':
-                    tamanho_padrao_explosao = npc['tamanho'] + 75 
-                
-                explosao = Explosao(pos_npc, tamanho_padrao_explosao)
-                grupo_explosoes.add(explosao)
-                
-                if npc['tipo'] in ['mothership', 'boss_congelante']:
-                    tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
-                else:
-                    tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
 
+            # 2. Encontra NPCs que existiam no frame passado mas NÃO neste
+            #    (Esta é a sua lógica antiga de 'dead_npc_ids')
+            ids_desaparecidos = set(online_npcs_last_frame.keys()) - current_npc_ids
+
+            # 3. VERIFICAÇÃO DE HP: Encontra IDs que foram enviados, mas com HP <= 0
+            ids_mortos_pelo_hp = set()
+            for npc_id, state in online_npcs_copy.items():
+                # Agora que o HP é float, esta verificação está correta
+                if state.get('hp', 0) <= 0:
+                    ids_mortos_pelo_hp.add(npc_id)
+
+            # 4. Combina os dois conjuntos. Um NPC está morto se DESAPARECEU ou se foi ENVIADO COM HP <= 0.
+            ids_npcs_mortos_neste_tick = ids_desaparecidos.union(ids_mortos_pelo_hp)
+
+            # 5. Processa a morte (Explosão e Limpeza de Mira)
+            if ids_npcs_mortos_neste_tick:
+                # Limpa a mira do jogador PRIMEIRO
+                if nave_player.alvo_selecionado and isinstance(nave_player.alvo_selecionado, str):
+                    if nave_player.alvo_selecionado in ids_npcs_mortos_neste_tick:
+                        print(f"[CLIENTE] Alvo {nave_player.alvo_selecionado} detectado como morto (HP ou Desapareceu). Limpando mira.")
+                        nave_player.alvo_selecionado = None
+                
+                # Toca explosões
+                for npc_id in ids_npcs_mortos_neste_tick:
+                    # Só toca explosão se não tivermos tocado ainda (se existia no frame passado)
+                    if npc_id in online_npcs_last_frame: 
+                        npc = online_npcs_last_frame[npc_id]
+                        pos_npc = pygame.math.Vector2(npc['x'], npc['y'])
+                        tamanho_padrao_explosao = npc['tamanho'] // 2 + 5
+                        
+                        if npc['tipo'] == 'bomba':
+                            tamanho_padrao_explosao = npc['tamanho'] + 75 
+                        
+                        explosao = Explosao(pos_npc, tamanho_padrao_explosao)
+                        grupo_explosoes.add(explosao)
+                        
+                        if npc['tipo'] in ['mothership', 'boss_congelante']:
+                            tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
+                        else:
+                            tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+            
+            # (O código de morte de Jogadores permanece o mesmo)
             current_player_names = set(online_players_copy.keys())
             dead_player_states = [player for name, player in online_players_last_frame.items() if name not in current_player_names]
             
             for player in dead_player_states:
                  pos_player = pygame.math.Vector2(player['x'], player['y'])
-                 # --- INÍCIO: CORREÇÃO (NameError 'explosao') ---
                  explosao = Explosao(pos_player, 30 // 2 + 10) 
-                 # --- FIM: CORREÇÃO ---
                  grupo_explosoes.add(explosao)
                  tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_player, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
+
+            # --- FIM DA NOVA LÓGICA DE MORTE ---
+
 
             for nome, state in online_players_copy.items():
                 # --- MODIFICAÇÃO: Não desenha nosso "fantasma" se estivermos mortos ---
@@ -1838,10 +1849,9 @@ while rodando:
             
             for npc_id, state in online_npcs_copy.items():
                 
-                # --- INÍCIO DA CORREÇÃO (NPC INVISÍVEL) ---
+                # ESTA É A VERIFICAÇÃO QUE AGORA ESTÁ SEGURA
                 if state.get('hp', 0) <= 0:
-                    continue # Não desenha NPCs mortos
-                # --- FIM DA CORREÇÃO ---
+                    continue # Não desenha (a lógica acima já tratou a morte)
                 
                 tamanho = state.get('tamanho', 30) 
                 tipo = state.get('tipo')
