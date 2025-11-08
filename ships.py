@@ -66,18 +66,23 @@ class NaveAuxiliar(pygame.sprite.Sprite):
         self.posicao = self.owner.posicao + self.offset_pos.rotate(-self.owner.angulo); self.rect = self.imagem_original.get_rect(center=self.posicao)
         self.angulo = self.owner.angulo; self.alvo_atual = None; self.distancia_tiro = 600; self.cooldown_tiro = 1000; self.ultimo_tiro_tempo = 0
 
-    def update(self, lista_alvos, grupo_projeteis_destino, estado_jogo_atual, nave_player_ref, client_socket=None):
+    # --- INÍCIO DA MODIFICAÇÃO (Assinatura e lógica Online) ---
+    def update(self, lista_alvos, grupo_projeteis_destino, estado_jogo_atual, nave_player_ref, client_socket=None, online_players={}, online_npcs={}):
+        """
+        lista_alvos: (Offline) lista de sprites. (Online) Vazio.
+        online_players/online_npcs: (Online) Dicionários de estado.
+        """
         parar_ataque = (self.owner == nave_player_ref and estado_jogo_atual == "GAME_OVER")
         offset_rotacionado = self.offset_pos.rotate(-self.owner.angulo); posicao_alvo_seguir = self.owner.posicao + offset_rotacionado
         self.posicao = self.posicao.lerp(posicao_alvo_seguir, 0.1) 
         
         self.alvo_atual = None 
 
-        if client_socket is None:
+        if client_socket is None: # --- OFFLINE LOGIC ---
             if not parar_ataque:
-                alvo_do_dono = self.owner.alvo_selecionado 
+                alvo_do_dono = self.owner.alvo_selecionado # This is a SPRITE
                 
-                if alvo_do_dono and alvo_do_dono.groups():
+                if alvo_do_dono and alvo_do_dono.groups(): # Check if sprite is alive
                     try:
                         dist = self.posicao.distance_to(alvo_do_dono.posicao)
                         if dist < self.distancia_tiro: 
@@ -97,13 +102,11 @@ class NaveAuxiliar(pygame.sprite.Sprite):
                         self.ultimo_tiro_tempo = agora
                         radianos = math.radians(self.angulo)
                         
-                        # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
                         dano_real_aux = DANO_POR_NIVEL[self.owner.nivel_dano]
                         proj = ProjetilTeleguiadoJogador(self.posicao.x, self.posicao.y, radianos, 
-                                                       dano_real_aux, # self.owner.nivel_dano, 
+                                                       dano_real_aux, 
                                                        owner_nave=self.owner, 
                                                        alvo_sprite=self.alvo_atual)
-                        # --- FIM: MODIFICAÇÃO ---
                         
                         grupo_projeteis_destino.add(proj)
                         tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, nave_player_ref.posicao, VOLUME_BASE_TIRO_PLAYER)
@@ -111,16 +114,41 @@ class NaveAuxiliar(pygame.sprite.Sprite):
                     self.angulo = self.owner.angulo
             else: 
                 self.angulo = self.owner.angulo
-        else:
-            alvo_do_dono = self.owner.alvo_selecionado
-            if alvo_do_dono and alvo_do_dono.groups():
+        
+        else: # --- ONLINE LOGIC (VISUAL ONLY) ---
+            alvo_do_dono_id = self.owner.alvo_selecionado # This is a STRING ID (e.g., 'npc_119')
+            
+            alvo_pos = None # Posição do alvo
+            
+            if alvo_do_dono_id:
+                # Tentar encontrar a posição do alvo
+                if alvo_do_dono_id in online_npcs:
+                    alvo_state = online_npcs.get(alvo_do_dono_id)
+                    # Verifica se o estado existe e se o alvo está vivo
+                    if alvo_state and alvo_state.get('hp', 0) > 0:
+                        alvo_pos = pygame.math.Vector2(alvo_state['x'], alvo_state['y'])
+                
+                elif alvo_do_dono_id in online_players:
+                    alvo_state = online_players.get(alvo_do_dono_id)
+                    # Verifica se o estado existe e se o alvo está vivo
+                    if alvo_state and alvo_state.get('hp', 0) > 0:
+                         alvo_pos = pygame.math.Vector2(alvo_state['x'], alvo_state['y'])
+                
+                # Se não encontrou (morreu ou desapareceu), limpa o alvo do dono (localmente)
+                if alvo_pos is None:
+                    self.owner.alvo_selecionado = None 
+            
+            # Agora, usa a 'alvo_pos' (que é um Vector2 ou None) para mirar
+            if alvo_pos:
                 try: 
-                    direcao = (alvo_do_dono.posicao - self.posicao).normalize()
+                    direcao = (alvo_pos - self.posicao).normalize()
                     self.angulo = direcao.angle_to(pygame.math.Vector2(0, -1))
                 except ValueError: 
                     self.angulo = self.owner.angulo
             else:
+                # Se não tem alvo, apenas alinha com o dono
                 self.angulo = self.owner.angulo
+        # --- FIM DA MODIFICAÇÃO ---
 
         self.rect.center = self.posicao
         

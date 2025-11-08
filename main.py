@@ -1288,14 +1288,25 @@ while rodando:
 
 
     if estado_jogo not in ["MENU", "GET_NAME", "GET_SERVER_INFO"]:
-        # camera.update(nave_player) # <--- REMOVIDO (Movido para cima)
+        
+        # --- INÍCIO DA MODIFICAÇÃO (Mover cópia para o topo) ---
+        online_players_copy = {}
+        online_npcs_copy = {} 
+        if client_socket:
+            with network_state_lock:
+                online_players_copy = online_players_states.copy() 
+                online_npcs_copy = online_npcs.copy() 
+        # --- FIM DA MODIFICAÇÃO ---
 
         if client_socket:
             with network_state_lock:
                 
                 # --- (Lógica de alvo "pegajoso" movida para o loop de Desenho) ---
                 
-                my_state = online_players_states.get(MEU_NOME_REDE)
+                # --- MODIFICAÇÃO (Usa 'online_players_copy') ---
+                my_state = online_players_copy.get(MEU_NOME_REDE)
+                # --- FIM DA MODIFICAÇÃO ---
+                
                 if my_state:
                     nova_pos = pygame.math.Vector2(my_state['x'], my_state['y'])
                     
@@ -1579,7 +1590,17 @@ while rodando:
             bot.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_bots, estado_jogo, nave_player, client_socket)
         
         if nave_player.vida_atual > 0:
-            nave_player.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_player, estado_jogo, nave_player, client_socket)
+            # --- INÍCIO DA MODIFICAÇÃO (Passar dicts) ---
+            nave_player.grupo_auxiliares_ativos.update(
+                lista_todos_alvos_para_aux, 
+                grupo_projeteis_player, 
+                estado_jogo, 
+                nave_player, 
+                client_socket,
+                online_players_copy, # <--- Passa o dict
+                online_npcs_copy     # <--- Passa o dict
+            )
+            # --- FIM DA MODIFICAÇÃO ---
         
         grupo_efeitos_visuais.update() 
 
@@ -1599,7 +1620,7 @@ while rodando:
             elif isinstance(proj, ProjetilTeleguiadoLento):
                 nave_player.aplicar_lentidao(6000)
             else:
-                if nave_player.foi_atingido(1, estado_jogo_atual, proj.posicao):
+                if nave_player.foi_atingido(1, estado_jogo, proj.posicao):
                     estado_jogo = "ESPECTADOR"
                     jogador_esta_vivo_espectador = False
                     alvo_espectador = None
@@ -1609,7 +1630,7 @@ while rodando:
         colisoes_proj_bot_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_bots, True)
         for proj in colisoes_proj_bot_player:
             if proj.owner != nave_player: 
-                if nave_player.foi_atingido(proj.dano, estado_jogo_atual, proj.posicao):
+                if nave_player.foi_atingido(proj.dano, estado_jogo, proj.posicao):
                      estado_jogo = "ESPECTADOR" 
                      jogador_esta_vivo_espectador = False
                      alvo_espectador = None
@@ -1618,7 +1639,7 @@ while rodando:
         colisoes_ram_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_inimigos, False)
         for inimigo in colisoes_ram_inimigo_player:
             dano = 1 if not isinstance(inimigo, InimigoBomba) else inimigo.DANO_EXPLOSAO
-            if nave_player.foi_atingido(dano, estado_jogo_atual, inimigo.posicao):
+            if nave_player.foi_atingido(dano, estado_jogo, inimigo.posicao):
                 estado_jogo = "ESPECTADOR"
                 jogador_esta_vivo_espectador = False
                 alvo_espectador = None
@@ -1638,12 +1659,12 @@ while rodando:
         
         colisoes_ram_bot_player = pygame.sprite.spritecollide(nave_player, grupo_bots, False)
         for bot in colisoes_ram_bot_player:
-            if nave_player.foi_atingido(1, estado_jogo_atual, bot.posicao):
+            if nave_player.foi_atingido(1, estado_jogo, bot.posicao):
                 estado_jogo = "ESPECTADOR"
                 jogador_esta_vivo_espectador = False
                 alvo_espectador = None
                 espectador_dummy_alvo.posicao = nave_player.posicao.copy()
-            bot.foi_atingido(1, estado_jogo_atual, nave_player.posicao)
+            bot.foi_atingido(1, estado_jogo, nave_player.posicao)
 
     # 13. Desenho
     if estado_jogo == "MENU":
@@ -1669,15 +1690,17 @@ while rodando:
         # Sprites do Jogo
         for obst in grupo_obstaculos: tela.blit(obst.image, camera.apply(obst.rect))
         
-        online_players_copy = {}
-        online_projectiles_copy = []
-        online_npcs_copy = {} 
+        # --- INÍCIO DA MODIFICAÇÃO (Remover cópia daqui) ---
+        # online_players_copy = {} # <--- REMOVIDO
+        online_projectiles_copy = [] # <-- Apenas projéteis são copiados aqui (para sons)
+        # online_npcs_copy = {} # <--- REMOVIDO
+        # --- FIM DA MODIFICAÇÃO ---
         
         if client_socket:
             with network_state_lock:
-                online_players_copy = online_players_states.copy() 
-                online_projectiles_copy = list(online_projectiles) 
-                online_npcs_copy = online_npcs.copy() 
+                # online_players_copy = online_players_states.copy() # <--- REMOVIDO
+                online_projectiles_copy = list(online_projectiles) # <--- MANTIDO
+                # online_npcs_copy = online_npcs.copy() # <--- REMOVIDO
             
             current_projectile_ids = {proj['id'] for proj in online_projectiles_copy}
             new_projectiles = [proj for proj in online_projectiles_copy if proj['id'] not in online_projectile_ids_last_frame]
@@ -1708,6 +1731,7 @@ while rodando:
             # --- INÍCIO DA NOVA LÓGICA DE MORTE (SUBSTITUIÇÃO) ---
             
             # 1. Conjunto de IDs de NPCs que o servidor enviou (não inclui mortos-HP<=0)
+            #    (Usa 'online_npcs_copy' que foi copiado no bloco de LÓGICA)
             current_npc_ids = set(online_npcs_copy.keys())
 
             # 2. Encontra NPCs que existiam no frame passado mas NÃO neste
@@ -1752,6 +1776,7 @@ while rodando:
                             tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
             
             # (O código de morte de Jogadores permanece o mesmo)
+            # (Usa 'online_players_copy' que foi copiado no bloco de LÓGICA)
             current_player_names = set(online_players_copy.keys())
             dead_player_states = [player for name, player in online_players_last_frame.items() if name not in current_player_names]
             
@@ -1969,10 +1994,12 @@ while rodando:
              ui.desenhar_hud(tela, nave_player, estado_jogo)
         
         if estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", "ESPECTADOR"]:
-            online_players_copy = {}
-            if client_socket:
-                 with network_state_lock:
-                     online_players_copy = online_players_states.copy()
+            # --- MODIFICAÇÃO (Usa 'online_players_copy' já copiado) ---
+            # online_players_copy = {} # <-- REMOVIDO
+            # if client_socket:
+            #      with network_state_lock:
+            #          online_players_copy = online_players_states.copy()
+            # --- FIM DA MODIFICAÇÃO ---
             
             # --- INÍCIO DA MODIFICAÇÃO (BUG 3) ---
             # Passa a flag 'jogador_esta_vivo_espectador' para o minimapa
