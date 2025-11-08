@@ -432,7 +432,7 @@ def desenhar_hud(surface, nave, estado_jogo):
 
 # --- MODIFICAÇÃO 1: Mudar a assinatura da função ---
 def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height, online_players, meu_nome_rede, 
-                         alvo_camera_atual, camera_zoom):
+                         alvo_camera_atual, camera_zoom, jogador_esta_vivo_espectador=False):
 # --- FIM DA MODIFICAÇÃO 1 ---
     fundo_mini = pygame.Surface((MINIMAP_WIDTH, MINIMAP_HEIGHT), pygame.SRCALPHA)
     fundo_mini.fill(MINIMAP_FUNDO)
@@ -490,10 +490,16 @@ def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height,
         for bot in bots:
             pygame.draw.circle(surface, LARANJA_BOT, get_pos_minimapa(bot.posicao), 2)
     
-    # --- INÍCIO: MODIFICAÇÃO (Não desenha jogador morto no minimapa) ---
+    # --- INÍCIO DA MODIFICAÇÃO 2 (BUG 3): Condição de desenho do player ---
+    # Só desenha o ícone azul do jogador se ele estiver jogando E vivo E
+    # NÃO estiver no modo "espectador-vivo" (voluntário)
+        # --- INÍCIO: CORREÇÃO (Não desenha jogador espectador no minimapa) ---
     if estado_jogo == "JOGANDO" and player.vida_atual > 0:
-    # --- FIM: MODIFICAÇÃO ---
         pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(player.posicao), 3)
+    elif estado_jogo == "ESPECTADOR" and not jogador_esta_vivo_espectador and player.vida_atual > 0:
+        # Desenha se estiver espectando morto (mas com vida) - caso raro de respawn
+        pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(player.posicao), 3)
+    # --- FIM: CORREÇÃO ---)
 
 def desenhar_ranking(surface, lista_top_5, nave_player):
     pos_x_base = MINIMAP_POS_X

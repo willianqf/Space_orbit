@@ -328,8 +328,13 @@ def update_player_logic(player_state, agora_ms=0):
     return None
 # --- FIM ---
 
-# --- (Função update_npc_logic - Sem alterações) ---
+# --- (Função update_npc_logic) ---
 def update_npc_logic(npc, players_pos_lista, agora_ms=0):
+    # --- INÍCIO DA CORREÇÃO (BUG 2) ---
+    if npc.get('hp', 0) <= 0:
+        return None # Não faz nada se já estiver morto
+    # --- FIM DA CORREÇÃO ---
+    
     alvo_pos = None; dist_min_sq = float('inf')
     if not players_pos_lista: return None 
     for p_pos in players_pos_lista:
@@ -398,7 +403,7 @@ def update_npc_logic(npc, players_pos_lista, agora_ms=0):
                     'tipo_proj': tipo_proj_npc, 'alvo_id': alvo_id_proj, 'timestamp_criacao': agora_ms
                 }
             return novo_projetil 
-    return None 
+    return None
 # --- FIM ---
 
 # --- (Função server_spawnar_inimigo_aleatorio - Sem alterações) ---
@@ -429,21 +434,53 @@ def server_spawnar_inimigo_aleatorio(x, y, npc_id):
 
 # --- (Funções de Spawn de Boss - Sem alterações) ---
 def server_spawnar_mothership(x, y, npc_id):
-    return {'id': npc_id, 'tipo': 'mothership', 'x': float(x), 'y': float(y), 'angulo': 0.0,
-        'hp': 200, 'max_hp': 200, 'tamanho': 80, 'cooldown_tiro': 999999,   
-        'ultimo_tiro_tempo': 0, 'pontos_por_morte': 100,
-        'ia_estado': 'VAGANDO', 'ia_alvo_retaliacao': None, 'ia_ultimo_hit_tempo': 0,
+    """Spawna uma Mothership com HP correto."""
+    mothership = {
+        'id': npc_id, 
+        'tipo': 'mothership', 
+        'x': float(x), 
+        'y': float(y), 
+        'angulo': 0.0,
+        'hp': 200,  # HP inicial
+        'max_hp': 200,  # HP máximo
+        'tamanho': 80, 
+        'cooldown_tiro': 999999,   
+        'ultimo_tiro_tempo': 0, 
+        'pontos_por_morte': 100,
+        'ia_estado': 'VAGANDO', 
+        'ia_alvo_retaliacao': None, 
+        'ia_ultimo_hit_tempo': 0,
         'ia_minions_ativos': [] 
     }
+    print(f"[DEBUG SPAWN] Mothership {npc_id} criada com HP: {mothership['hp']}/{mothership['max_hp']}")
+    return mothership
 
 def server_spawnar_boss_congelante(x, y, npc_id):
-    return {'id': npc_id, 'tipo': 'boss_congelante', 'x': float(x), 'y': float(y), 'angulo': 0.0,
-        'hp': s.HP_BOSS_CONGELANTE, 'max_hp': s.HP_BOSS_CONGELANTE, 'tamanho': 100,             
-        'cooldown_tiro': s.COOLDOWN_TIRO_CONGELANTE, 'ultimo_tiro_tempo': 0,
+    """Spawna um Boss Congelante com HP correto."""
+    boss = {
+        'id': npc_id, 
+        'tipo': 'boss_congelante', 
+        'x': float(x), 
+        'y': float(y), 
+        'angulo': 0.0,
+        'hp': s.HP_BOSS_CONGELANTE,  # Deve ser 400 (de settings)
+        'max_hp': s.HP_BOSS_CONGELANTE, 
+        'tamanho': 100,             
+        'cooldown_tiro': s.COOLDOWN_TIRO_CONGELANTE, 
+        'ultimo_tiro_tempo': 0,
         'pontos_por_morte': s.PONTOS_BOSS_CONGELANTE,
-        'ia_ultimo_spawn_minion': 0, 'ia_minions_ativos': [], 'ia_ultimo_hit_tempo': 0,
+        'ia_ultimo_spawn_minion': 0, 
+        'ia_minions_ativos': [], 
+        'ia_ultimo_hit_tempo': 0,
         'ia_wander_target': None 
     }
+    print(f"[DEBUG SPAWN] Boss Congelante {npc_id} criado com HP: {boss['hp']}/{boss['max_hp']}")
+    return boss
+def debug_dano_npc(owner_nome, npc_id, npc_tipo, dano, hp_antes, hp_depois):
+    """Helper para debug de dano."""
+    print(f"[DANO] {owner_nome} → {npc_tipo}#{npc_id}: {dano:.1f} dmg | HP: {hp_antes:.1f} → {hp_depois:.1f}")
+
+
 # --- FIM: FUNÇÕES DE SPAWN DE BOSS ---
 
 # --- (Funções de Spawn de Minions - Sem alterações) ---
@@ -484,8 +521,13 @@ def server_spawnar_minion_congelante(owner_npc, alvo_id):
     return minion_npc
 # --- FIM: Novas funções de Spawn de Minions ---
 
-# --- (Funções de Lógica de Bosses - Sem alterações) ---
+# --- (Funções de Lógica de Bosses) ---
 def update_mothership_logic(npc, all_living_players):
+    # --- INÍCIO DA CORREÇÃO (BUG 2) ---
+    if npc.get('hp', 0) <= 0:
+        return ([], []) # Não faz nada se já estiver morto
+    # --- FIM DA CORREÇÃO ---
+
     novos_minions = []
     agora = int(time.time() * 1000)
     if (agora - npc.get('ia_ultimo_hit_tempo', 0) < 1000) and npc['ia_alvo_retaliacao'] is None:
@@ -526,9 +568,14 @@ def update_mothership_logic(npc, all_living_players):
             vec_x = npc['x'] - alvo['x']; vec_y = npc['y'] - alvo['y']
             dist = math.sqrt(vec_x**2 + vec_y**2) + 1e-6
             npc['x'] += (vec_x / dist) * 1.0; npc['y'] += (vec_y / dist) * 1.0
-    return ([], novos_minions) 
+    return ([], novos_minions)
 
 def update_boss_congelante_logic(npc, all_living_players, agora_ms):
+    # --- INÍCIO DA CORREÇÃO (BUG 2) ---
+    if npc.get('hp', 0) <= 0:
+        return ([], []) # Não faz nada se já estiver morto
+    # --- FIM DA CORREÇÃO ---
+
     novos_projeteis = []; novos_minions = []
     alvo = None; dist_min = float('inf')
     for p in all_living_players:
@@ -573,6 +620,11 @@ def update_boss_congelante_logic(npc, all_living_players, agora_ms):
     return (novos_projeteis, novos_minions)
 
 def update_minion_logic(npc, all_living_players, agora_ms):
+    # --- INÍCIO DA CORREÇÃO (BUG 2) ---
+    if npc.get('hp', 0) <= 0:
+        return [] # Não faz nada se já estiver morto
+    # --- FIM DA CORREÇÃO ---
+
     alvo_id = npc.get('ia_alvo_id'); alvo = None
     if alvo_id:
         for p in all_living_players:
@@ -586,39 +638,93 @@ def update_minion_logic(npc, all_living_players, agora_ms):
                 continue # Ignora, muito longe
             if dist_sq < dist_min:
                 dist_min = dist_sq; alvo = p
-    if alvo is None: return [] 
+    
+    # --- INÍCIO DA MODIFICAÇÃO (BUG 1: LÓGICA MINION CONGELANTE) ---
+    
+    # 1. Encontrar o Dono (Boss)
+    owner = None
+    owner_id = npc.get('owner_id')
+    if owner_id:
+        for n_owner in network_npcs: # Procura na lista de NPCs do servidor
+            if n_owner['id'] == owner_id:
+                owner = n_owner; break
+    
+    # Se o dono morreu (não encontrado), o minion se autodestrói
+    if owner is None:
+        npc['hp'] = 0; return []
+
+    # 2. Lógica específica por tipo de Minion
     novos_projeteis = []
     if npc['tipo'] == 'minion_mothership':
-        owner = None
-        for n_owner in network_npcs:
-            if n_owner['id'] == npc['owner_id']:
-                owner = n_owner; break
-        if owner is None:
-            npc['hp'] = 0; return []
+        # (Lógica da Mothership permanece a mesma)
         npc['ia_angulo_orbita'] = (npc['ia_angulo_orbita'] + npc['ia_vel_orbita']) % 360
         rad = math.radians(npc['ia_angulo_orbita']); raio = npc['ia_raio_orbita']
         pos_alvo_orbita_x = owner['x'] + math.cos(rad) * raio
         pos_alvo_orbita_y = owner['y'] + math.sin(rad) * raio
         npc['x'] = npc['x'] + (pos_alvo_orbita_x - npc['x']) * 0.05
         npc['y'] = npc['y'] + (pos_alvo_orbita_y - npc['y']) * 0.05
-        vec_x = alvo['x'] - npc['x']; vec_y = alvo['y'] - npc['y']
-        dist_sq_alvo = vec_x**2 + vec_y**2
-        if dist_sq_alvo < 500**2 and (agora_ms - npc['ultimo_tiro_tempo'] > npc['cooldown_tiro']):
-            npc['ultimo_tiro_tempo'] = agora_ms
-            dist = math.sqrt(dist_sq_alvo) + 1e-6
-            proj = {'id': f"{npc['id']}_{agora_ms}", 'owner_nome': npc['id'],
-                'x': npc['x'], 'y': npc['y'], 'pos_inicial_x': npc['x'], 'pos_inicial_y': npc['y'],
-                'angulo_rad': math.atan2(vec_y, vec_x), 'velocidade': VELOCIDADE_PROJETIL_NPC, 
-                'dano': 1, 'tipo': 'npc', 'tipo_proj': 'normal', 'timestamp_criacao': agora_ms
-            }
-            novos_projeteis.append(proj)
+        
+        if alvo: # Só atira se tiver um alvo
+            vec_x = alvo['x'] - npc['x']; vec_y = alvo['y'] - npc['y']
+            dist_sq_alvo = vec_x**2 + vec_y**2
+            if dist_sq_alvo < 500**2 and (agora_ms - npc['ultimo_tiro_tempo'] > npc['cooldown_tiro']):
+                npc['ultimo_tiro_tempo'] = agora_ms
+                dist = math.sqrt(dist_sq_alvo) + 1e-6
+                proj = {'id': f"{npc['id']}_{agora_ms}", 'owner_nome': npc['id'],
+                    'x': npc['x'], 'y': npc['y'], 'pos_inicial_x': npc['x'], 'pos_inicial_y': npc['y'],
+                    'angulo_rad': math.atan2(vec_y, vec_x), 'velocidade': VELOCIDADE_PROJETIL_NPC, 
+                    'dano': 1, 'tipo': 'npc', 'tipo_proj': 'normal', 'timestamp_criacao': agora_ms
+                }
+                novos_projeteis.append(proj)
+
     elif npc['tipo'] == 'minion_congelante':
-        vec_x = alvo['x'] - npc['x']; vec_y = alvo['y'] - npc['y']
-        dist = math.sqrt(vec_x**2 + vec_y**2) + 1e-6
-        if dist > 150: 
+        
+        # 3. Verifica a "Coleira" (Leash)
+        target_in_leash = False
+        if alvo:
+            try:
+                # Distância do *DONO* ao *ALVO*
+                dist_dono_alvo_sq = (owner['x'] - alvo['x'])**2 + (owner['y'] - alvo['y'])**2
+                if dist_dono_alvo_sq < (s.MINION_CONGELANTE_LEASH_RANGE ** 2):
+                    target_in_leash = True
+            except (ValueError, KeyError):
+                target_in_leash = False
+        
+        pos_alvo_seguir_x = owner['x']
+        pos_alvo_seguir_y = owner['y']
+        is_attacking = False
+
+        if target_in_leash:
+            # 4. Se o alvo está na coleira: Persegue o ALVO
+            pos_alvo_seguir_x = alvo['x']
+            pos_alvo_seguir_y = alvo['y']
+            is_attacking = True
+        else:
+            # 5. Se o alvo está fora da coleira: Retorna para o DONO
+            pos_alvo_seguir_x = owner['x']
+            pos_alvo_seguir_y = owner['y']
+            is_attacking = False
+
+        # 6. Lógica de Movimento (Comportamento de Perseguir/Orbitar simplificado)
+        vec_x = pos_alvo_seguir_x - npc['x']
+        vec_y = pos_alvo_seguir_y - npc['y']
+        dist_sq = vec_x**2 + vec_y**2
+        dist = math.sqrt(dist_sq) + 1e-6
+        
+        distancia_parar = 150 # Distância para parar (se atacando)
+        distancia_orbita_dono = 100 # Distância para orbitar (se defendendo)
+        
+        if is_attacking and dist > distancia_parar:
+            # Move-se para o alvo
             npc['x'] += (vec_x / dist) * VELOCIDADE_MINION_CONGELANTE
             npc['y'] += (vec_y / dist) * VELOCIDADE_MINION_CONGELANTE
-        if dist < 400**2 and (agora_ms - npc['ultimo_tiro_tempo'] > npc['cooldown_tiro']):
+        elif not is_attacking and dist > distancia_orbita_dono:
+             # Move-se para o dono
+            npc['x'] += (vec_x / dist) * (VELOCIDADE_MINION_CONGELANTE * 0.8) # Volta mais devagar
+            npc['y'] += (vec_y / dist) * (VELOCIDADE_MINION_CONGELANTE * 0.8)
+        
+        # 7. Lógica de Tiro (Só atira se estiver atacando)
+        if is_attacking and dist_sq < (400**2) and (agora_ms - npc['ultimo_tiro_tempo'] > npc['cooldown_tiro']):
             npc['ultimo_tiro_tempo'] = agora_ms
             proj = {'id': f"{npc['id']}_{agora_ms}", 'owner_nome': npc['id'],
                 'x': npc['x'], 'y': npc['y'], 'pos_inicial_x': npc['x'], 'pos_inicial_y': npc['y'],
@@ -626,13 +732,17 @@ def update_minion_logic(npc, all_living_players, agora_ms):
                 'dano': 1, 'tipo': 'npc', 'tipo_proj': 'normal', 'timestamp_criacao': agora_ms
             }
             novos_projeteis.append(proj)
+            
+    # --- FIM DA MODIFICAÇÃO (BUG 1) ---
+
     return novos_projeteis
 # --- FIM: Lógica de Bosses ---
 
 
+# --- INÍCIO DA REESCRITA (BUGS 2 e 3) ---
 def game_loop(bot_manager): 
     """
-    O loop principal do servidor.
+    O loop principal do servidor. (REORDENADO PARA ELIMINAR DELAY)
     """
     global next_npc_id, network_npcs, network_projectiles 
     print("[LOG] [GAME LOOP INICIADO] O servidor está agora a calcular e a enviar o estado.")
@@ -640,7 +750,8 @@ def game_loop(bot_manager):
     
     while True:
         loop_start_time = time.time()
-        novos_projeteis = []
+        novos_projeteis_de_players = []
+        novos_projeteis_de_npcs = []
         novos_npcs_spawnados = [] 
         
         with game_state_lock:
@@ -648,28 +759,30 @@ def game_loop(bot_manager):
             projeteis_para_remover = [] 
             npcs_para_remover = [] 
 
+            # --- PARTE 0: Gerenciar Bots ---
             bots_para_remover = bot_manager.manage_bot_population(MAX_BOTS_ONLINE)
             for nome_bot in bots_para_remover:
                 if nome_bot in player_states:
                     del player_states[nome_bot]
-                    print(f"[LOG] Bot {nome_bot} morreu e foi removido.")
 
-            posicoes_jogadores_vivos = [] 
+            # --- PARTE 1: Obter lista de jogadores vivos ---
             all_living_players = []
             if player_states:
                 try:
-                    all_living_players = [p for p in player_states.values() if p.get('handshake_completo', True) and p.get('hp', 0) > 0]
+                    all_living_players = [p for p in player_states.values() 
+                                         if p.get('handshake_completo', True) and p.get('hp', 0) > 0]
                 except RuntimeError:
                     pass 
 
+            posicoes_jogadores_vivos = [(state['x'], state['y']) for state in all_living_players]
+
+            # --- PARTE 2: Atualizar Jogadores (Movimento, Regeneração, Tiros) ---
             for state in all_living_players:
-                posicoes_jogadores_vivos.append( (state['x'], state['y']) )
-                
                 if state.get('is_bot', False):
                     bot_manager.process_bot_logic(state, all_living_players, agora_ms)
-                
                 elif state.get('esta_regenerando', False):
-                    if (state['teclas']['w'] or state['teclas']['a'] or state['teclas']['s'] or state['teclas']['d'] or state['alvo_mouse'] is not None):
+                    if (state['teclas']['w'] or state['teclas']['a'] or 
+                         state['teclas']['s'] or state['teclas']['d'] or state['alvo_mouse'] is not None):
                         state['esta_regenerando'] = False
                     elif state['hp'] >= state['max_hp']:
                         state['hp'] = state['max_hp']; state['esta_regenerando'] = False
@@ -680,13 +793,14 @@ def game_loop(bot_manager):
                 
                 novo_proj = update_player_logic(state, agora_ms) 
                 if novo_proj:
-                    novos_projeteis.append(novo_proj)
+                    novos_projeteis_de_players.append(novo_proj)
                     
+                # Tiros dos Auxiliares
                 num_aux = state.get('nivel_aux', 0)
                 if num_aux > 0 and state.get('alvo_lock'):
                     target_id = state['alvo_lock']
                     alvo_coords_aux = None; alvo_vivo_aux = False
-                    alvo_npc = next((npc for npc in network_npcs if npc['id'] == target_id), None)
+                    alvo_npc = next((npc for npc in network_npcs if npc['id'] == target_id and npc.get('hp', 0) > 0), None)
                     if alvo_npc:
                         alvo_coords_aux = (alvo_npc['x'], alvo_npc['y']); alvo_vivo_aux = True
                     else:
@@ -704,36 +818,38 @@ def game_loop(bot_manager):
                                     state['aux_cooldowns'][i] = agora_ms + AUX_COOLDOWN_TIRO
                                     radianos = math.radians(state['angulo'])
                                     vel_x_inicial = -math.sin(radianos) * 14; vel_y_inicial = -math.cos(radianos) * 14
-                                    
-                                    # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
                                     dano_calculado_aux = DANO_POR_NIVEL[state['nivel_dano']]
-                                    proj_aux = {'id': f"{state['nome']}_aux{i}_{agora_ms}", 'owner_nome': state['nome'], 'x': aux_x, 'y': aux_y,
-                                        'pos_inicial_x': aux_x, 'pos_inicial_y': aux_y, 'dano': dano_calculado_aux, 'tipo': 'player', 
-                                        'timestamp_criacao': agora_ms, 'tipo_proj': 'teleguiado', 'velocidade': 14, 'alvo_id': target_id,
+                                    proj_aux = {'id': f"{state['nome']}_aux{i}_{agora_ms}", 'owner_nome': state['nome'], 
+                                        'x': aux_x, 'y': aux_y, 'pos_inicial_x': aux_x, 'pos_inicial_y': aux_y, 
+                                        'dano': dano_calculado_aux, 'tipo': 'player', 'timestamp_criacao': agora_ms, 
+                                        'tipo_proj': 'teleguiado', 'velocidade': 14, 'alvo_id': target_id,
                                         'vel_x': vel_x_inicial, 'vel_y': vel_y_inicial}
-                                    # --- FIM: MODIFICAÇÃO ---
-                                    novos_projeteis.append(proj_aux)
+                                    novos_projeteis_de_players.append(proj_aux)
 
-            network_projectiles.extend(novos_projeteis)
+            network_projectiles.extend(novos_projeteis_de_players)
 
-            # --- Parte 2: Atualizar Projéteis (Mover) ---
+            # --- PARTE 3: Mover Projéteis ---
             for proj in network_projectiles:
                 if proj in projeteis_para_remover: continue
                 tipo_proj_mov = proj.get('tipo_proj', 'normal')
+                
                 if tipo_proj_mov in ['teleguiado', 'teleguiado_lento', 'congelante']:
                     duracao_max = DURACAO_PROJETIL_TELE_MS
                     if tipo_proj_mov == 'teleguiado_lento': duracao_max = DURACAO_PROJ_LENTO_MS
                     elif tipo_proj_mov == 'congelante': duracao_max = DURACAO_PROJ_CONGELANTE_MS
+                    
                     if agora_ms - proj.get('timestamp_criacao', 0) > duracao_max:
                         projeteis_para_remover.append(proj); continue
+                        
                     alvo_id = proj.get('alvo_id'); alvo_entidade = None 
                     if alvo_id:
-                        if proj['tipo'] == 'player': 
-                            alvo_entidade = next((npc for npc in network_npcs if npc['id'] == alvo_id), None)
+                        if proj['tipo'] == 'player':
+                            alvo_entidade = next((npc for npc in network_npcs if npc['id'] == alvo_id and npc.get('hp', 0) > 0), None)
                             if not alvo_entidade:
                                 alvo_entidade = next((p for p_name, p in player_states.items() if p_name == alvo_id and p['hp'] > 0), None)
-                        else: 
+                        else:
                             alvo_entidade = next((p for p_name, p in player_states.items() if p_name == alvo_id and p['hp'] > 0), None)
+                    
                     if alvo_entidade:
                         try:
                             vec_para_alvo_x = alvo_entidade['x'] - proj['x']
@@ -745,105 +861,81 @@ def game_loop(bot_manager):
                                 proj['vel_x'] = proj['vel_x'] + (ideal_vel_x - proj['vel_x']) * TURN_SPEED_TELE
                                 proj['vel_y'] = proj['vel_y'] + (ideal_vel_y - proj['vel_y']) * TURN_SPEED_TELE
                         except (ValueError, KeyError, AttributeError): pass 
+                    
                     proj['x'] += proj.get('vel_x', 0)
                     proj['y'] += proj.get('vel_y', 0)
+
                 elif tipo_proj_mov == 'normal' and proj['tipo'] == 'player':
                     proj['x'] += proj.get('vel_x', 0)
                     proj['y'] += proj.get('vel_y', 0)
                 elif tipo_proj_mov == 'normal' and proj['tipo'] == 'npc':
                     proj['x'] += math.cos(proj['angulo_rad']) * proj['velocidade']
                     proj['y'] += math.sin(proj['angulo_rad']) * proj['velocidade']
+
                 dist_sq = (proj['x'] - proj['pos_inicial_x'])**2 + (proj['y'] - proj['pos_inicial_y'])**2
                 if dist_sq > s.MAX_DISTANCIA_TIRO**2:
                     projeteis_para_remover.append(proj)
                 elif not s.MAP_RECT.collidepoint((proj['x'], proj['y'])):
                     projeteis_para_remover.append(proj)
-            
-            # --- (Parte 3: Spawns e Atualização de NPCs - Sem alterações) ---
-            if posicoes_jogadores_vivos: 
-                contagem_inimigos_normais = 0; contagem_motherships = 0; contagem_boss_congelante = 0
-                for npc in network_npcs:
-                    tipo = npc.get('tipo', 'perseguidor')
-                    if tipo == 'mothership': contagem_motherships += 1
-                    elif tipo == 'boss_congelante': contagem_boss_congelante += 1
-                    elif 'minion' not in tipo: contagem_inimigos_normais += 1
-                if contagem_inimigos_normais < s.MAX_INIMIGOS:
-                    spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_jogadores_vivos)
-                    novo_npc = server_spawnar_inimigo_aleatorio(spawn_x, spawn_y, f"npc_{next_npc_id}")
-                    novos_npcs_spawnados.append(novo_npc); next_npc_id += 1
-                if contagem_motherships < s.MAX_MOTHERSHIPS:
-                    spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_jogadores_vivos)
-                    novo_boss = server_spawnar_mothership(spawn_x, spawn_y, f"ms_{next_npc_id}")
-                    novos_npcs_spawnados.append(novo_boss); next_npc_id += 1
-                    print(f"[LOG] [SERVIDOR] Spawnow Mothership {novo_boss['id']}")
-                if contagem_boss_congelante < s.MAX_BOSS_CONGELANTE:
-                    spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_jogadores_vivos)
-                    novo_boss = server_spawnar_boss_congelante(spawn_x, spawn_y, f"bc_{next_npc_id}")
-                    novos_npcs_spawnados.append(novo_boss); next_npc_id += 1
-                    print(f"[LOG] [SERVIDOR] Spawnow Boss Congelante {novo_boss['id']}")
-                novos_projeteis_npc = []
-                for npc in network_npcs[:]: 
-                    if npc['tipo'] == 'mothership':
-                        novos_proj, novos_minions = update_mothership_logic(npc, all_living_players)
-                        novos_projeteis_npc.extend(novos_proj); novos_npcs_spawnados.extend(novos_minions)
-                    elif npc['tipo'] == 'boss_congelante':
-                        novos_proj, novos_minions = update_boss_congelante_logic(npc, all_living_players, agora_ms)
-                        novos_projeteis_npc.extend(novos_proj); novos_npcs_spawnados.extend(novos_minions)
-                    elif 'minion' in npc['tipo']:
-                        novos_proj = update_minion_logic(npc, all_living_players, agora_ms)
-                        novos_projeteis_npc.extend(novos_proj)
-                    else: 
-                        novo_proj = update_npc_logic(npc, posicoes_jogadores_vivos, agora_ms) 
-                        if novo_proj:
-                            novos_projeteis_npc.append(novo_proj)
-                network_projectiles.extend(novos_projeteis_npc)
-                network_npcs.extend(novos_npcs_spawnados)
 
-            # --- (Parte 4: Lógica de Colisão - Sem alterações) ---
-            projeteis_ativos = network_projectiles[:] 
+            # --- PARTE 4: Processar Colisões (MARCA NPCs para morte) ---
+            ids_npcs_mortos_neste_tick = set()
+
+            projeteis_ativos = network_projectiles[:]
             for proj in projeteis_ativos:
                 if proj in projeteis_para_remover: continue
+                
                 if proj['tipo'] == 'player':
-                    owner_state = None; owner_name_to_find = proj['owner_nome']
-                    owner_state = player_states.get(owner_name_to_find)
-                    if not owner_state:
-                        for p_state in player_states.values():
-                            if p_state.get('nome') == owner_name_to_find:
-                                owner_state = p_state; break
+                    owner_state = player_states.get(proj['owner_nome'])
+                    
                     for npc in network_npcs:
-                        if npc in npcs_para_remover: continue
+                        if npc in npcs_para_remover: continue 
+                        if npc.get('hp', 0) <= 0: continue
+                        
                         dist_colisao_sq = ( (npc['tamanho']/2 + 5)**2 ) 
                         dist_sq = (npc['x'] - proj['x'])**2 + (npc['y'] - proj['y'])**2
+                        
                         if dist_sq < dist_colisao_sq:
-                            # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
-                            dano_real = proj['dano'] # O projétil já tem o dano real
+                            dano_real = 1.0
                             if owner_state: 
-                                # Verifica o nível de dano ATUAL do dono (caso o projétil seja antigo)
-                                dano_real = DANO_POR_NIVEL[owner_state['nivel_dano']]
-                            # --- FIM: MODIFICAÇÃO ---
+                                nivel_dano_atual = owner_state.get('nivel_dano', 1)
+                                if 0 <= nivel_dano_atual < len(DANO_POR_NIVEL):
+                                    dano_real = DANO_POR_NIVEL[nivel_dano_atual]
                             
+                            #####
+    
+                            # === DEBUG: Mostra o dano ===                            hp_antes = npc['hp']
                             npc['hp'] -= dano_real
+                            # === FIM DEBUG ===
+                            
                             if npc['tipo'] in ['mothership', 'boss_congelante']:
                                 npc['ia_ultimo_hit_tempo'] = agora_ms
+                                
                             projeteis_para_remover.append(proj) 
+                            
                             if npc['hp'] <= 0:
                                 npcs_para_remover.append(npc) 
+                                ids_npcs_mortos_neste_tick.add(npc['id'])
                                 if owner_state:
                                     server_ganhar_pontos(owner_state, npc.get('pontos_por_morte', 5))
-                                    print(f"[LOG] {owner_state['nome']} ganhou {npc.get('pontos_por_morte', 5)} pontos. Total: {owner_state['pontos']}") 
-                            break 
+                                    print(f"[KILL] {owner_state['nome']} destruiu {npc['tipo']}#{npc['id']} (+{npc.get('pontos_por_morte', 5)} pts)")
+                            break
+                            ###
+                    
                     if proj in projeteis_para_remover: continue 
+                    
                     for target_state in all_living_players:
-                        if target_state['nome'] == proj['owner_nome']: continue
+                        if target_state['nome'] == proj['owner_nome']: continue 
                         if target_state.get('invencivel', False): continue
+                        
                         dist_sq = (target_state['x'] - proj['x'])**2 + (target_state['y'] - proj['y'])**2
                         if dist_sq < COLISAO_JOGADOR_PROJ_DIST_SQ:
                             if agora_ms - target_state.get('ultimo_hit_tempo', 0) > 150:
-                                # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
-                                dano_real = proj['dano'] # O projétil já tem o dano real
+                                dano_real = 1.0
                                 if owner_state: 
-                                    dano_real = DANO_POR_NIVEL[owner_state['nivel_dano']]
-                                # --- FIM: MODIFICAÇÃO ---
+                                    nivel_dano_atual = owner_state.get('nivel_dano', 1)
+                                    if 0 <= nivel_dano_atual < len(DANO_POR_NIVEL):
+                                        dano_real = DANO_POR_NIVEL[nivel_dano_atual]
 
                                 reducao_percent = min(target_state['nivel_escudo'] * s.REDUCAO_DANO_POR_NIVEL, 75)
                                 dano_reduzido = dano_real * (1 - reducao_percent / 100.0)
@@ -852,12 +944,13 @@ def game_loop(bot_manager):
                                 target_state['esta_regenerando'] = False 
                                 projeteis_para_remover.append(proj) 
                                 if target_state['hp'] <= 0:
-                                    print(f"[LOG] [SERVIDOR] {target_state['nome']} foi morto por {proj['owner_nome']}!")
                                     if owner_state: server_ganhar_pontos(owner_state, 10) 
                                 break 
+                
                 elif proj['tipo'] == 'npc':
                     for player_state in all_living_players: 
                         if player_state.get('invencivel', False): continue
+                        
                         dist_sq = (player_state['x'] - proj['x'])**2 + (player_state['y'] - proj['y'])**2
                         if dist_sq < COLISAO_JOGADOR_PROJ_DIST_SQ:
                             if agora_ms - player_state.get('ultimo_hit_tempo', 0) > 150:
@@ -866,6 +959,7 @@ def game_loop(bot_manager):
                                     player_state['tempo_fim_lentidao'] = agora_ms + DURACAO_LENTIDAO_MS
                                 elif proj_tipo == 'congelante':
                                     player_state['tempo_fim_congelamento'] = agora_ms + DURACAO_CONGELAMENTO_MS
+                                
                                 reducao_percent = min(player_state['nivel_escudo'] * s.REDUCAO_DANO_POR_NIVEL, 75)
                                 dano_reduzido = proj['dano'] * (1 - reducao_percent / 100.0)
                                 player_state['hp'] -= dano_reduzido
@@ -873,49 +967,123 @@ def game_loop(bot_manager):
                                 player_state['esta_regenerando'] = False 
                                 projeteis_para_remover.append(proj) 
                                 if player_state['hp'] <= 0:
-                                    print(f"[LOG] [SERVIDOR] Jogador {player_state['nome']} morreu!")
+                                    print(f"[LOG] Jogador {player_state['nome']} morreu!")
                                 break 
+            
+            # Colisão por Ramming
             for npc in network_npcs:
                 if npc in npcs_para_remover: continue
+                if npc.get('hp', 0) <= 0: continue
+                
                 if 'minion' in npc['tipo'] or npc['tipo'] in ['bomba', 'perseguidor', 'rapido']: 
                     for player_state in all_living_players:
                         if player_state.get('invencivel', False): continue
+                        
                         dist_sq = (player_state['x'] - npc['x'])**2 + (player_state['y'] - npc['y'])**2
                         if dist_sq < COLISAO_JOGADOR_NPC_DIST_SQ: 
                             if agora_ms - player_state.get('ultimo_hit_tempo', 0) > 300: 
-                                dano_ram = 1
-                                if npc['tipo'] == 'bomba': dano_ram = 3 
+                                dano_ram = 3 if npc['tipo'] == 'bomba' else 1
+                                
                                 reducao_percent = min(player_state['nivel_escudo'] * s.REDUCAO_DANO_POR_NIVEL, 75)
                                 dano_reduzido = dano_ram * (1 - reducao_percent / 100.0)
                                 player_state['hp'] -= dano_reduzido
                                 player_state['ultimo_hit_tempo'] = agora_ms
                                 player_state['esta_regenerando'] = False 
+                                
                                 if npc['tipo'] in ['bomba', 'minion_mothership', 'minion_congelante']:
                                     npc['hp'] = 0 
                                     npcs_para_remover.append(npc)
+                                    ids_npcs_mortos_neste_tick.add(npc['id'])
+                                    
                                 if player_state['hp'] <= 0:
-                                    print(f"[LOG] [SERVIDOR] Jogador {player_state['nome']} morreu por colisão com {npc['tipo']}!")
-                                break 
+                                    print(f"[LOG] Jogador {player_state['nome']} morreu por colisão!")
+                                break
 
-            # --- (Limpeza - Sem alterações) ---
+            # --- PARTE 5: LIMPAR NPCs e Projéteis IMEDIATAMENTE (antes da IA) ---
             if projeteis_para_remover:
-                projeteis_a_manter = []
-                for p in network_projectiles:
-                    if p not in projeteis_para_remover:
-                        projeteis_a_manter.append(p)
-                network_projectiles = projeteis_a_manter
+                ids_projeteis_remover = {proj['id'] for proj in projeteis_para_remover}
+                network_projectiles = [p for p in network_projectiles if p['id'] not in ids_projeteis_remover]
+
             if npcs_para_remover:
                 ids_npcs_mortos = {n['id'] for n in npcs_para_remover}
+                
                 for n_boss in network_npcs:
                     if n_boss['tipo'] in ['mothership', 'boss_congelante']:
-                        n_boss['ia_minions_ativos'] = [m_id for m_id in n_boss['ia_minions_ativos'] if m_id not in ids_npcs_mortos]
-                network_npcs = [n for n in network_npcs if n not in npcs_para_remover]
+                        n_boss['ia_minions_ativos'] = [m_id for m_id in n_boss['ia_minions_ativos'] 
+                                                        if m_id not in ids_npcs_mortos]
+                
+                ids_bosses_mortos = {n['id'] for n in npcs_para_remover 
+                                    if n['tipo'] in ['mothership', 'boss_congelante']}
+                
+                minions_orfaos = []
+                if ids_bosses_mortos:
+                    for npc in network_npcs:
+                        if npc['tipo'] in ['minion_mothership', 'minion_congelante']:
+                            owner_id = npc.get('owner_id')
+                            if owner_id in ids_bosses_mortos:
+                                minions_orfaos.append(npc)
+                
+                npcs_para_remover.extend(minions_orfaos)
+                ids_npcs_mortos.update({n['id'] for n in minions_orfaos})
+                
+                network_npcs = [n for n in network_npcs if n['id'] not in ids_npcs_mortos]
+                
                 for state in player_states.values():
-                    if state.get('alvo_lock') in [npc['id'] for npc in npcs_para_remover]:
+                    if state.get('alvo_lock') in ids_npcs_mortos:
                         state['alvo_lock'] = None
+
+            # --- PARTE 6: Processar IA dos NPCs (SÓ OS VIVOS) ---
+            if posicoes_jogadores_vivos: 
+                npcs_para_processar = network_npcs[:]
+                
+                for npc in npcs_para_processar: 
+                    if npc.get('hp', 0) <= 0: continue
+                    
+                    if npc['tipo'] == 'mothership':
+                        novos_proj, novos_minions = update_mothership_logic(npc, all_living_players)
+                        novos_projeteis_de_npcs.extend(novos_proj)
+                        novos_npcs_spawnados.extend(novos_minions)
+                    elif npc['tipo'] == 'boss_congelante':
+                        novos_proj, novos_minions = update_boss_congelante_logic(npc, all_living_players, agora_ms)
+                        novos_projeteis_de_npcs.extend(novos_proj)
+                        novos_npcs_spawnados.extend(novos_minions)
+                    elif 'minion' in npc['tipo']:
+                        novos_proj = update_minion_logic(npc, all_living_players, agora_ms)
+                        novos_projeteis_de_npcs.extend(novos_proj)
+                    else:
+                        novo_proj = update_npc_logic(npc, posicoes_jogadores_vivos, agora_ms) 
+                        if novo_proj:
+                            novos_projeteis_de_npcs.append(novo_proj)
             
-            
-            # --- (Parte 5: Construir a string de estado global - MUDANÇA) ---
+            network_projectiles.extend(novos_projeteis_de_npcs)
+            network_npcs.extend(novos_npcs_spawnados)
+
+            # --- PARTE 7: Spawns de novos NPCs ---
+            if posicoes_jogadores_vivos:
+                contagem_inimigos_normais = sum(1 for npc in network_npcs 
+                    if npc.get('hp', 0) > 0 and npc['tipo'] not in ['mothership', 'boss_congelante', 'minion_mothership', 'minion_congelante'])
+                contagem_motherships = sum(1 for npc in network_npcs if npc.get('hp', 0) > 0 and npc['tipo'] == 'mothership')
+                contagem_boss_congelante = sum(1 for npc in network_npcs if npc.get('hp', 0) > 0 and npc['tipo'] == 'boss_congelante')
+                
+                if contagem_inimigos_normais < s.MAX_INIMIGOS:
+                    spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_jogadores_vivos)
+                    novo_npc = server_spawnar_inimigo_aleatorio(spawn_x, spawn_y, f"npc_{next_npc_id}")
+                    network_npcs.append(novo_npc)
+                    next_npc_id += 1
+                
+                if contagem_motherships < s.MAX_MOTHERSHIPS:
+                    spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_jogadores_vivos)
+                    novo_boss = server_spawnar_mothership(spawn_x, spawn_y, f"ms_{next_npc_id}")
+                    network_npcs.append(novo_boss)
+                    next_npc_id += 1
+                
+                if contagem_boss_congelante < s.MAX_BOSS_CONGELANTE:
+                    spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_jogadores_vivos)
+                    novo_boss = server_spawnar_boss_congelante(spawn_x, spawn_y, f"bc_{next_npc_id}")
+                    network_npcs.append(novo_boss)
+                    next_npc_id += 1
+
+            # --- PARTE 8: Construir e Enviar Estado ---
             if not player_states: 
                 time.sleep(TICK_INTERVAL); continue
                 
@@ -923,56 +1091,43 @@ def game_loop(bot_manager):
             for state in player_states.values():
                 if state.get('handshake_completo', True):
                     regen_status = 1 if state.get('esta_regenerando', False) else 0
+                    is_lento = 1 if agora_ms < state.get('tempo_fim_lentidao', 0) else 0
+                    is_congelado = 1 if agora_ms < state.get('tempo_fim_congelamento', 0) else 0
                     
-                    # --- MUDANÇA: Adiciona status de lento/congelado ---
-                    agora_ms_check = int(time.time() * 1000) # Pega o tempo exato
-                    is_lento = 1 if agora_ms_check < state.get('tempo_fim_lentidao', 0) else 0
-                    is_congelado = 1 if agora_ms_check < state.get('tempo_fim_congelamento', 0) else 0
-                    # --- FIM MUDANÇA ---
-                    
-                    # --- MUDANÇA: Formato agora tem 17 campos ---
                     estado_str = (
-                        f"{state['nome']}:{state['x']:.1f}:{state['y']:.1f}:{state['angulo']:.0f}:{state['hp']:.1f}:{state['max_hp']:.1f}" # <-- .1f para max_hp
+                        f"{state['nome']}:{state['x']:.1f}:{state['y']:.1f}:{state['angulo']:.0f}:{state['hp']:.1f}:{state['max_hp']:.1f}"
                         f":{state['pontos']}:{regen_status}"
                         f":{state['pontos_upgrade_disponiveis']}:{state['total_upgrades_feitos']}"
                         f":{state['nivel_motor']}:{state['nivel_dano']}:{state['nivel_max_vida']}"
                         f":{state['nivel_escudo']}:{state['nivel_aux']}"
-                        f":{is_lento}:{is_congelado}" # Novos campos
+                        f":{is_lento}:{is_congelado}"
                     )
                     lista_de_estados.append(estado_str)
             payload_players = ";".join(lista_de_estados)
 
-            lista_de_projeteis = []
-            for proj in network_projectiles:
-                # --- MUDANÇA: Adiciona o tipo_proj (ex: 'teleguiado_lento') ---
-                proj_str = f"{proj['id']}:{proj['x']:.1f}:{proj['y']:.1f}:{proj['tipo']}:{proj.get('tipo_proj', 'normal')}"
-                lista_de_projeteis.append(proj_str)
+            lista_de_projeteis = [f"{proj['id']}:{proj['x']:.1f}:{proj['y']:.1f}:{proj['tipo']}:{proj.get('tipo_proj', 'normal')}" 
+                                 for proj in network_projectiles]
             payload_proj = ";".join(lista_de_projeteis)
-            # --- FIM MUDANÇA ---
 
-            lista_de_npcs = []
-            for npc in network_npcs:
-                npc_str = (f"{npc['id']}:{npc['tipo']}:{npc['x']:.1f}:{npc['y']:.1f}:{npc['angulo']:.0f}:{npc['hp']}:{npc['max_hp']}:{npc['tamanho']}")
-                lista_de_npcs.append(npc_str)
+            lista_de_npcs = [f"{npc['id']}:{npc['tipo']}:{npc['x']:.1f}:{npc['y']:.1f}:{npc['angulo']:.0f}:{npc['hp']}:{npc['max_hp']}:{npc['tamanho']}"
+                            for npc in network_npcs if npc.get('hp', 0) > 0]
             payload_npcs = ";".join(lista_de_npcs)
             
             full_message = f"STATE|{payload_players}|PROJ|{payload_proj}|NPC|{payload_npcs}\n"
             full_message_bytes = full_message.encode('utf-8')
             
-            # --- (Parte 6: Enviar a string global - Sem alterações) ---
             clientes_mortos = []
             for conn_key, state in player_states.items():
                 if state.get('handshake_completo', False) and state.get('conn') is not None:
                     try:
                         state['conn'].sendall(full_message_bytes)
-                    except (socket.error, BrokenPipeError) as e:
+                    except (socket.error, BrokenPipeError):
                         clientes_mortos.append(state['conn'])
 
         if clientes_mortos:
             with game_state_lock:
                 for conn in clientes_mortos:
                     if conn in player_states:
-                        print(f"[LOG] [Game Loop] Removendo cliente morto: {player_states[conn]['nome']}")
                         del player_states[conn]
                         try: conn.close() 
                         except: pass 
@@ -981,7 +1136,7 @@ def game_loop(bot_manager):
         sleep_time = TICK_INTERVAL - time_elapsed
         if sleep_time > 0:
             time.sleep(sleep_time)
-# --- FIM ---
+# --- FIM DA REESCRITA ---
 
 
 # --- (handle_client - MUDANÇA) ---

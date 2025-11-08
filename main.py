@@ -1669,19 +1669,29 @@ while rodando:
                 tocar_som_posicional(som_a_tocar, pos_som, nave_player.posicao, vol_base)
 
             current_npc_ids = set(online_npcs_copy.keys())
-            dead_npc_states = [npc for npc_id, npc in online_npcs_last_frame.items() if npc_id not in current_npc_ids]
+            dead_npc_ids = set(online_npcs_last_frame.keys()) - current_npc_ids
             
-            for npc in dead_npc_states:
+            # --- INÍCIO: CORREÇÃO BUG 2 (NPCs Invisíveis) ---
+            # Limpa referências a NPCs mortos ANTES de desenhar
+            # Remove alvo_selecionado se for um NPC morto
+            if nave_player.alvo_selecionado:
+                # Verifica se o alvo é um NPC (string ID) e se morreu
+                if isinstance(nave_player.alvo_selecionado, str):
+                    if nave_player.alvo_selecionado in dead_npc_ids:
+                        print(f"[CLIENTE] Alvo NPC {nave_player.alvo_selecionado} morreu. Limpando mira.")
+                        nave_player.alvo_selecionado = None
+            # --- FIM: CORREÇÃO BUG 2 ---
+            
+            for npc_id in dead_npc_ids:
+                npc = online_npcs_last_frame[npc_id]
                 pos_npc = pygame.math.Vector2(npc['x'], npc['y'])
                 tamanho_padrao_explosao = npc['tamanho'] // 2 + 5
                 
                 if npc['tipo'] == 'bomba':
                     tamanho_padrao_explosao = npc['tamanho'] + 75 
                 
-                # --- INÍCIO: CORREÇÃO (NameError 'explosao') ---
                 explosao = Explosao(pos_npc, tamanho_padrao_explosao)
-                grupo_explosoes.add(explosao) # Adiciona ao grupo
-                # --- FIM: CORREÇÃO ---
+                grupo_explosoes.add(explosao)
                 
                 if npc['tipo'] in ['mothership', 'boss_congelante']:
                     tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
@@ -1858,43 +1868,34 @@ while rodando:
             for proj in grupo_projeteis_bots: tela.blit(proj.image, camera.apply(proj.rect))
             for proj in grupo_projeteis_inimigos: tela.blit(proj.image, camera.apply(proj.rect))
         
-        # --- INÍCIO: MODIFICAÇÃO (Desenho do Jogador) ---
+        # --- INÍCIO: CORREÇÃO BUG 1 (LÓGICA DE DESENHO DO JOGADOR) ---
+        
         jogador_visivel = False
+        
+        # 1. Estados onde o jogador deve ser desenhado normalmente
         if estado_jogo in ["JOGANDO", "PAUSE", "LOJA", "TERMINAL"]:
             if nave_player.vida_atual > 0:
                 jogador_visivel = True
-                
-        # 2. Caso especial: Estamos a espectar online (vivo-espectador)?
-        elif estado_jogo == "ESPECTADOR" and jogador_esta_vivo_espectador:
-            # Só desenha a nossa nave se estivermos online (pois ela ainda existe no servidor)
-            if client_socket:
-                 jogador_visivel = True 
         
-        # 3. (Se morto ou espectador offline, jogador_visivel permanece False, o que está correto)
-
-        if jogador_visivel: 
-            nave_player.desenhar(tela, camera, client_socket) 
-            nave_player.desenhar_vida(tela, camera)
-            nave_player.desenhar_nome(tela, camera)
-            
-            for aux in nave_player.grupo_auxiliares_ativos: aux.desenhar(tela, camera)
+        # 2. Caso especial: Espectador Voluntário OFFLINE
+        # Se estamos espectando vivos no modo OFFLINE, NÃO desenhamos
+        # (pois é um "modo fantasma" local)
         elif estado_jogo == "ESPECTADOR" and jogador_esta_vivo_espectador:
-            # Se estamos espectando vivos, só queremos desenhar nossa nave
-            # se estivermos no modo online (onde ela ainda existe no servidor).
-            # Se estivermos offline, "jogador_esta_vivo_espectador" significa
-            # que entramos voluntariamente, e NÃO queremos desenhar a nave.
-            if client_socket:
-                 jogador_visivel = True # Online: sim, desenhe
-            else:
-                 jogador_visivel = False # Offline: não, não desenhe
-
+            # Só desenha se estiver online E com vida > 0
+            # (porque no servidor a nave ainda existe)
+            if client_socket and nave_player.vida_atual > 0:
+                jogador_visivel = True
+            # Se offline ou morto: não desenha
+        
+        # 3. Desenha a nave se for visível
         if jogador_visivel: 
             nave_player.desenhar(tela, camera, client_socket) 
             nave_player.desenhar_vida(tela, camera)
             nave_player.desenhar_nome(tela, camera)
             
-            for aux in nave_player.grupo_auxiliares_ativos: aux.desenhar(tela, camera)
-        # --- FIM: MODIFICAÇÃO ---
+            for aux in nave_player.grupo_auxiliares_ativos: 
+                aux.desenhar(tela, camera)
+        # --- FIM: CORREÇÃO BUG 1 ---
         
         for efeito in grupo_efeitos_visuais:
             if isinstance(efeito, NaveRegeneradora):
@@ -1913,9 +1914,12 @@ while rodando:
                  with network_state_lock:
                      online_players_copy = online_players_states.copy()
             
-            # --- MODIFICAÇÃO: Passa o 'alvo_camera_final' para o minimapa ---
+            # --- INÍCIO DA MODIFICAÇÃO (BUG 3) ---
+            # Passa a flag 'jogador_esta_vivo_espectador' para o minimapa
             ui.desenhar_minimapa(tela, nave_player, grupo_bots, estado_jogo, s.MAP_WIDTH, s.MAP_HEIGHT, 
-                                 online_players_copy, MEU_NOME_REDE, alvo_camera_final, camera.zoom)
+                                 online_players_copy, MEU_NOME_REDE, alvo_camera_final, camera.zoom,
+                                 jogador_esta_vivo_espectador) # <-- Flag adicionada
+            # --- FIM DA MODIFICAÇÃO ---
             
             if client_socket:
                 class RankingEntry:
@@ -1931,9 +1935,11 @@ while rodando:
                 top_5 = lista_ordenada[:5]
             else:
                 todos_os_jogadores = []
-                if nave_player.vida_atual > 0: # Só inclui player no ranking se vivo
+                # --- CORREÇÃO: Não mostra jogador morto/espectador no ranking offline ---
+                if nave_player.vida_atual > 0 and not jogador_esta_vivo_espectador:
                     todos_os_jogadores.append(nave_player)
-                todos_os_jogadores.extend(list(grupo_bots.sprites())) 
+                todos_os_jogadores.extend([bot for bot in grupo_bots.sprites() if bot.vida_atual > 0]) # Só bots vivos
+                # --- FIM CORREÇÃO ---
                 
                 lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
             
@@ -1998,10 +2004,12 @@ while rodando:
     
     if client_socket:
         with network_state_lock:
+            # Salva o estado ATUAL como "last_frame" para o próximo tick
             online_projectile_ids_last_frame = {p['id'] for p in online_projectiles}
             online_npcs_last_frame = online_npcs.copy()
             online_players_last_frame = online_players_states.copy()
     else:
+        # Se offline, limpa tudo
         online_projectile_ids_last_frame.clear()
         online_npcs_last_frame.clear()
         online_players_last_frame.clear()
