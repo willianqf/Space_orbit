@@ -88,24 +88,33 @@ class GameLogic:
                 self.cb_spawnar_boss_congelante(ponto_referencia)
 
         # --- 3. Lógica de Colisão ---
-        
-        # Colisões de Projéteis de Jogador/Bots
-        self._handle_player_projectile_collisions(nave_player, grupo_projeteis_player, grupo_obstaculos, grupo_inimigos, grupo_bots, estado_jogo)
+        # Colisões de Projéteis de Bots (Sempre rodam, pois eles não pausam)
         self._handle_bot_projectile_collisions(nave_player, grupo_projeteis_bots, grupo_obstaculos, grupo_inimigos, grupo_bots, estado_jogo)
         
-        # Colisões de Projéteis Inimigos
-        self._handle_enemy_projectile_collisions(nave_player, grupo_bots, grupo_projeteis_inimigos, estado_jogo)
+        # --- INÍCIO DA CORREÇÃO ---
+        # As colisões do JOGADOR (Player) só devem acontecer se ele estiver JOGANDO.
+        # No modo ESPECTADOR, o jogador é um "fantasma" e não colide.
+        # Esta é a lógica que existia no main.py antigo.
         
-        # Colisões de Ramming (Corpo a Corpo)
-        self._handle_ramming_collisions(nave_player, grupo_bots, grupo_inimigos, estado_jogo)
-
-        # --- 4. Checagem de Morte do Jogador (após todas as colisões) ---
         if (estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL"):
+        
+            # Colisões de Projéteis de Jogador
+            self._handle_player_projectile_collisions(nave_player, grupo_projeteis_player, grupo_obstaculos, grupo_inimigos, grupo_bots, estado_jogo)
+            
+            # Colisões de Projéteis Inimigos (contra o Jogador)
+            self._handle_enemy_projectile_collisions(nave_player, grupo_bots, grupo_projeteis_inimigos, estado_jogo)
+            
+            # Colisões de Ramming (Corpo a Corpo, contra o Jogador)
+            self._handle_ramming_collisions(nave_player, grupo_bots, grupo_inimigos, estado_jogo)
+
+            # --- 4. Checagem de Morte do Jogador (após todas as colisões) ---
             if nave_player.vida_atual <= 0:
                 print("[LOGIC] Morte do jogador detectada por colisões.")
                 # Retorna o novo estado
                 return "ESPECTADOR" 
         
+        # --- FIM DA CORREÇÃO ---
+            
         return estado_jogo # Retorna o estado atual se não houver mudança
 
     

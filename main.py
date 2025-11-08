@@ -317,9 +317,14 @@ def ciclar_alvo_espectador(avancar=True):
                 lista_alvos_vivos.append({'nome': nome, 'state': state})
                 lista_nomes_alvos_vivos.append(nome)
     else: 
-        if game_globals["jogador_esta_vivo_espectador"] and nave_player.vida_atual > 0:
+        # --- INÍCIO DA CORREÇÃO ---
+        if nave_player.vida_atual > 0:
              lista_alvos_vivos.append(nave_player)
-        lista_alvos_vivos.extend([bot for bot in grupo_bots if bot.vida_atual > 0])
+        # Adiciona TODOS os bots que estão vivos.
+        for bot in grupo_bots:
+            if bot.vida_atual > 0:
+                lista_alvos_vivos.append(bot)
+        # --- FIM DA CORREÇÃO ---
     if not lista_alvos_vivos:
         game_globals["alvo_espectador"] = None; game_globals["alvo_espectador_nome"] = None; return 
     current_index = -1

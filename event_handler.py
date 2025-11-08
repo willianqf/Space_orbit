@@ -274,9 +274,14 @@ class EventHandler:
                         self.network_client.send("ENTER_SPECTATOR")
                         novos_estados["estado_jogo"] = "JOGANDO" # Espera a desconexão
                     else:
-                        nave_player.vida_atual = 0
+                        # --- INÍCIO DA CORREÇÃO ---
+                        # Não mate o jogador. Apenas mude o estado.
+                        # nave_player.vida_atual = 0 # <-- LINHA REMOVIDA
+                        
                         novos_estados["estado_jogo"] = "ESPECTADOR"
-                        novos_estados["jogador_esta_vivo_espectador"] = True
+                        novos_estados["jogador_esta_vivo_espectador"] = True # Agora isso é verdade
+                        # --- FIM DA CORREÇÃO ---
+                        
                         novos_estados["alvo_espectador"] = None
                         novos_estados["alvo_espectador_nome"] = None
                         novos_estados["espectador_dummy_alvo"].posicao = nave_player.posicao.copy()
