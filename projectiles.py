@@ -3,7 +3,7 @@ import pygame
 import math
 from settings import (MAP_RECT, MAX_DISTANCIA_TIRO, VERMELHO_TIRO, VERDE_TIRO_MAX,
                       MAX_NIVEL_DANO, LARANJA_TIRO_INIMIGO, ROXO_TIRO_LENTO,
-                      AZUL_TIRO_CONGELANTE) # <-- Importar nova cor
+                      AZUL_TIRO_CONGELANTE, VELOCIDADE_TIRO, FOCO_TIRO) # <-- Importar nova cor
 
 # Projétil do Jogador/Bots Aliados (Padrão "Burro")
 class Projetil(pygame.sprite.Sprite):
@@ -25,7 +25,7 @@ class Projetil(pygame.sprite.Sprite):
         self.posicao_inicial = pygame.math.Vector2(x, y)
         self.posicao = pygame.math.Vector2(x, y) 
         self.rect = self.image.get_rect(center = self.posicao)
-        self.velocidade_valor = 25 # Renomeado de 'velocidade'
+        self.velocidade_valor = VELOCIDADE_TIRO # Renomeado de 'velocidade'
         self.angulo_radianos = angulo_radianos
         
         # self.owner = owner_nave # <-- MOVIDO PARA CIMA
@@ -57,7 +57,7 @@ class ProjetilTeleguiadoJogador(Projetil):
         super().__init__(x, y, angulo_radianos, nivel_dano_owner, owner_nave)
         
         self.alvo_sprite = alvo_sprite
-        self.turn_speed = 0.02 # Mantém a curva suave
+        self.turn_speed = FOCO_TIRO # Mantém a curva suave
         
         # 1. Aumenta a velocidade (padrão do pai era 10)
         self.velocidade_valor = 14 

@@ -66,7 +66,7 @@ RASTRO_TAMANHO_INICIAL = 4
 
 # --- INÍCIO DA ADIÇÃO (Regeneração) ---
 REGEN_POR_TICK = 0.2
-REGEN_TICK_RATE = 2000 # 2000ms = 2 segundos
+REGEN_TICK_RATE = 1500 # 2000ms = 1.5 segundos
 # --- FIM DA ADIÇÃO ---
 
 # 4. Constantes da Loja
@@ -152,3 +152,7 @@ SOM_TIRO_CONGELANTE = None
 
 # 7. Outros
 NUM_ESTRELAS = 150
+
+# 8. Velocidade de tiro
+VELOCIDADE_TIRO = 25
+FOCO_TIRO = 0.055
