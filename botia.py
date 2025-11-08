@@ -19,7 +19,7 @@ class BotAI:
         self.direcao_virada_aleatoria = "direita"
         
         # Referência para o grupo de vidas (será atualizado a cada frame)
-        self.grupo_vidas_ref = None # <--- ADICIONADO PARA CORRIGIR O BUG
+        self.grupo_vidas_ref = None 
         
         # Constantes de comportamento da IA
         self.distancia_scan_geral = 800
@@ -42,11 +42,79 @@ class BotAI:
         self.grupo_bots_ref_cache = None
         self.grupo_inimigos_ref_cache = None
         self.grupo_obstaculos_ref_cache = None
+        
+        # --- LÓGICA DE ÓRBITA ALEATÓRIA (da correção anterior) ---
+        self.direcao_orbita = 1 
+        self.timer_troca_orbita = 0 
+        self.duracao_orbita_atual = random.randint(120, 300)
+        
+        # --- INÍCIO DA CORREÇÃO (KITING) ---
+        self.flee_destination = None # Armazena o ponto de fuga na borda
+        # --- FIM DA CORREÇÃO ---
+    
+    def _find_closest_edge_point(self):
+        """
+        Calcula o ponto mais próximo na borda do mapa para onde o bot deve fugir.
+        """
+        pos = self.bot.posicao
+        dist_to_top = pos.y
+        dist_to_bottom = MAP_HEIGHT - pos.y
+        dist_to_left = pos.x
+        dist_to_right = MAP_WIDTH - pos.x
 
+        min_dist = min(dist_to_top, dist_to_bottom, dist_to_left, dist_to_right)
+        
+        # Define uma pequena margem para não ficar "colado" na borda
+        margin = 50 
+
+        if min_dist == dist_to_top:
+            return pygame.math.Vector2(pos.x, margin)
+        elif min_dist == dist_to_bottom:
+            return pygame.math.Vector2(pos.x, MAP_HEIGHT - margin)
+        elif min_dist == dist_to_left:
+            return pygame.math.Vector2(margin, pos.y)
+        else: # dist_to_right
+            return pygame.math.Vector2(MAP_WIDTH - margin, pos.y)
+    
+    def _find_closest_threat(self):
+        """
+        Encontra a ameaça (Inimigo ou Player/Bot) mais próxima.
+        Retorna o sprite da ameaça, ou None se nenhuma for encontrada.
+        """
+        alvo_ameacador_sprite = None
+        dist_min = float('inf')
+        
+        # 1. Procura Inimigos
+        if self.grupo_inimigos_ref_cache:
+            for inimigo in self.grupo_inimigos_ref_cache:
+                if not inimigo.groups(): continue
+                try:
+                    dist = self.bot.posicao.distance_to(inimigo.posicao)
+                    if dist < self.distancia_scan_geral and dist < dist_min:
+                        dist_min = dist
+                        alvo_ameacador_sprite = inimigo 
+                except (ValueError, AttributeError): continue
+        
+        # 2. Procura Players/Bots (se não houver inimigos)
+        if alvo_ameacador_sprite is None:
+            lista_alvos_naves = [self.player_ref_cache] + list(self.grupo_bots_ref_cache.sprites())
+            for alvo in lista_alvos_naves:
+                if alvo == self.bot or not alvo.groups() or alvo.vida_atual <= 0: 
+                    continue
+                try:
+                    dist = self.bot.posicao.distance_to(alvo.posicao)
+                    if dist < self.distancia_scan_geral and dist < dist_min:
+                        dist_min = dist
+                        alvo_ameacador_sprite = alvo 
+                except (ValueError, AttributeError): continue
+        
+        return alvo_ameacador_sprite
+        
     def update_ai(self, player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_vidas_ref):
         """ 
         O "tick" principal do cérebro da IA. 
         Chamado a cada frame pelo NaveBot.
+        (ORDEM CORRIGIDA: A lógica de estado (Fugir) agora roda ANTES de encontrar alvo)
         """
         
         # --- INÍCIO DA CORREÇÃO DO BUG ---
@@ -57,6 +125,7 @@ class BotAI:
         self.grupo_inimigos_ref_cache = grupo_inimigos_ref
         self.grupo_obstaculos_ref_cache = grupo_obstaculos_ref
         # --- FIM DA CORREÇÃO DO BUG ---
+        
         # Detecção de bot preso
         if self.bot.posicao.distance_to(self.posicao_anterior) < 3:
             self.frames_sem_movimento += 1
@@ -76,15 +145,24 @@ class BotAI:
             self.frames_sem_movimento = 0
         self.posicao_anterior = self.bot.posicao.copy()
         
-        # 1. Encontrar um novo alvo se o atual for inválido
-        #    (self.bot.alvo_selecionado é a "trava de mira" da Nave)
-        if (self.bot.alvo_selecionado is None or not self.bot.alvo_selecionado.groups()) and self.estado_ia not in ["EVITANDO_BORDA"]:
+        # --- INÍCIO DA MUDANÇA (Correção da Prioridade de Fuga) ---
+        
+        # 1. Processar o estado atual (DECIDIR SE PRECISA FUGIR)
+        #    Isto irá definir o estado_ia para "FUGINDO" ou "REGENERANDO_NA_BORDA"
+        #    e limpar o alvo (alvo_selecionado = None) se o HP estiver baixo.
+        self._processar_input_ia()
+        
+        # 2. Encontrar um novo alvo APENAS SE:
+        #    - O alvo atual for inválido (None ou morto)
+        #    - E o estado NÃO for de fuga (FUGINDO, REGENERANDO_NA_BORDA)
+        #    - E o estado NÃO for de evitar a borda (pois isso também é prioritário)
+        if (self.bot.alvo_selecionado is None or not self.bot.alvo_selecionado.groups()) and \
+           self.estado_ia not in ["FUGINDO", "REGENERANDO_NA_BORDA", "EVITANDO_BORDA"]:
+            
             lista_alvos_naves = [player_ref] + list(grupo_bots_ref.sprites())
             self._encontrar_alvo(grupo_inimigos_ref, grupo_obstaculos_ref, lista_alvos_naves, grupo_vidas_ref)
         
-        # 2. Processar o estado atual
-        self._processar_input_ia()
-
+        # --- FIM DA MUDANÇA ---
 
     def _encontrar_alvo(self, grupo_inimigos, grupo_obstaculos, lista_alvos_naves, grupo_vidas):
         """ 
@@ -186,12 +264,28 @@ class BotAI:
         self.bot.posicao_alvo_mouse = None
         
         LIMITE_HP_FUGIR = self.bot.max_vida * 0.20 # 20%
-        LIMITE_HP_REGENERAR_PERC = self.bot.max_vida * 0.8 # 80% (Threshold do VAGANDO)
+        LIMITE_HP_REGENERAR_OBRIGATORIO = self.bot.max_vida * 0.80 # 80%
 
-        # === 2. PRIORIDADE 1: FUGIR / REGENERAR NA BORDA (Se HP < 20%) ===
+        # === PRIORIDADE 0: JÁ ESTÁ REGENERANDO FORÇADAMENTE? ===
+        # Se o bot está no estado REGENERANDO_NA_BORDA, ele não pode sair
+        # até que seu HP esteja em 80%.
+        if self.estado_ia == "REGENERANDO_NA_BORDA":
+            if self.bot.vida_atual < LIMITE_HP_REGENERAR_OBRIGATORIO:
+                self.bot.posicao_alvo_mouse = None # Garante que fica parado
+                self.flee_destination = None 
+                
+                # Procura alvos para se defender (kiting parado)
+                self.bot.alvo_selecionado = self._find_closest_threat()
+                return # Decisão final: Ficar parado e atirar
+            else:
+                # Atingiu 80%! Volta a vagar.
+                print(f"[{self.bot.nome}] Regeneração concluída. Voltando a vagar.")
+                self.estado_ia = "VAGANDO"
+                self.flee_destination = None
+
+        # === PRIORIDADE 1: FUGIR (HP < 20%) ===
         if self.bot.vida_atual <= LIMITE_HP_FUGIR:
             
-            # Checa se está na borda
             zona_perigo = self.dist_borda_segura
             em_zona_perigo = (self.bot.posicao.x < zona_perigo or 
                               self.bot.posicao.x > MAP_WIDTH - zona_perigo or
@@ -199,58 +293,33 @@ class BotAI:
                               self.bot.posicao.y > MAP_HEIGHT - zona_perigo)
 
             if em_zona_perigo:
-                # 2A. PARAR NA BORDA E REGENERAR
+                # 2A. CHEGOU NA BORDA: PARAR E REGENERAR
+                # Este é o único local que define este estado
                 self.estado_ia = "REGENERANDO_NA_BORDA"
-                self.bot.posicao_alvo_mouse = None
-                self.bot.quer_mover_frente = False
-                # (A lógica de encontrar alvo abaixo vai rodar, para atirar parado)
+                self.bot.posicao_alvo_mouse = None # Para de mover
+                self.flee_destination = None # Limpa o destino de fuga
             
             else:
-                # 2B. FUGIR (MOVENDO)
-                self.estado_ia = "FUGINDO"
+                # 2B. PRECISA FUGIR (AINDA NÃO ESTÁ NA BORDA)
+                if self.estado_ia != "FUGINDO":
+                    self.estado_ia = "FUGINDO"
+                    self.flee_destination = self._find_closest_edge_point()
+                    print(f"[{self.bot.nome}] HP baixo! Fugindo para {self.flee_destination}")
                 
-                # Tenta encontrar o inimigo mais próximo para fugir DELE
-                alvo_ameacador_pos = None
-                dist_min = float('inf')
-                
-                # Procura Inimigos
-                if self.grupo_inimigos_ref_cache:
-                    for inimigo in self.grupo_inimigos_ref_cache:
-                        if not inimigo.groups(): continue
-                        try:
-                            dist = self.bot.posicao.distance_to(inimigo.posicao)
-                            if dist < self.distancia_scan_geral and dist < dist_min:
-                                dist_min = dist; alvo_ameacador_pos = inimigo.posicao
-                        except (ValueError, AttributeError): continue
-                
-                # Procura Players/Bots
-                if alvo_ameacador_pos is None:
-                    lista_alvos_naves = [self.player_ref_cache] + list(self.grupo_bots_ref_cache.sprites())
-                    for alvo in lista_alvos_naves:
-                        if alvo == self.bot or not alvo.groups() or alvo.vida_atual <= 0: 
-                            continue
-                        try:
-                            dist = self.bot.posicao.distance_to(alvo.posicao)
-                            if dist < self.distancia_scan_geral and dist < dist_min:
-                                dist_min = dist; alvo_ameacador_pos = alvo.posicao
-                        except (ValueError, AttributeError): continue
+                if self.flee_destination:
+                    self.bot.posicao_alvo_mouse = self.flee_destination
+            
+            # LÓGICA DE KITING (atirar enquanto foge/regenera)
+            self.bot.alvo_selecionado = self._find_closest_threat()
+            return # Fuga/Regeneração é prioridade máxima
+            
+        # === 3. RESETAR ESTADO DE FUGA (Se HP > 20% e não estava regenerando) ===
+        if self.estado_ia == "FUGINDO":
+            self.estado_ia = "VAGANDO"
+            self.flee_destination = None
 
-                if alvo_ameacador_pos:
-                    # Foge do alvo
-                    vec_x = alvo_ameacador_pos.x - self.bot.posicao.x
-                    vec_y = alvo_ameacador_pos.y - self.bot.posicao.y
-                    dist_fuga = math.sqrt(vec_x**2 + vec_y**2) + 1e-6
-                    ponto_fuga_x = self.bot.posicao.x - (vec_x / dist_fuga) * 500 # Foge 500px
-                    ponto_fuga_y = self.bot.posicao.y - (vec_y / dist_fuga) * 500
-                    self.bot.posicao_alvo_mouse = pygame.math.Vector2(ponto_fuga_x, ponto_fuga_y)
-                else:
-                    # Foge para o wander target (se não houver inimigos)
-                    self.bot.posicao_alvo_mouse = self.bot_wander_target
-            
-            self.bot.alvo_selecionado = None # Limpa a mira (para de seguir)
-            
-        # === 3. PRIORIDADE 2: EVITAR A BORDA (Se HP ALTO) ===
-        elif self.estado_ia != "EVITANDO_BORDA": # Só checa se não estiver FUGINDO
+        # === 4. PRIORIDADE 2: EVITAR A BORDA (Se HP ALTO) ===
+        elif self.estado_ia != "EVITANDO_BORDA": 
             centro_mapa = pygame.math.Vector2(MAP_WIDTH / 2, MAP_HEIGHT / 2)
             zona_perigo = self.dist_borda_segura
             em_zona_perigo = (self.bot.posicao.x < zona_perigo or self.bot.posicao.x > MAP_WIDTH - zona_perigo or
@@ -258,7 +327,7 @@ class BotAI:
             
             if em_zona_perigo:
                 self.estado_ia = "EVITANDO_BORDA"
-                self.bot.alvo_selecionado = None # Cancela a mira
+                self.bot.alvo_selecionado = None 
         
         if self.estado_ia == "EVITANDO_BORDA":
             zona_segura_minima = self.dist_borda_segura + 200
@@ -269,16 +338,12 @@ class BotAI:
             else:
                 centro_mapa = pygame.math.Vector2(MAP_WIDTH / 2, MAP_HEIGHT / 2)
                 self.bot.posicao_alvo_mouse = centro_mapa
-            return # EVITAR BORDA (com HP alto) tem prioridade sobre atacar
+            return 
 
-        # === 4. LÓGICA DE ALVO (Se não estiver FUGINDO/EVITANDO) ===
-        if self.estado_ia not in ["FUGINDO", "REGENERANDO_NA_BORDA"]:
-            # (Se HP baixo, _encontrar_alvo VAI para COLETANDO)
-            if (self.bot.alvo_selecionado is None or not self.bot.alvo_selecionado.groups()):
-                lista_alvos_naves = [self.player_ref_cache] + list(self.grupo_bots_ref_cache.sprites())
-                self._encontrar_alvo(self.grupo_inimigos_ref_cache, self.grupo_obstaculos_ref_cache, lista_alvos_naves, self.grupo_vidas_ref)
-        
-        # === 5. PROCESSAR ESTADOS DE COMBATE/VAGANDO ===
+        # === 5. LÓGICA DE ALVO (Se não estiver FUGINDO/EVITANDO) ===
+        # (Esta lógica está em update_ai, o que é correto)
+
+        # === 6. PROCESSAR ESTADOS DE COMBATE/VAGANDO (HP ALTO) ===
         
         if self.estado_ia == "COLETANDO": 
             vida_perto = None
@@ -297,7 +362,7 @@ class BotAI:
             if vida_perto:
                 self.bot.posicao_alvo_mouse = vida_perto.posicao
             else:
-                self.estado_ia = "VAGANDO" # Acabou a vida
+                self.estado_ia = "VAGANDO" 
             return
 
         if self.estado_ia == "CAÇANDO":
@@ -337,7 +402,14 @@ class BotAI:
                 
                 else:
                     if direcao_alvo_vec.length() > 0:
-                        vetor_orbita = direcao_alvo_vec.rotate(75).normalize()
+                        
+                        self.timer_troca_orbita += 1
+                        if self.timer_troca_orbita > self.duracao_orbita_atual:
+                            self.timer_troca_orbita = 0 
+                            self.direcao_orbita = -self.direcao_orbita 
+                            self.duracao_orbita_atual = random.randint(120, 300) 
+                        
+                        vetor_orbita = direcao_alvo_vec.rotate(75 * self.direcao_orbita).normalize() 
                         ponto_movimento = self.bot.posicao + vetor_orbita * 200
                 
                 self.bot.posicao_alvo_mouse = ponto_movimento
@@ -346,20 +418,12 @@ class BotAI:
             except ValueError:
                 self.estado_ia = "VAGANDO"
 
-        if self.estado_ia == "VAGANDO" or self.estado_ia == "REGENERANDO_NA_BORDA":
-            
-            # Se estiver regenerando (parado na borda) OU
-            # Se estiver vagando E com HP baixo (tentando parar para regenerar)
-            if self.estado_ia == "REGENERANDO_NA_BORDA" or \
-               (self.estado_ia == "VAGANDO" and self.bot.vida_atual < LIMITE_HP_REGENERAR_PERC):
-                
-                # Fica parado (não seta 'posicao_alvo_mouse')
-                # A lógica em NaveBot.update (ships.py) vai iniciar a regeneração.
-                pass
-            
+        if self.estado_ia == "VAGANDO":
+            # Se HP < 80% (mas > 20%), para de andar para regenerar
+            if self.bot.vida_atual < LIMITE_HP_REGENERAR_OBRIGATORIO:
+                self.bot.posicao_alvo_mouse = None
             else:
-                # Estado VAGANDO com HP alto
-                # --- LÓGICA DE VAGAR (WANDER) ---
+                # HP alto: anda por aí
                 chegou_perto = False
                 if self.bot_wander_target:
                     try:
@@ -375,9 +439,6 @@ class BotAI:
                     self.bot_wander_target = pygame.math.Vector2(target_x, target_y)
                 
                 self.bot.posicao_alvo_mouse = self.bot_wander_target
-            
-            # Se estiver regenerando ou com vida baixa, a IA não define
-            # 'posicao_alvo_mouse', fazendo o bot parar (correto).
 
     def resetar_ia(self):
         """ Chamado quando o bot morre/respawna. """
@@ -387,5 +448,13 @@ class BotAI:
         self.virando_aleatoriamente_timer = 0
         self.frames_sem_movimento = 0
         self.posicao_anterior = pygame.math.Vector2(0, 0)
-
+        
+        # --- LÓGICA DE ÓRBITA ALEATÓRIA (da correção anterior) ---
+        self.direcao_orbita = 1
+        self.timer_troca_orbita = 0
+        self.duracao_orbita_atual = random.randint(120, 300)
+        
+        # --- INÍCIO DA CORREÇÃO (KITING) ---
+        self.flee_destination = None # Reseta o ponto de fuga
+        # --- FIM DA CORREÇÃO ---
 # --- O HACK GLOBAL FOI REMOVIDO DAQUI ---

@@ -573,9 +573,7 @@ while game_globals["rodando"]:
                         estado_jogo = "ESPECTADOR"; game_globals["jogador_esta_vivo_espectador"] = False
                         game_globals["alvo_espectador"] = None; game_globals["alvo_espectador_nome"] = None
                         
-                        # --- CORREÇÃO DE BUG (Overlay de Morte) ---
-                        game_globals["spectator_overlay_hidden"] = False # <-- ADICIONADO (Mostrar overlay)
-                        # --- FIM DA CORREÇÃO ---
+                        game_globals["spectator_overlay_hidden"] = False # (Correção anterior)
                         
                         espectador_dummy_alvo.posicao = nave_player.posicao.copy()
                         network_client.send("W_UP"); network_client.send("A_UP"); network_client.send("S_UP"); network_client.send("D_UP"); network_client.send("SPACE_UP")
@@ -597,22 +595,27 @@ while game_globals["rodando"]:
             lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + list(grupo_bots)
 
         if not is_online:
-            game_state_logica = game_globals.copy()
-            game_state_logica["estado_jogo"] = estado_jogo
-            game_state_logica["dificuldade_jogo_atual"] = dificuldade_jogo_atual
             
-            novo_estado_jogo = game_logic_handler.update_offline_logic(game_state_logica, game_groups)
+            # --- INÍCIO DA CORREÇÃO (BUG DO PAUSE) ---
+            # Só executa a lógica do jogo se o jogo NÃO estiver pausado.
+            # O modo ESPECTADOR agora está CORRETAMENTE PERMITIDO aqui.
+            if estado_jogo not in ["PAUSE"]:
             
-            if novo_estado_jogo == "ESPECTADOR" and estado_jogo != "ESPECTADOR":
-                estado_jogo = "ESPECTADOR"
-                game_globals["jogador_esta_vivo_espectador"] = False
-                game_globals["alvo_espectador"] = None; game_globals["alvo_espectador_nome"] = None
+                game_state_logica = game_globals.copy()
+                game_state_logica["estado_jogo"] = estado_jogo
+                game_state_logica["dificuldade_jogo_atual"] = dificuldade_jogo_atual
                 
-                # --- CORREÇÃO DE BUG (Overlay de Morte) ---
-                game_globals["spectator_overlay_hidden"] = False # <-- ADICIONADO (Mostrar overlay)
-                # --- FIM DA CORREÇÃO ---
+                novo_estado_jogo = game_logic_handler.update_offline_logic(game_state_logica, game_groups)
                 
-                espectador_dummy_alvo.posicao = nave_player.posicao.copy()
+                if novo_estado_jogo == "ESPECTADOR" and estado_jogo != "ESPECTADOR":
+                    estado_jogo = "ESPECTADOR"
+                    game_globals["jogador_esta_vivo_espectador"] = False
+                    game_globals["alvo_espectador"] = None; game_globals["alvo_espectador_nome"] = None
+                    
+                    game_globals["spectator_overlay_hidden"] = False # (Correção anterior)
+                    
+                    espectador_dummy_alvo.posicao = nave_player.posicao.copy()
+            # --- FIM DA CORREÇÃO ---
         
         for bot in grupo_bots: 
             bot.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_bots, estado_jogo, nave_player, None, {}, {})
@@ -621,12 +624,16 @@ while game_globals["rodando"]:
                 lista_todos_alvos_para_aux, grupo_projeteis_player, estado_jogo, nave_player, 
                 network_client.client_socket, online_players_copy, online_npcs_copy     
             )
-        grupo_efeitos_visuais.update() 
+            
+        # --- INÍCIO DA CORREÇÃO (BUG DO PAUSE) ---
+        # Os efeitos visuais (como explosões) também devem pausar.
+        if estado_jogo not in ["PAUSE"]:
+            grupo_efeitos_visuais.update() 
+        # --- FIM DA CORREÇÃO ---
 
     if estado_jogo == "JOGANDO":
         if not is_online:
             nave_player.update(grupo_projeteis_player, camera, None)
-
 
     # 5. Desenho (Etapa 4)
     online_data = {
