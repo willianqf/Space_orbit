@@ -29,7 +29,7 @@ class EventHandler:
         self.cb_processar_cheat = main_callbacks["processar_cheat"]
         self.cb_ciclar_alvo_espectador = main_callbacks["ciclar_alvo_espectador"]
         self.cb_respawn_player_offline = main_callbacks["respawn_player_offline"]
-
+    ####
     def processar_eventos(self, game_state: dict):
         """
         Processa todos os eventos pendentes do Pygame e atualiza o game_state.
@@ -169,9 +169,7 @@ class EventHandler:
                         if is_online:
                             self.network_client.send("TOGGLE_REGEN")
                         else:
-                            # O grupo de efeitos visuais é passado no loop de lógica, não aqui.
-                            # Precisamos de uma referência...
-                            # Por enquanto, vamos assumir que o main.py o passa no dicionário
+                            # O grupo de efeitos visuais é passado no dicionário
                             grupo_fx = novos_estados.get("grupo_efeitos_visuais")
                             if grupo_fx is not None:
                                 nave_player.toggle_regeneracao(grupo_fx)
@@ -274,13 +272,14 @@ class EventHandler:
                         self.network_client.send("ENTER_SPECTATOR")
                         novos_estados["estado_jogo"] = "JOGANDO" # Espera a desconexão
                     else:
-                        # --- INÍCIO DA CORREÇÃO ---
-                        # Não mate o jogador. Apenas mude o estado.
-                        # nave_player.vida_atual = 0 # <-- LINHA REMOVIDA
+                        # --- CORREÇÃO (BUGS 1 e 2) ---
+                        # "Mata" o jogador localmente para que ele não possa ser 
+                        # espectado e para que o respawn funcione
+                        nave_player.vida_atual = 0 
+                        # --- FIM DA CORREÇÃO ---
                         
                         novos_estados["estado_jogo"] = "ESPECTADOR"
-                        novos_estados["jogador_esta_vivo_espectador"] = True # Agora isso é verdade
-                        # --- FIM DA CORREÇÃO ---
+                        novos_estados["jogador_esta_vivo_espectador"] = True
                         
                         novos_estados["alvo_espectador"] = None
                         novos_estados["alvo_espectador_nome"] = None
@@ -293,12 +292,15 @@ class EventHandler:
                     novos_estados["alvo_espectador_nome"] = None
 
                 elif action == "REQ_RESPAWN":
+                    # (Lógica da semana passada: checa se está morto OU se é vivo-espectador)
                     if nave_player.vida_atual <= 0 or novos_estados["jogador_esta_vivo_espectador"]:
                         if is_online:
                             self.network_client.send("RESPAWN_ME")
                         else:
                             self.cb_respawn_player_offline(nave_player)
+                            # (Lógica da semana passada: sincroniza estado)
                             novos_estados["estado_jogo"] = "JOGANDO"
+                            novos_estados["jogador_esta_vivo_espectador"] = False 
 
                 elif action == "BOT_MENOS":
                     if novos_estados["max_bots_atual"] > 0:
@@ -352,6 +354,8 @@ class EventHandler:
                         self.camera.set_zoom(1.0)
                     
                     elif event.key == pygame.K_z:
+                         # (Lógica da semana passada: esconde overlay)
+                         novos_estados["spectator_overlay_hidden"] = True 
                          if self.camera.zoom < 1.0:
                              self.camera.set_zoom(1.0)
                          else:
@@ -362,8 +366,10 @@ class EventHandler:
                          novos_estados["alvo_espectador_nome"] = None
                     
                     elif event.key == pygame.K_e or event.key == pygame.K_q:
-                        # Chama o callback, que modifica os globais do 'main'
-                        self.cb_ciclar_alvo_espectador(avancar=(event.key == pygame.K_e))
+                        # (Lógica da semana passada: esconde overlay)
+                        novos_estados["spectator_overlay_hidden"] = True 
+                        # (Lógica da semana passada: passa o dicionário)
+                        self.cb_ciclar_alvo_espectador(novos_estados, avancar=(event.key == pygame.K_e))
                 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     mouse_pos_tela = pygame.mouse.get_pos()
@@ -376,9 +382,13 @@ class EventHandler:
                             self.network_client.send("RESPAWN_ME")
                         else:
                             self.cb_respawn_player_offline(nave_player)
-                            novos_estados["estado_jogo"] = "JOGANDO" # Respawn offline muda o estado
+                            # (A flag 'spectator_overlay_hidden' é resetada DENTRO do cb_respawn_player_offline)
+                            novos_estados["estado_jogo"] = "JOGANDO" 
+                            novos_estados["jogador_esta_vivo_espectador"] = False
 
                     elif event.button == 1:
+                        # (Lógica da semana passada: esconde overlay)
+                        novos_estados["spectator_overlay_hidden"] = True 
                         self.camera.set_zoom(1.0) 
                         mouse_pos_mundo = self.camera.get_mouse_world_pos(mouse_pos_tela)
                         
@@ -403,6 +413,7 @@ class EventHandler:
                         else: # Modo Offline
                             grupo_bots = novos_estados.get("grupo_bots")
                             alvos_offline_vivos = []
+                            # (Lógica da semana passada: permite seguir a si mesmo se vivo)
                             if novos_estados["jogador_esta_vivo_espectador"]:
                                  alvos_offline_vivos.append(nave_player)
                             if grupo_bots:
@@ -420,6 +431,8 @@ class EventHandler:
                                 novos_estados["alvo_espectador_nome"] = None
 
                     elif event.button == 3:
+                        # (Lógica da semana passada: esconde overlay)
+                        novos_estados["spectator_overlay_hidden"] = True 
                         self.camera.set_zoom(1.0)
                         novos_estados["alvo_espectador"] = None
                         novos_estados["alvo_espectador_nome"] = None

@@ -374,11 +374,19 @@ class Renderer:
             self.ui.desenhar_terminal(self.tela, game_globals["variavel_texto_terminal"], LARGURA_TELA, ALTURA_TELA)
             
         elif estado_jogo == "ESPECTADOR":
-            # 1. Botão de Respawn (se morto)
-            if nave_player.vida_atual <= 0 and not game_globals["jogador_esta_vivo_espectador"]:
-                 self.ui.desenhar_game_over(self.tela, LARGURA_TELA, ALTURA_TELA)
             
-            # 2. HUD de Espectador
+            # --- INÍCIO DA CORREÇÃO (BUG 2) ---
+            # O jogador está morto E NÃO está vivo-espectador?
+            is_dead_spectator = (nave_player.vida_atual <= 0 and not game_globals["jogador_esta_vivo_espectador"])
+            
+            # 1. Botão de Respawn (se morto E flag NÃO está ativa)
+            # Só desenha o overlay "Você Morreu" se o jogador estiver morto
+            # E a flag 'spectator_overlay_hidden' for Falsa.
+            if is_dead_spectator and not game_globals.get("spectator_overlay_hidden", False):
+                 self.ui.desenhar_game_over(self.tela, LARGURA_TELA, ALTURA_TELA)
+            # --- FIM DA CORREÇÃO ---
+                 
+            # 2. HUD de Espectador (Sempre desenha)
             texto_titulo_spec = s.FONT_TITULO.render("MODO ESPECTADOR", True, s.BRANCO)
             pos_x_spec = 10; pos_y_spec = 10
             self.tela.blit(texto_titulo_spec, (pos_x_spec, pos_y_spec)); pos_y_spec += texto_titulo_spec.get_height() + 5

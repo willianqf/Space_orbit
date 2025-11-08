@@ -147,6 +147,7 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     game_globals["jogador_esta_vivo_espectador"] = False
     game_globals["alvo_espectador"] = None
     game_globals["alvo_espectador_nome"] = None
+    game_globals["spectator_overlay_hidden"] = False # <-- ADICIONADO (Reset)
     camera.set_zoom(1.0) 
 
     print("Reiniciando o Jogo...")
@@ -210,6 +211,7 @@ def respawn_player_offline(nave):
     global estado_jogo
     game_globals["jogador_esta_vivo_espectador"] = False
     game_globals["alvo_espectador"] = None
+    game_globals["spectator_overlay_hidden"] = False # <-- ADICIONADO (Reset)
     camera.set_zoom(1.0)
     print("Respawnando jogador (Offline)...")
     pos_referencia_bots = [bot.posicao for bot in grupo_bots]
@@ -305,9 +307,18 @@ def processar_cheat(comando, nave):
     elif comando_limpo == "spawncongelante": spawnar_boss_congelante_perto(nave_player.posicao)
     else: print(f"[CHEAT] Comando desconhecido: '{comando_limpo}'")
 
-def ciclar_alvo_espectador(avancar=True):
-    camera.set_zoom(1.0) 
-    lista_alvos_vivos = []; lista_nomes_alvos_vivos = [] 
+def ciclar_alvo_espectador(game_globals_dict, avancar=True):
+    """
+    Encontra e define o próximo alvo de espectador (Online ou Offline).
+    Usado por 'REQ_SPECTATOR' e pelas teclas Q/E.
+    (Esta versão foi corrigida para aceitar o dicionário de estado)
+    """
+    
+    camera.set_zoom(1.0) # Sai do modo zoom ao ciclar
+    
+    lista_alvos_vivos = []
+    lista_nomes_alvos_vivos = [] # for online
+    
     if network_client.is_connected():
         game_state = network_client.get_state(); online_players = game_state['players']
         nomes_ordenados = sorted(online_players.keys())
@@ -317,35 +328,48 @@ def ciclar_alvo_espectador(avancar=True):
                 lista_alvos_vivos.append({'nome': nome, 'state': state})
                 lista_nomes_alvos_vivos.append(nome)
     else: 
-        # --- INÍCIO DA CORREÇÃO ---
+        # (Correção da semana passada: Não adiciona o player se HP=0)
         if nave_player.vida_atual > 0:
              lista_alvos_vivos.append(nave_player)
         # Adiciona TODOS os bots que estão vivos.
         for bot in grupo_bots:
             if bot.vida_atual > 0:
                 lista_alvos_vivos.append(bot)
-        # --- FIM DA CORREÇÃO ---
+
     if not lista_alvos_vivos:
-        game_globals["alvo_espectador"] = None; game_globals["alvo_espectador_nome"] = None; return 
+        print("[Espectador] Nenhum alvo vivo para ciclar.")
+        # Usa o dicionário passado como argumento
+        game_globals_dict["alvo_espectador"] = None; game_globals_dict["alvo_espectador_nome"] = None; return 
+    
     current_index = -1
-    if network_client.is_connected() and game_globals["alvo_espectador_nome"]:
-        if game_globals["alvo_espectador_nome"] in lista_nomes_alvos_vivos:
-            current_index = lista_nomes_alvos_vivos.index(game_globals["alvo_espectador_nome"])
-    elif not network_client.is_connected() and game_globals["alvo_espectador"]:
-        if game_globals["alvo_espectador"] in lista_alvos_vivos:
-            current_index = lista_alvos_vivos.index(game_globals["alvo_espectador"])
+    # Lê o alvo atual do dicionário
+    if network_client.is_connected() and game_globals_dict["alvo_espectador_nome"]:
+        if game_globals_dict["alvo_espectador_nome"] in lista_nomes_alvos_vivos:
+            current_index = lista_nomes_alvos_vivos.index(game_globals_dict["alvo_espectador_nome"])
+            
+    # --- INÍCIO DA CORREÇÃO (ValueError) ---
+    elif not network_client.is_connected() and game_globals_dict["alvo_espectador"]:
+        # Procura o OBJETO (alvo_espectador) na LISTA DE OBJETOS (lista_alvos_vivos)
+        if game_globals_dict["alvo_espectador"] in lista_alvos_vivos:
+            # USA A LISTA DE OBJETOS 'lista_alvos_vivos'
+            current_index = lista_alvos_vivos.index(game_globals_dict["alvo_espectador"]) 
+    # --- FIM DA CORREÇÃO ---
+            
     if avancar: current_index += 1
     else: current_index -= 1
     current_index %= len(lista_alvos_vivos)
+    
+    # Define o novo alvo no dicionário
     if network_client.is_connected():
         novo_alvo_dict = lista_alvos_vivos[current_index]
-        game_globals["alvo_espectador_nome"] = novo_alvo_dict['nome']
-        game_globals["alvo_espectador"] = None
+        game_globals_dict["alvo_espectador_nome"] = novo_alvo_dict['nome']
+        game_globals_dict["alvo_espectador"] = None
+        print(f"[Espectador] Seguindo (Online): {game_globals_dict['alvo_espectador_nome']}")
     else:
         novo_alvo_sprite = lista_alvos_vivos[current_index]
-        game_globals["alvo_espectador"] = novo_alvo_sprite
-        game_globals["alvo_espectador_nome"] = None
-
+        game_globals_dict["alvo_espectador"] = novo_alvo_sprite
+        game_globals_dict["alvo_espectador_nome"] = None
+        print(f"[Espectador] Seguindo (Offline): {game_globals_dict['alvo_espectador'].nome}")
 # 10. Recalcula Posições Iniciais da UI
 ui.recalculate_ui_positions(LARGURA_TELA, ALTURA_TELA)
 
@@ -376,6 +400,7 @@ game_globals = {
     "jogador_pediu_para_espectar": False, "jogador_esta_vivo_espectador": False,
     "alvo_espectador": None, "alvo_espectador_nome": None,
     "espectador_dummy_alvo": espectador_dummy_alvo,
+    "spectator_overlay_hidden": False, # <-- ADICIONADO
     "max_bots_atual": s.MAX_BOTS,
     "LARGURA_TELA": LARGURA_TELA, "ALTURA_TELA": ALTURA_TELA,
     "nave_player": nave_player, # <-- Adiciona a nave player ao dicionário
@@ -514,6 +539,7 @@ while game_globals["rodando"]:
                     estado_jogo = "JOGANDO"; nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
                     game_globals["jogador_esta_vivo_espectador"] = False; game_globals["jogador_pediu_para_espectar"] = False
                     game_globals["alvo_espectador_nome"] = None; camera.set_zoom(1.0)
+                    game_globals["spectator_overlay_hidden"] = False # <-- Reset no respawn
                 if nova_vida < nave_player.vida_atual: nave_player.ultimo_hit_tempo = pygame.time.get_ticks()
                 is_server_regenerando = my_state.get('esta_regenerando', False)
                 if is_server_regenerando and not nave_player.esta_regenerando: nave_player.iniciar_regeneracao(grupo_efeitos_visuais)
@@ -541,10 +567,16 @@ while game_globals["rodando"]:
                 if nave_player.nivel_max_vida > 0 and nave_player.nivel_max_vida < len(VIDA_POR_NIVEL):
                     nave_player.max_vida = VIDA_POR_NIVEL[nave_player.nivel_max_vida]
                 else: nave_player.max_vida = my_state.get('max_hp', nave_player.max_vida)
+                
                 if nave_player.vida_atual <= 0 and estado_jogo == "JOGANDO":
                     if not game_globals["jogador_pediu_para_espectar"]:
                         estado_jogo = "ESPECTADOR"; game_globals["jogador_esta_vivo_espectador"] = False
                         game_globals["alvo_espectador"] = None; game_globals["alvo_espectador_nome"] = None
+                        
+                        # --- CORREÇÃO DE BUG (Overlay de Morte) ---
+                        game_globals["spectator_overlay_hidden"] = False # <-- ADICIONADO (Mostrar overlay)
+                        # --- FIM DA CORREÇÃO ---
+                        
                         espectador_dummy_alvo.posicao = nave_player.posicao.copy()
                         network_client.send("W_UP"); network_client.send("A_UP"); network_client.send("S_UP"); network_client.send("D_UP"); network_client.send("SPACE_UP")
                     else:
@@ -575,6 +607,11 @@ while game_globals["rodando"]:
                 estado_jogo = "ESPECTADOR"
                 game_globals["jogador_esta_vivo_espectador"] = False
                 game_globals["alvo_espectador"] = None; game_globals["alvo_espectador_nome"] = None
+                
+                # --- CORREÇÃO DE BUG (Overlay de Morte) ---
+                game_globals["spectator_overlay_hidden"] = False # <-- ADICIONADO (Mostrar overlay)
+                # --- FIM DA CORREÇÃO ---
+                
                 espectador_dummy_alvo.posicao = nave_player.posicao.copy()
         
         for bot in grupo_bots: 
