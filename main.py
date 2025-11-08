@@ -85,6 +85,7 @@ try:
     s.LOGO_JOGO = pygame.image.load("Space_Orbit.png")
     s.LOGO_JOGO = s.LOGO_JOGO.convert_alpha()
     print("Logo carregada com sucesso!") 
+    print("Testando se esse é o codigo") # SEU PRINT DE TESTE
 except pygame.error as e:
     print(f"Erro ao carregar a imagem 'Space_Orbit.png': {e}")
     s.LOGO_JOGO = None 
@@ -390,12 +391,20 @@ game_groups = {
 
 
 # --- LOOP PRINCIPAL DO JOGO ---
+# main.py
+
+# --- LOOP PRINCIPAL DO JOGO ---
 while game_globals["rodando"]:
     
     # 1. Configuração do Frame
     agora = pygame.time.get_ticks() 
     is_online = network_client.is_connected()
     
+    # --- INÍCIO DA CORREÇÃO: Captura o tamanho ANTIGO ---
+    LARGURA_ANTIGA = LARGURA_TELA
+    ALTURA_ANTIGA = ALTURA_TELA
+    # --- FIM DA CORREÇÃO ---
+
     # 2. Checagem de Desconexão Inesperada
     if not network_client.listener_thread_running and network_client.connection_status == "CONNECTED":
         if game_globals["jogador_pediu_para_espectar"]:
@@ -408,7 +417,7 @@ while game_globals["rodando"]:
             print("[AVISO] Thread de rede morreu! Voltando ao Menu.")
             resetar_para_menu(); estado_jogo = "MENU"
     
-    # 3. Processar Eventos
+    # 3. Processar Eventos (Irá atualizar LARGURA_TELA e ALTURA_TELA se houver resize)
     game_state_eventos = game_globals.copy()
     game_state_eventos["estado_jogo"] = estado_jogo
     game_state_eventos["agora"] = agora
@@ -422,12 +431,24 @@ while game_globals["rodando"]:
 
     if not game_globals["rodando"]: break
 
-    if tela.get_width() != LARGURA_TELA or tela.get_height() != ALTURA_TELA:
+    # --- INÍCIO DA CORREÇÃO: Nova Lógica de Verificação ---
+    # Compara o tamanho ANTIGO (antes dos eventos) com o NOVO (depois dos eventos)
+    if LARGURA_ANTIGA != LARGURA_TELA or ALTURA_ANTIGA != ALTURA_TELA:
+        
+        print(f"REDIMENSIONAMENTO DETECTADO! (De {LARGURA_ANTIGA}x{ALTURA_ANTIGA} para {LARGURA_TELA}x{ALTURA_TELA})") # <-- PRINT DE TESTE
+        
+        # 1. Cria a nova superfície de tela
         tela = pygame.display.set_mode((LARGURA_TELA, ALTURA_TELA), pygame.RESIZABLE)
+        
+        # 2. Recalcula a UI (Botões do Menu)
         ui.recalculate_ui_positions(LARGURA_TELA, ALTURA_TELA)
+        
+        # 3. Redimensiona a Câmera (Mundo do Jogo)
         camera.resize(LARGURA_TELA, ALTURA_TELA)
-        renderer.tela = tela # <-- ATUALIZA A TELA NO RENDERER
-        print(f"Tela redimensionada para: {LARGURA_TELA}x{ALTURA_TELA}")
+        
+        # 4. Atualiza o Renderer
+        renderer.tela = tela 
+    # --- FIM DA CORREÇÃO ---
     
     # 4. Lógica de Atualização
     
@@ -577,17 +598,9 @@ while game_globals["rodando"]:
         "players_last_frame": online_players_last_frame
     }
     
-    # --- INÍCIO: CORREÇÃO DA CHAMADA ---
-    # Chamada antiga (errada):
-    # render_state = game_globals.copy()
-    # render_state["estado_jogo"] = estado_jogo
-    # ...
-    # renderer.draw(render_state, game_groups, online_data, online_trackers)
-    
     # Chamada nova (correta):
     renderer.draw(estado_jogo, game_globals, game_groups, online_data, 
                   online_trackers, alvo_camera_final)
-    # --- FIM: CORREÇÃO DA CHAMADA ---
 
 
     # 6. Atualização de Trackers (Pós-Desenho)

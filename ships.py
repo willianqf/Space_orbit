@@ -597,7 +597,10 @@ class Player(Nave):
 
     def update(self, grupo_projeteis_jogador, camera, client_socket=None):
         if client_socket is None:
+            # --- INÍCIO DA CORREÇÃO ---
+            # O 'camera' DEVE ser passado para processar_input_humano
             self.processar_input_humano(camera)
+            # --- FIM DA CORREÇÃO ---
             self.update_regeneracao()
             self.rotacionar()
             self.mover()
@@ -630,8 +633,12 @@ class Player(Nave):
             if mouse_buttons[0]:
                 mouse_pos_tela = pygame.mouse.get_pos()
                 if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela) and not ui.RECT_BOTAO_REGEN_HUD.collidepoint(mouse_pos_tela):
-                    camera_world_topleft = (-camera.camera_rect.left, -camera.camera_rect.top)
-                    mouse_pos_mundo = pygame.math.Vector2(mouse_pos_tela[0] + camera_world_topleft[0], mouse_pos_tela[1] + camera_world_topleft[1])
+                    
+                    # --- INÍCIO DA CORREÇÃO ---
+                    # Esta é a nova lógica correta (que já existe na câmera)
+                    mouse_pos_mundo = camera.get_mouse_world_pos(mouse_pos_tela)
+                    # --- FIM DA CORREÇÃO ---
+
                     self.posicao_alvo_mouse = mouse_pos_mundo
                     self.quer_mover_frente = False 
                     self.quer_mover_tras = False
