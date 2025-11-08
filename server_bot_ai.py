@@ -58,6 +58,14 @@ class ServerBotManager:
         # Remove bots mortos (o game_loop fará isso)
         if bots_para_remover:
             print(f"[LOG] Bots mortos para remover: {bots_para_remover}")
+        
+        # --- CORREÇÃO NPC FANTASMA: purga servidor ---
+        # Remove imediatamente NPCs mortos da lista para parar IA e tiros
+        npcs_antes = len(self.network_npcs)
+        self.network_npcs[:] = [n for n in self.network_npcs if n.get('hp', 0) > 0]
+        if len(self.network_npcs) != npcs_antes:
+            print(f"[IA] NPCs removidos (mortos): {npcs_antes - len(self.network_npcs)}")
+        # --- FIM: CORREÇÃO NPC FANTASMA ---
             
         # Spawna novos bots se necessário
         if len(bots_atuais) < max_bots:

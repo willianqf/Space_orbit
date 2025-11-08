@@ -1687,6 +1687,16 @@ while rodando:
                 online_projectiles_copy = list(online_projectiles) 
                 online_npcs_copy = online_npcs.copy() 
             
+            # --- CORREÇÃO NPC FANTASMA: normalização cliente ---
+            # Normaliza NPCs (lista -> dict) para consistência
+            raw_online_npcs = online_npcs_copy
+            if isinstance(raw_online_npcs, list):
+                online_npcs_by_id = {str(n['id']): n for n in raw_online_npcs}
+            else:
+                online_npcs_by_id = dict(raw_online_npcs)
+            online_npcs_copy = online_npcs_by_id  # Substitui com versão normalizada
+            # --- FIM: CORREÇÃO NPC FANTASMA ---
+            
             current_projectile_ids = {proj['id'] for proj in online_projectiles_copy}
             new_projectiles = [proj for proj in online_projectiles_copy if proj['id'] not in online_projectile_ids_last_frame]
             
@@ -1712,19 +1722,16 @@ while rodando:
                 
                 tocar_som_posicional(som_a_tocar, pos_som, nave_player.posicao, vol_base)
 
+            # --- CORREÇÃO NPC FANTASMA: detecção e limpeza de alvos mortos ---
             current_npc_ids = set(online_npcs_copy.keys())
-            dead_npc_ids = set(online_npcs_last_frame.keys()) - current_npc_ids
+            previous_npc_ids = set(online_npcs_last_frame.keys()) if isinstance(online_npcs_last_frame, dict) else set()
+            dead_npc_ids = previous_npc_ids - current_npc_ids
             
-            # --- INÍCIO: CORREÇÃO BUG 2 (NPCs Invisíveis) ---
             # Limpa referências a NPCs mortos ANTES de desenhar
-            # Remove alvo_selecionado se for um NPC morto
-            if nave_player.alvo_selecionado:
-                # Verifica se o alvo é um NPC (string ID) e se morreu
-                if isinstance(nave_player.alvo_selecionado, str):
-                    if nave_player.alvo_selecionado in dead_npc_ids:
-                        print(f"[CLIENTE] Alvo NPC {nave_player.alvo_selecionado} morreu. Limpando mira.")
-                        nave_player.alvo_selecionado = None
-            # --- FIM: CORREÇÃO BUG 2 ---
+            if isinstance(nave_player.alvo_selecionado, str) and nave_player.alvo_selecionado in dead_npc_ids:
+                print(f"[CLIENTE] Alvo NPC {nave_player.alvo_selecionado} removido pelo servidor. Limpando mira.")
+                nave_player.alvo_selecionado = None
+            # --- FIM: CORREÇÃO NPC FANTASMA ---
             
             for npc_id in dead_npc_ids:
                 npc = online_npcs_last_frame[npc_id]
@@ -2056,7 +2063,10 @@ while rodando:
         with network_state_lock:
             # Salva o estado ATUAL como "last_frame" para o próximo tick
             online_projectile_ids_last_frame = {p['id'] for p in online_projectiles}
-            online_npcs_last_frame = online_npcs.copy()
+            # --- CORREÇÃO NPC FANTASMA: salva versão normalizada ---
+            # Salva online_npcs_copy normalizado (já processado como dict)
+            online_npcs_last_frame = online_npcs_copy.copy()
+            # --- FIM: CORREÇÃO NPC FANTASMA ---
             online_players_last_frame = online_players_states.copy()
     else:
         # Se offline, limpa tudo
