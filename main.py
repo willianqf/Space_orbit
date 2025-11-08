@@ -14,10 +14,13 @@ import settings as s
 from camera import Camera
 from projectiles import Projetil, ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento, ProjetilCongelante, ProjetilTeleguiadoJogador
 from entities import Obstaculo, NaveRegeneradora 
+# --- INÍCIO: CORREÇÃO (Importar Explosao) ---
 from enemies import (InimigoPerseguidor, InimigoAtiradorRapido, InimigoBomba, InimigoMinion,
                      InimigoMothership, InimigoRapido, InimigoTiroRapido, InimigoAtordoador,
                      BossCongelante, MinionCongelante, 
                      set_global_enemy_references)
+from effects import Explosao # <-- Importa a classe Explosao
+# --- FIM: CORREÇÃO ---
 from ships import (Player, NaveBot, NaveAuxiliar, Nave, set_global_ship_references, 
                    tocar_som_posicional) 
 import ui
@@ -210,7 +213,9 @@ def network_listener_thread(sock):
                                     'y': float(parts_player[2]),
                                     'angulo': float(parts_player[3]),
                                     'hp': float(parts_player[4]), 
-                                    'max_hp': int(parts_player[5]),
+                                    # --- INÍCIO: CORREÇÃO (ValueError int('5.0')) ---
+                                    'max_hp': int(float(parts_player[5])), # Converte para float primeiro
+                                    # --- FIM: CORREÇÃO ---
                                     'pontos': int(parts_player[6]),
                                     'esta_regenerando': bool(int(parts_player[7])),
                                     'pontos_upgrade_disponiveis': int(parts_player[8]),
@@ -1673,7 +1678,10 @@ while rodando:
                 if npc['tipo'] == 'bomba':
                     tamanho_padrao_explosao = npc['tamanho'] + 75 
                 
-                explosao = explosao(pos_npc, tamanho_padrao_explosao)
+                # --- INÍCIO: CORREÇÃO (NameError 'explosao') ---
+                explosao = Explosao(pos_npc, tamanho_padrao_explosao)
+                grupo_explosoes.add(explosao) # Adiciona ao grupo
+                # --- FIM: CORREÇÃO ---
                 
                 if npc['tipo'] in ['mothership', 'boss_congelante']:
                     tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, pos_npc, nave_player.posicao, VOLUME_BASE_EXPLOSAO_BOSS)
@@ -1685,7 +1693,9 @@ while rodando:
             
             for player in dead_player_states:
                  pos_player = pygame.math.Vector2(player['x'], player['y'])
-                 explosao = explosao(pos_player, 30 // 2 + 10) 
+                 # --- INÍCIO: CORREÇÃO (NameError 'explosao') ---
+                 explosao = Explosao(pos_player, 30 // 2 + 10) 
+                 # --- FIM: CORREÇÃO ---
                  grupo_explosoes.add(explosao)
                  tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_player, nave_player.posicao, VOLUME_BASE_EXPLOSAO_NPC)
 

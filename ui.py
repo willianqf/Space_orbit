@@ -332,10 +332,24 @@ def desenhar_loja(surface, nave, largura_tela, altura_tela, client_socket=None):
     cor_aux = BRANCO if pode_aux else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_aux, RECT_BOTAO_AUX, border_radius=5)
     draw_text_on_button(RECT_BOTAO_AUX, txt_aux, FONT_PADRAO, PRETO)
-    pode_maxhp = pode_comprar_geral
+
+    # --- INÍCIO: MODIFICAÇÃO (Lógica Botão Vida Máx) ---
+    # Define o nível máximo de vida com base na lista de settings
+    # (VIDA_POR_NIVEL é importado via 'from settings import *')
+    MAX_NIVEL_VIDA = len(VIDA_POR_NIVEL) - 1 # (Isso será 5)
+    
+    pode_maxhp = pode_comprar_geral and nave.nivel_max_vida < MAX_NIVEL_VIDA
     cor_maxhp = BRANCO if pode_maxhp else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_maxhp, RECT_BOTAO_MAX_HP, border_radius=5)
-    draw_text_on_button(RECT_BOTAO_MAX_HP, f"Vida Max Nv. {nave.nivel_max_vida + 1} (Custo: {custo_padrao} Pt)", FONT_PADRAO, PRETO)
+    
+    if nave.nivel_max_vida < MAX_NIVEL_VIDA:
+        txt_maxhp = f"Vida Max Nv. {nave.nivel_max_vida + 1} (Custo: {custo_padrao} Pt)"
+    else:
+        txt_maxhp = f"Vida Max Nv. {nave.nivel_max_vida} (MAX)"
+        
+    draw_text_on_button(RECT_BOTAO_MAX_HP, txt_maxhp, FONT_PADRAO, PRETO)
+    # --- FIM: MODIFICAÇÃO ---
+    
     pode_escudo = pode_comprar_geral and nave.nivel_escudo < MAX_NIVEL_ESCUDO
     cor_escudo = BRANCO if pode_escudo else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, cor_escudo, RECT_BOTAO_ESCUDO, border_radius=5)
