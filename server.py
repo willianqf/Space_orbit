@@ -56,10 +56,11 @@ CUSTOS_AUXILIARES = s.CUSTOS_AUXILIARES
 PONTOS_LIMIARES_PARA_UPGRADE = s.PONTOS_LIMIARES_PARA_UPGRADE[:]
 PONTOS_SCORE_PARA_MUDAR_LIMIAR = s.PONTOS_SCORE_PARA_MUDAR_LIMIAR[:]
 
-# --- INÍCIO: MODIFICAÇÃO (Importar DANO e VIDA) ---
-DANO_POR_NIVEL = s.DANO_POR_NIVEL[:]
-VIDA_POR_NIVEL = s.VIDA_POR_NIVEL[:]
-# --- FIM: MODIFICAÇÃO ---
+# --- INÍCIO: CORREÇÃO (Bug de Dano / NPC Fantasma) ---
+# As variáveis globais 'DANO_POR_NIVEL = None' foram REMOVIDAS.
+# Agora, todas as funções irão ler 's.DANO_POR_NIVEL' e 's.VIDA_POR_NIVEL'
+# que são preenchidas corretamente pelo bloco __main__ no arranque.
+# --- FIM: CORREÇÃO ---
 
 # --- (Constantes de Auxiliares - Sem alterações) ---
 AUX_POSICOES = [
@@ -152,8 +153,12 @@ def server_comprar_upgrade(player_state, tipo_upgrade):
     elif tipo_upgrade == "max_health":
         
         # --- INÍCIO: CORREÇÃO CRASH (Nível Máx. Vida) ---
+        if s.VIDA_POR_NIVEL is None: # Proteção caso a global não esteja setada
+            print("[ERRO] s.VIDA_POR_NIVEL não inicializada no servidor!")
+            return
+            
         # Verifica se o nível atual é MENOR que o índice máximo (len-1)
-        if player_state['nivel_max_vida'] >= len(VIDA_POR_NIVEL) - 1:
+        if player_state['nivel_max_vida'] >= len(s.VIDA_POR_NIVEL) - 1:
             if player_state.get('is_bot', False) == False:
                 print(f"[LOG] [{player_state['nome']}] Pedido de compra negado (Vida Máx. já está no Nível 5)!")
             return # Simplesmente retorna, não compra
@@ -163,8 +168,8 @@ def server_comprar_upgrade(player_state, tipo_upgrade):
             player_state['pontos_upgrade_disponiveis'] -= custo_padrao
             player_state['total_upgrades_feitos'] += 1
             player_state['nivel_max_vida'] += 1
-            # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
-            player_state['max_hp'] = VIDA_POR_NIVEL[player_state['nivel_max_vida']]
+            # --- INÍCIO: MODIFICAÇÃO (Usa s.VIDA_POR_NIVEL) ---
+            player_state['max_hp'] = s.VIDA_POR_NIVEL[player_state['nivel_max_vida']]
             # --- FIM: MODIFICAÇÃO ---
             player_state['hp'] += 1 
             comprou = True
@@ -203,6 +208,13 @@ def server_calcular_posicao_spawn(pos_referencia_lista):
 def update_player_logic(player_state, agora_ms=0): 
     """ Calcula a nova posição, ângulo E processa o tiro de UM jogador. """
     
+    # --- INÍCIO: CORREÇÃO (Bug de Dano / NPC Fantasma) ---
+    # Proteção para garantir que o loop não falhe se for chamado antes do __main__
+    if s.DANO_POR_NIVEL is None: 
+        print("[ERRO] update_player_logic chamado antes de s.DANO_POR_NIVEL ser definido.")
+        return None
+    # --- FIM: CORREÇÃO ---
+        
     if agora_ms == 0: agora_ms = int(time.time() * 1000) 
 
     is_congelado = agora_ms < player_state.get('tempo_fim_congelamento', 0)
@@ -304,8 +316,8 @@ def update_player_logic(player_state, agora_ms=0):
             pos_y = player_state['y'] + (-math.cos(radianos) * OFFSET_PONTA_TIRO)
             vel_x_inicial = -math.sin(radianos); vel_y_inicial = -math.cos(radianos)
 
-            # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
-            dano_calculado = DANO_POR_NIVEL[player_state['nivel_dano']]
+            # --- INÍCIO: MODIFICAÇÃO (Usa s.DANO_POR_NIVEL) ---
+            dano_calculado = s.DANO_POR_NIVEL[player_state['nivel_dano']]
             
             novo_projetil = {'id': f"{player_state['nome']}_{agora_ms}", 'owner_nome': player_state['nome'],
                 'x': pos_x, 'y': pos_y, 'pos_inicial_x': pos_x, 'pos_inicial_y': pos_y,
@@ -758,6 +770,13 @@ def game_loop(bot_manager):
             agora_ms = int(time.time() * 1000) 
             projeteis_para_remover = [] 
             npcs_para_remover = [] 
+            
+            # --- Proteção: Garante que as constantes de settings foram carregadas ---
+            if s.DANO_POR_NIVEL is None or s.VIDA_POR_NIVEL is None:
+                print("[ERRO FATAL] s.DANO_POR_NIVEL ou s.VIDA_POR_NIVEL não foram carregados. Loop pausado.")
+                time.sleep(1)
+                continue
+            # --- Fim Proteção ---
 
             # --- PARTE 0: Gerenciar Bots ---
             bots_para_remover = bot_manager.manage_bot_population(MAX_BOTS_ONLINE)
@@ -818,7 +837,11 @@ def game_loop(bot_manager):
                                     state['aux_cooldowns'][i] = agora_ms + AUX_COOLDOWN_TIRO
                                     radianos = math.radians(state['angulo'])
                                     vel_x_inicial = -math.sin(radianos) * 14; vel_y_inicial = -math.cos(radianos) * 14
-                                    dano_calculado_aux = DANO_POR_NIVEL[state['nivel_dano']]
+                                    
+                                    # --- INÍCIO: CORREÇÃO (Bug de Dano) ---
+                                    dano_calculado_aux = s.DANO_POR_NIVEL[state['nivel_dano']]
+                                    # --- FIM: CORREÇÃO ---
+                                    
                                     proj_aux = {'id': f"{state['nome']}_aux{i}_{agora_ms}", 'owner_nome': state['nome'], 
                                         'x': aux_x, 'y': aux_y, 'pos_inicial_x': aux_x, 'pos_inicial_y': aux_y, 
                                         'dano': dano_calculado_aux, 'tipo': 'player', 'timestamp_criacao': agora_ms, 
@@ -885,8 +908,25 @@ def game_loop(bot_manager):
             for proj in projeteis_ativos:
                 if proj in projeteis_para_remover: continue
                 
+                # --- [INÍCIO DA MODIFICAÇÃO DEFINITIVA (DANO FANTASMA)] ---
                 if proj['tipo'] == 'player':
-                    owner_state = player_states.get(proj['owner_nome'])
+                    
+                    # 1. Encontra o 'owner_state' (PARA PONTOS)
+                    owner_state = None
+                    owner_nome_proj = proj.get('owner_nome')
+                    if owner_nome_proj:
+                        try:
+                            # Itera pelos 'values()' para funcionar com humanos (chave=conn) e bots (chave=nome)
+                            for state in player_states.values(): 
+                                if state.get('nome') == owner_nome_proj:
+                                    owner_state = state
+                                    break
+                        except RuntimeError: pass 
+                    
+                    # 2. Usa o dano JÁ ARMAZENADO no projétil
+                    # Este valor foi calculado em update_player_logic (para tiros normais)
+                    # ou na lógica de auxiliares (para tiros de aux), usando s.DANO_POR_NIVEL.
+                    dano_real = proj.get('dano', 1.0) 
                     
                     for npc in network_npcs:
                         if npc in npcs_para_remover: continue 
@@ -896,17 +936,11 @@ def game_loop(bot_manager):
                         dist_sq = (npc['x'] - proj['x'])**2 + (npc['y'] - proj['y'])**2
                         
                         if dist_sq < dist_colisao_sq:
-                            dano_real = 1.0
-                            if owner_state: 
-                                nivel_dano_atual = owner_state.get('nivel_dano', 1)
-                                if 0 <= nivel_dano_atual < len(DANO_POR_NIVEL):
-                                    dano_real = DANO_POR_NIVEL[nivel_dano_atual]
                             
-                            #####
-    
-                            # === DEBUG: Mostra o dano ===                            hp_antes = npc['hp']
+                            # 3. Aplica o dano
+                            hp_antes = npc['hp']
                             npc['hp'] -= dano_real
-                            # === FIM DEBUG ===
+                            # print(f"[DANO] {owner_nome_proj} -> {npc['tipo']}#{npc['id']}: {dano_real:.1f} dmg | HP: {hp_antes:.1f} -> {npc['hp']:.1f}")
                             
                             if npc['tipo'] in ['mothership', 'boss_congelante']:
                                 npc['ia_ultimo_hit_tempo'] = agora_ms
@@ -916,14 +950,14 @@ def game_loop(bot_manager):
                             if npc['hp'] <= 0:
                                 npcs_para_remover.append(npc) 
                                 ids_npcs_mortos_neste_tick.add(npc['id'])
-                                if owner_state:
+                                if owner_state: # 4. Usa o owner_state para dar os pontos
                                     server_ganhar_pontos(owner_state, npc.get('pontos_por_morte', 5))
                                     print(f"[KILL] {owner_state['nome']} destruiu {npc['tipo']}#{npc['id']} (+{npc.get('pontos_por_morte', 5)} pts)")
-                            break
-                            ###
+                            break # Projétil acerta só um NPC
                     
                     if proj in projeteis_para_remover: continue 
                     
+                    # Colisão PVP (Jogador vs Jogador)
                     for target_state in all_living_players:
                         if target_state['nome'] == proj['owner_nome']: continue 
                         if target_state.get('invencivel', False): continue
@@ -931,21 +965,21 @@ def game_loop(bot_manager):
                         dist_sq = (target_state['x'] - proj['x'])**2 + (target_state['y'] - proj['y'])**2
                         if dist_sq < COLISAO_JOGADOR_PROJ_DIST_SQ:
                             if agora_ms - target_state.get('ultimo_hit_tempo', 0) > 150:
-                                dano_real = 1.0
-                                if owner_state: 
-                                    nivel_dano_atual = owner_state.get('nivel_dano', 1)
-                                    if 0 <= nivel_dano_atual < len(DANO_POR_NIVEL):
-                                        dano_real = DANO_POR_NIVEL[nivel_dano_atual]
-
+                                
+                                # 5. Usa o dano do projétil para PVP
+                                dano_real_pvp = proj.get('dano', 1.0) 
+                                
                                 reducao_percent = min(target_state['nivel_escudo'] * s.REDUCAO_DANO_POR_NIVEL, 75)
-                                dano_reduzido = dano_real * (1 - reducao_percent / 100.0)
+                                dano_reduzido = dano_real_pvp * (1 - reducao_percent / 100.0)
                                 target_state['hp'] -= dano_reduzido
                                 target_state['ultimo_hit_tempo'] = agora_ms
                                 target_state['esta_regenerando'] = False 
                                 projeteis_para_remover.append(proj) 
                                 if target_state['hp'] <= 0:
                                     if owner_state: server_ganhar_pontos(owner_state, 10) 
-                                break 
+                                break # Projétil acerta só um Jogador
+                
+                # --- [FIM DA MODIFICAÇÃO DEFINITIVA] ---
                 
                 elif proj['tipo'] == 'npc':
                     for player_state in all_living_players: 
@@ -1028,9 +1062,15 @@ def game_loop(bot_manager):
                 
                 network_npcs = [n for n in network_npcs if n['id'] not in ids_npcs_mortos]
                 
-                for state in player_states.values():
-                    if state.get('alvo_lock') in ids_npcs_mortos:
-                        state['alvo_lock'] = None
+                # --- INÍCIO: CORREÇÃO (Bug Alvo "Pegajoso") ---
+                # Itera sobre uma cópia da lista de valores para evitar RuntimeError
+                try:
+                    for state in list(player_states.values()): 
+                        if state.get('alvo_lock') in ids_npcs_mortos:
+                            state['alvo_lock'] = None
+                except RuntimeError:
+                    print("[AVISO] RuntimeError ao limpar alvo_lock. O dicionário mudou.")
+                # --- FIM: CORREÇÃO ---
 
             # --- PARTE 6: Processar IA dos NPCs (SÓ OS VIVOS) ---
             if posicoes_jogadores_vivos: 
@@ -1144,6 +1184,14 @@ def handle_client(conn, addr):
     print(f"[LOG] [NOVA CONEXÃO] {addr} conetado.")
     nome_jogador = ""
     player_state = {} 
+    
+    # --- INÍCIO: CORREÇÃO (Bug de Dano / NPC Fantasma) ---
+    if s.VIDA_POR_NIVEL is None:
+        print(f"[ERRO] [{addr}] Conexão rejeitada. s.VIDA_POR_NIVEL não foi inicializada no servidor.")
+        conn.close()
+        return
+    # --- FIM: CORREÇÃO ---
+        
     try:
         data = conn.recv(1024)
         nome_jogador_original = data.decode('utf-8')
@@ -1164,8 +1212,8 @@ def handle_client(conn, addr):
         spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_atuais)
         
         nivel_max_vida_inicial = 1
-        # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
-        max_hp_inicial = VIDA_POR_NIVEL[nivel_max_vida_inicial]
+        # --- INÍCIO: MODIFICAÇÃO (Usa s.VIDA_POR_NIVEL) ---
+        max_hp_inicial = s.VIDA_POR_NIVEL[nivel_max_vida_inicial]
         # --- FIM: MODIFICAÇÃO ---
         
         player_state = {
@@ -1215,8 +1263,8 @@ def handle_client(conn, addr):
                             spawn_x, spawn_y = server_calcular_posicao_spawn(posicoes_atuais)
                             player_state['x'] = spawn_x; player_state['y'] = spawn_y
                             nivel_max_vida_inicial = 1
-                            # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
-                            max_hp_inicial = VIDA_POR_NIVEL[nivel_max_vida_inicial]
+                            # --- INÍCIO: MODIFICAÇÃO (Usa s.VIDA_POR_NIVEL) ---
+                            max_hp_inicial = s.VIDA_POR_NIVEL[nivel_max_vida_inicial]
                             # --- FIM: MODIFICAÇÃO ---
                             player_state['hp'] = max_hp_inicial
                             player_state['max_hp'] = max_hp_inicial
@@ -1326,6 +1374,11 @@ def connection_listener_thread(server_socket):
 
 # --- (Função iniciar_servidor - Sem alterações) ---
 def iniciar_servidor():
+    # --- INÍCIO: CORREÇÃO (Bug de Dano / NPC Fantasma) ---
+    # As globais 'DANO_POR_NIVEL' e 'VIDA_POR_NIVEL' foram removidas daqui.
+    # Elas são preenchidas no módulo 's' (settings) pelo bloco __main__.
+    # --- FIM: CORREÇÃO ---
+    
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         server_socket.bind((HOST, PORT))
@@ -1450,6 +1503,7 @@ if __name__ == "__main__":
         s.CUSTOS_AUXILIARES = [1, 2, 3, 4]
 
     # --- INÍCIO: MODIFICAÇÃO (Verificações) ---
+    # Este bloco AGORA MODIFICA o módulo 's' importado
     if not hasattr(s, 'DANO_POR_NIVEL') or len(s.DANO_POR_NIVEL) < (s.MAX_NIVEL_DANO + 1):
         print(f"[AVISO] 'DANO_POR_NIVEL' inválido/ausente. A usar valores padrão.")
         s.DANO_POR_NIVEL = [0, 0.7, 0.9, 1.2, 1.4, 1.6] # Fallback

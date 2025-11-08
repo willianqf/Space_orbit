@@ -969,7 +969,36 @@ while rodando:
                         # --- FIM: MODIFICAÇÃO ---
                         
                         if client_socket:
+                            # --- INÍCIO DA CORREÇÃO (ALVO "PEGAJOSO") ---
+                            
+                            # 1. Envia o clique para o servidor (como antes)
                             enviar_input_servidor(f"CLICK_TARGET|{int(mouse_pos_mundo.x)}|{int(mouse_pos_mundo.y)}")
+                            
+                            # 2. Tenta encontrar o alvo localmente para 'alvo_selecionado'
+                            #    Isso permite que o cliente saiba no que está mirando.
+                            alvo_clicado_id = None
+                            dist_min_sq = (s.TARGET_CLICK_SIZE / 2)**2
+                            
+                            # Copia os NPCs online para iterar
+                            online_npcs_copy = {}
+                            with network_state_lock:
+                                online_npcs_copy = online_npcs.copy()
+                                
+                            for npc_id, state in online_npcs_copy.items():
+                                if state.get('hp', 0) <= 0: continue
+                                dist_sq = (state['x'] - mouse_pos_mundo.x)**2 + (state['y'] - mouse_pos_mundo.y)**2
+                                if dist_sq < dist_min_sq:
+                                    dist_min_sq = dist_sq
+                                    alvo_clicado_id = npc_id # Salva o ID (string)
+                            
+                            # Limpa a mira se clicou no vazio, ou define o ID
+                            nave_player.alvo_selecionado = alvo_clicado_id
+                            if alvo_clicado_id:
+                                print(f"[CLIENTE] Mirando no ID: {alvo_clicado_id}")
+                            else:
+                                print("[CLIENTE] Mira limpa (clique no vazio).")
+                                
+                            # --- FIM DA CORREÇÃO ---
                         else:
                             alvo_clicado = None
                             todos_alvos_clicaveis = list(grupo_inimigos) + list(grupo_bots) + list(grupo_obstaculos)
@@ -1259,6 +1288,21 @@ while rodando:
 
         if client_socket:
             with network_state_lock:
+                
+                # --- INÍCIO DA CORREÇÃO (ALVO "PEGAJOSO") ---
+                if nave_player.alvo_selecionado and isinstance(nave_player.alvo_selecionado, str):
+                    target_id = nave_player.alvo_selecionado
+                    target_npc_state = online_npcs.get(target_id) # Pega o estado ATUAL do NPC
+                    
+                    if target_npc_state and target_npc_state.get('hp', 0) <= 0:
+                        print(f"[CLIENTE] Alvo NPC {target_id} está com HP <= 0. Limpando mira.")
+                        nave_player.alvo_selecionado = None
+                    elif not target_npc_state and target_id not in online_players_states:
+                         # O NPC/Player desapareceu (morte normal), limpa a mira
+                         print(f"[CLIENTE] Alvo {target_id} desapareceu. Limpando mira.")
+                         nave_player.alvo_selecionado = None
+                # --- FIM DA CORREÇÃO ---
+                
                 my_state = online_players_states.get(MEU_NOME_REDE)
                 if my_state:
                     nova_pos = pygame.math.Vector2(my_state['x'], my_state['y'])
@@ -1793,6 +1837,12 @@ while rodando:
                 # --- FIM: MODIFICAÇÃO ---
             
             for npc_id, state in online_npcs_copy.items():
+                
+                # --- INÍCIO DA CORREÇÃO (NPC INVISÍVEL) ---
+                if state.get('hp', 0) <= 0:
+                    continue # Não desenha NPCs mortos
+                # --- FIM DA CORREÇÃO ---
+                
                 tamanho = state.get('tamanho', 30) 
                 tipo = state.get('tipo')
                 base_img = pygame.Surface((tamanho, tamanho), pygame.SRCALPHA)
