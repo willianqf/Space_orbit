@@ -621,6 +621,29 @@ def desenhar_ranking(surface, lista_top_5, nave_player):
         surface.blit(pontos_surf, (pontos_x, pos_y_linha_atual))
         pos_y_linha_atual += FONT_RANKING.get_height() + 2
 
+def desenhar_ranking_pvp(surface, lista_top_5, nave_player):
+    """Desenha o ranking PVP baseado em vida ao invés de pontos."""
+    pos_x_base = MINIMAP_POS_X
+    pos_y_base = MINIMAP_POS_Y + MINIMAP_HEIGHT + 10
+    ranking_width = MINIMAP_WIDTH
+    titulo_surf = FONT_HUD.render("RANKING", True, BRANCO)
+    titulo_x = pos_x_base + (ranking_width - titulo_surf.get_width()) // 2
+    surface.blit(titulo_surf, (titulo_x, pos_y_base))
+    pos_y_linha_atual = pos_y_base + titulo_surf.get_height() + 5
+    for i, nave in enumerate(lista_top_5):
+        cor_texto = LARANJA_BOT if nave != nave_player else VERDE_VIDA
+        nome_nave = nave.nome
+        if len(nome_nave) > 12: nome_nave = nome_nave[:11] + "."
+        texto_nome = f"{i + 1}. {nome_nave}"
+        nome_surf = FONT_RANKING.render(texto_nome, True, cor_texto)
+        surface.blit(nome_surf, (pos_x_base + 5, pos_y_linha_atual))
+        # Mostra vida ao invés de pontos
+        texto_vida = f"{int(nave.vida_atual)}/{int(nave.max_vida)}"
+        vida_surf = FONT_RANKING.render(texto_vida, True, cor_texto)
+        vida_x = pos_x_base + ranking_width - vida_surf.get_width() - 5
+        surface.blit(vida_surf, (vida_x, pos_y_linha_atual))
+        pos_y_linha_atual += FONT_RANKING.get_height() + 2
+
 def desenhar_terminal(surface, texto_atual, largura_tela, altura_tela):
     fundo_terminal = pygame.Surface((largura_tela, altura_tela), pygame.SRCALPHA)
     fundo_terminal.fill(CINZA_LOJA_FUNDO)
