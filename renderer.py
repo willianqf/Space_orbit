@@ -6,7 +6,9 @@ import ui
 from camera import Camera
 from pause_menu import PauseMenu
 from Redes.network_client import NetworkClient
+# --- INÍCIO: MODIFICAÇÃO (Importação corrigida) ---
 from ships import Player, NaveBot, NaveAuxiliar, Nave, NaveRegeneradora, tocar_som_posicional
+# --- FIM: MODIFICAÇÃO ---
 from effects import Explosao
 from entities import Obstaculo
 
@@ -84,6 +86,11 @@ class Renderer:
         elif estado_jogo == "GET_SERVER_INFO":
             self.ui.desenhar_tela_conexao(self.tela, game_globals["nome_jogador_input"], game_globals["ip_servidor_input"], game_globals["input_connect_ativo"])
         
+        # --- INÍCIO: MODIFICAÇÃO (Adiciona o novo estado) ---
+        elif estado_jogo == "MULTIPLAYER_MODE_SELECT":
+            self.ui.desenhar_tela_modo_multiplayer(self.tela, LARGURA_TELA, ALTURA_TELA)
+        # --- FIM: MODIFICAÇÃO ---
+
         else: 
             # --- Desenho do Jogo (JOGANDO, PAUSE, LOJA, etc.) ---
             self.tela.fill(s.PRETO)

@@ -53,6 +53,11 @@ RECT_BOTAO_SAIR = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
 MINIMAP_RECT = pygame.Rect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT)
 RECT_LOGO_MENU = pygame.Rect(0, 0, 0, 0)
 
+# --- INÍCIO: MODIFICAÇÃO (Novos Rects Seleção Multiplayer) ---
+RECT_BOTAO_PVE_ONLINE = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
+RECT_BOTAO_PVP_ONLINE = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
+# --- FIM: MODIFICAÇÃO ---
+
 # --- INÍCIO: MODIFICAÇÃO (Novos Rects Pausa) ---
 RECT_PAUSE_FUNDO = pygame.Rect(0, 0, PAUSE_PANEL_W, PAUSE_PANEL_H)
 RECT_TEXTO_BOTS = pygame.Rect(0, 0, 200, 40)
@@ -91,6 +96,9 @@ def recalculate_ui_positions(w, h):
     global RECT_BOTAO_MOTOR, RECT_BOTAO_DANO, RECT_BOTAO_AUX, RECT_BOTAO_MAX_HP, RECT_BOTAO_ESCUDO
     global RECT_BOTAO_REINICIAR, RECT_BOTAO_UPGRADE_HUD
     global RECT_BOTAO_JOGAR_OFF, RECT_BOTAO_MULTIPLAYER, RECT_BOTAO_SAIR
+    # --- INÍCIO: MODIFICAÇÃO (Globais Seleção Multiplayer) ---
+    global RECT_BOTAO_PVE_ONLINE, RECT_BOTAO_PVP_ONLINE
+    # --- FIM: MODIFICAÇÃO ---
     # --- INÍCIO: MODIFICAÇÃO (Globais Pausa) ---
     global RECT_PAUSE_FUNDO, RECT_TEXTO_BOTS, RECT_BOTAO_BOT_MENOS, RECT_BOTAO_BOT_MAIS
     global RECT_BOTAO_VOLTAR_MENU, RECT_BOTAO_ESPECTADOR, RECT_BOTAO_VOLTAR_NAVE
@@ -150,6 +158,13 @@ def recalculate_ui_positions(w, h):
     # --- INÍCIO: CORREÇÃO DO ERRO ---
     RECT_BOTAO_SAIR.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing * 2)
     # --- FIM: CORREÇÃO DO ERRO ---
+
+    # --- INÍCIO: MODIFICAÇÃO (Posições Tela Seleção Multiplayer) ---
+    # Centraliza os dois botões na tela
+    multiplayer_btn_y_start = h // 2 - BTN_MENU_H - menu_btn_spacing // 2
+    RECT_BOTAO_PVE_ONLINE.topleft = (menu_btn_x, multiplayer_btn_y_start)
+    RECT_BOTAO_PVP_ONLINE.topleft = (menu_btn_x, multiplayer_btn_y_start + menu_btn_spacing)
+    # --- FIM: MODIFICAÇÃO ---
 
     # --- INÍCIO: MODIFICAÇÃO (Posições do Menu de Pausa) ---
     RECT_PAUSE_FUNDO.center = (w // 2, h // 2)
@@ -277,6 +292,41 @@ def desenhar_tela_nome(surface, nome_jogador_atual, input_nome_ativo, dificuldad
     texto_botao = FONT_PADRAO.render("Respawn", True, PRETO)
     texto_botao_rect = texto_botao.get_rect(center=RECT_LOGIN_BOTAO.center)
     surface.blit(texto_botao, texto_botao_rect)
+
+# --- INÍCIO: MODIFICAÇÃO (Adicionada nova função de desenho) ---
+def desenhar_tela_modo_multiplayer(surface, largura_tela, altura_tela):
+    """ Desenha a tela de seleção de modo multiplayer (PVE vs PVP). """
+    surface.fill(PRETO) 
+
+    # Desenha o logo ou título
+    if LOGO_JOGO:
+        logo_rect = LOGO_JOGO.get_rect(center=(largura_tela // 2, altura_tela // 3))
+        surface.blit(LOGO_JOGO, logo_rect)
+    
+    texto_titulo = FONT_TITULO.render("Modo Multijogador", True, BRANCO)
+    # Posiciona o título acima dos botões
+    titulo_rect = texto_titulo.get_rect(midbottom=(largura_tela // 2, RECT_BOTAO_PVE_ONLINE.top - 50))
+    surface.blit(texto_titulo, titulo_rect)
+
+    # Função helper para desenhar botões (copiada de desenhar_menu)
+    def draw_menu_button(rect, text, text_color=PRETO, button_color=BRANCO):
+        pygame.draw.rect(surface, button_color, rect, border_radius=5)
+        text_surf = FONT_PADRAO.render(text, True, text_color)
+        text_rect = text_surf.get_rect(center=rect.center)
+        surface.blit(text_surf, text_rect)
+
+    # Botão 1: Jogador VS Todos (Modo PVE Online)
+    draw_menu_button(RECT_BOTAO_PVE_ONLINE, "Jogador VS Todos")
+    
+    # Botão 2: Jogador VS Jogador (Modo PVP Online) - Desabilitado por enquanto
+    draw_menu_button(RECT_BOTAO_PVP_ONLINE, "Jogador VS Jogador", text_color=PRETO, button_color=CINZA_BOTAO_DESLIGADO)
+    
+    # Instrução para voltar
+    texto_voltar = FONT_PADRAO.render("ESC para Voltar", True, CINZA_BOTAO_DESLIGADO)
+    voltar_rect = texto_voltar.get_rect(midbottom=(largura_tela // 2, altura_tela - 50))
+    surface.blit(texto_voltar, voltar_rect)
+# --- FIM: MODIFICAÇÃO ---
+
 
 # --- INÍCIO: MODIFICAÇÃO (Remoção da função desenhar_pause) ---
 # A função 'desenhar_pause' (linhas 309-380 do arquivo original) foi removida.

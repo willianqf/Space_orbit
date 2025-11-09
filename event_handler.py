@@ -78,9 +78,10 @@ class EventHandler:
                     if ui.RECT_BOTAO_JOGAR_OFF.collidepoint(mouse_pos):
                         novos_estados["estado_jogo"] = "GET_NAME"
                         novos_estados["input_nome_ativo"] = True
+                    # --- INÍCIO: MODIFICAÇÃO (Muda o destino do clique) ---
                     elif ui.RECT_BOTAO_MULTIPLAYER.collidepoint(mouse_pos):
-                        novos_estados["estado_jogo"] = "GET_SERVER_INFO"
-                        novos_estados["input_connect_ativo"] = "nome"
+                        novos_estados["estado_jogo"] = "MULTIPLAYER_MODE_SELECT" # <-- MUDADO
+                    # --- FIM: MODIFICAÇÃO ---
                     elif ui.RECT_BOTAO_SAIR.collidepoint(mouse_pos):
                         novos_estados["rodando"] = False
 
@@ -158,6 +159,25 @@ class EventHandler:
                         novos_estados["input_connect_ativo"] = "ip"
                     else:
                         novos_estados["input_connect_ativo"] = "none"
+            
+            # --- INÍCIO: MODIFICAÇÃO (Adiciona novo estado) ---
+            elif estado_jogo == "MULTIPLAYER_MODE_SELECT":
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        novos_estados["estado_jogo"] = "MENU"
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    mouse_pos = pygame.mouse.get_pos()
+                    
+                    if ui.RECT_BOTAO_PVE_ONLINE.collidepoint(mouse_pos):
+                        # Este é o fluxo original: vai para a tela de conexão
+                        novos_estados["estado_jogo"] = "GET_SERVER_INFO"
+                        novos_estados["input_connect_ativo"] = "nome"
+                    elif ui.RECT_BOTAO_PVP_ONLINE.collidepoint(mouse_pos):
+                        # Ainda não implementado, apenas imprime um aviso
+                        print("[AVISO] Modo PVP (Jogador VS Jogador) ainda não implementado.")
+                        # (Opcional: voltar ao menu)
+                        # novos_estados["estado_jogo"] = "MENU"
+            # --- FIM: MODIFICAÇÃO ---
             
             elif estado_jogo == "JOGANDO":
                 if event.type == pygame.KEYDOWN:

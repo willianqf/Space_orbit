@@ -199,6 +199,11 @@ class Nave(pygame.sprite.Sprite):
         self.quer_virar_esquerda = False; self.quer_virar_direita = False; self.quer_mover_frente = False; self.quer_mover_tras = False; self.quer_atirar = False
         
         self.alvo_selecionado = None; self.posicao_alvo_mouse = None; self.tempo_barra_visivel = 2000; self.ultimo_hit_tempo = 0
+        
+        # --- INÍCIO DA MODIFICAÇÃO (Recompensa por Abate) ---
+        self.ultimo_atacante = None # Armazena quem deu o último golpe
+        # --- FIM DA MODIFICAÇÃO ---
+
         self.mostrar_escudo_fx = False; self.angulo_impacto_rad_pygame = 0; self.tempo_escudo_fx = 0; self.rastro_particulas = []
         self.tempo_fim_lentidao = 0; self.lista_todas_auxiliares = []; self.grupo_auxiliares_ativos = pygame.sprite.Group()
         for pos in self.POSICOES_AUXILIARES: self.lista_todas_auxiliares.append(NaveAuxiliar(self, pos))
@@ -208,7 +213,7 @@ class Nave(pygame.sprite.Sprite):
         self.esta_regenerando = False
         self.nave_regeneradora_sprite = pygame.sprite.GroupSingle()
         self.ultimo_tick_regeneracao = 0
-
+        
     def update(self, grupo_projeteis_destino, camera=None): pass
     
     def parar_regeneracao(self):
@@ -359,7 +364,7 @@ class Nave(pygame.sprite.Sprite):
                 ouvinte_real = pos_ouvinte if pos_ouvinte is not None else self.posicao
                 tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, ouvinte_real, VOLUME_BASE_TIRO_PLAYER)
     
-    def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
+    def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None, atacante=None): # <-- MODIFICADO
         if self.esta_regenerando:
             self.parar_regeneracao()
         
@@ -367,6 +372,11 @@ class Nave(pygame.sprite.Sprite):
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_hit_tempo < 150: return False
         
+        # --- INÍCIO DA MODIFICAÇÃO (Recompensa por Abate) ---
+        if atacante:
+            self.ultimo_atacante = atacante # Registra o atacante
+        # --- FIM DA MODIFICAÇÃO ---
+
         reducao_percent = min(self.nivel_escudo * REDUCAO_DANO_POR_NIVEL, 75)
         dano_reduzido = dano * (1 - reducao_percent / 100.0)
         
@@ -596,10 +606,11 @@ class Player(Nave):
         super().__init__(x, y, cor=AZUL_NAVE, nome=nome)
         self.invencivel = False
 
-    def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
+    def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None, atacante=None): # <-- MODIFICADO
         if self.invencivel:
             return False 
-        return super().foi_atingido(dano, estado_jogo_atual, proj_pos)
+        # --- MODIFICADO: Passa o atacante para a classe base ---
+        return super().foi_atingido(dano, estado_jogo_atual, proj_pos, atacante=atacante)
 
     def update(self, grupo_projeteis_jogador, camera, client_socket=None, pos_ouvinte=None): # <-- MODIFICADO
         if client_socket is None:
@@ -681,13 +692,19 @@ class NaveBot(Nave):
                     self.comprar_auxiliar() 
                     self.nivel_aux += 1 
     
-    def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None):
+    def foi_atingido(self, dano, estado_jogo_atual, proj_pos=None, atacante=None): # <-- MODIFICADO
         vida_antes = self.vida_atual
-        morreu = super().foi_atingido(dano, estado_jogo_atual, proj_pos)
+        
+        # --- MODIFICADO: Passa o atacante para a classe base ---
+        morreu = super().foi_atingido(dano, estado_jogo_atual, proj_pos, atacante=atacante)
 
         if morreu:
             print(f"[{self.nome}] BOT MORREU! Resetando...")
             
+            # --- INÍCIO DA MODIFICAÇÃO (Recompensa por Abate) ---
+            # (Esta lógica é movida para game_logic.py para consistência)
+            # --- FIM DA MODIFICAÇÃO ---
+
             novo_x = random.randint(50, MAP_WIDTH - 50) 
             novo_y = random.randint(50, MAP_HEIGHT - 50)
             self.posicao = pygame.math.Vector2(novo_x, novo_y); self.rect.center = self.posicao

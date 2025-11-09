@@ -59,6 +59,7 @@ class GameLogic:
         grupo_projeteis_inimigos.update()
 
         # --- 2. Lógica de Spawn ---
+        # ... (lógica de spawn inalterada) ...
         lista_spawn_anchors = lista_alvos_naves
         if lista_spawn_anchors:
             ponto_referencia_sprite = random.choice(lista_spawn_anchors)
@@ -80,6 +81,8 @@ class GameLogic:
             
             if len(grupo_boss_congelante) < s.MAX_BOSS_CONGELANTE:
                 self.cb_spawnar_boss_congelante(ponto_referencia)
+        # --- Fim da lógica de Spawn ---
+
 
         # --- 3. Lógica de Colisão ---
         
@@ -117,11 +120,23 @@ class GameLogic:
             # --- 4. Checagem de Morte do Jogador (após todas as colisões) ---
             if nave_player.vida_atual <= 0:
                 print("[LOGIC] Morte do jogador detectada por colisões.")
+                
+                # --- INÍCIO DA MODIFICAÇÃO (Recompensa por Abate) ---
+                # Verifica se o jogador tem um 'ultimo_atacante' registrado
+                if hasattr(nave_player, 'ultimo_atacante') and nave_player.ultimo_atacante:
+                    # Verifica se o atacante ainda pode ganhar pontos (é uma Nave)
+                    if hasattr(nave_player.ultimo_atacante, 'ganhar_pontos'):
+                        pontos_ganhos = int(nave_player.pontos * 0.75)
+                        nave_player.ultimo_atacante.ganhar_pontos(pontos_ganhos)
+                        print(f"[{nave_player.ultimo_atacante.nome}] ganhou {pontos_ganhos} pontos por abater [{nave_player.nome}]")
+                    # Limpa o atacante para evitar recompensas múltiplas
+                    nave_player.ultimo_atacante = None 
+                # --- FIM DA MODIFICAÇÃO ---
+
                 # Retorna o novo estado
                 return "ESPECTADOR" 
             
         return estado_jogo # Retorna o estado atual se não houver mudança
-
     
     def _tocar_som_explosao(self, inimigo, pos_ouvinte):
         """Helper para tocar som de explosão."""
@@ -158,20 +173,36 @@ class GameLogic:
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_bots, True, False)
         for proj, bot_list in colisoes.items():
             for bot in bot_list:
-                morreu = bot.foi_atingido(proj.dano, estado_jogo, proj.posicao)
+                
+                # --- INÍCIO DA CORREÇÃO ---
+                pontos_da_vitima = bot.pontos # 1. Salva os pontos ANTES de atingir.
+                # --- FIM DA CORREÇÃO ---
+                
+                morreu = bot.foi_atingido(proj.dano, estado_jogo, proj.posicao, atacante=nave_player)
+                
                 if morreu:
-                    nave_player.ganhar_pontos(10) # Pontos por matar bot
-
+                    # --- INÍCIO DA CORREÇÃO ---
+                    pontos_ganhos = int(pontos_da_vitima * 0.75) # 2. Usa os pontos salvos.
+                    nave_player.ganhar_pontos(pontos_ganhos)
+                    print(f"[{nave_player.nome}] ganhou {pontos_ganhos} pontos por abater [{bot.nome}]")
+                    # --- FIM DA CORREÇÃO ---
+                    
     def _handle_enemy_projectile_collisions_vs_player(self, nave_player, grupo_projeteis_inimigos, estado_jogo):
         """ Processa colisões dos projéteis inimigos contra O JOGADOR. """
         colisoes_proj_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_inimigos, False)
         for proj in colisoes_proj_inimigo_player:
+            # --- INÍCIO DA MODIFICAÇÃO (Recompensa por Abate) ---
+            # Define o atacante como o 'dono' do projétil (se existir)
+            atacante = getattr(proj, 'owner', None) 
+            # --- FIM DA MODIFICAÇÃO ---
+
             if isinstance(proj, ProjetilCongelante):
                 nave_player.aplicar_congelamento(s.DURACAO_CONGELAMENTO) 
             elif isinstance(proj, ProjetilTeleguiadoLento):
                 nave_player.aplicar_lentidao(6000)
             else:
-                nave_player.foi_atingido(1, estado_jogo, proj.posicao)
+                # --- MODIFICADO: Passa 'atacante' ---
+                nave_player.foi_atingido(1, estado_jogo, proj.posicao, atacante=atacante)
             proj.kill()
             # (A checagem de morte do player acontece no final do update_offline_logic)
 
@@ -192,11 +223,21 @@ class GameLogic:
         """ Processa colisões de corpo a corpo (Jogador vs Bots). """
         colisoes_ram_bot_player = pygame.sprite.spritecollide(nave_player, grupo_bots, False)
         for bot in colisoes_ram_bot_player:
-            nave_player.foi_atingido(1, estado_jogo, bot.posicao)
-            bot.foi_atingido(1, estado_jogo, nave_player.posicao)
-            # (A checagem de morte do player acontece no final)
+            
+            # --- INÍCIO DA CORREÇÃO ---
+            pontos_do_bot = bot.pontos # 1. Salva os pontos do bot ANTES de atingir.
+            # (Não precisamos salvar os pontos do player, pois eles são lidos em update_offline_logic)
+            # --- FIM DA CORREÇÃO ---
 
-    # --- FUNÇÕES DE COLISÃO DOS BOTS (SEMPRE RODAM) ---
+            morreu_player = nave_player.foi_atingido(1, estado_jogo, bot.posicao, atacante=bot)
+            morreu_bot = bot.foi_atingido(1, estado_jogo, nave_player.posicao, atacante=nave_player)
+            
+            if morreu_bot:
+                # --- INÍCIO DA CORREÇÃO ---
+                pontos_ganhos = int(pontos_do_bot * 0.75) # 2. Usa os pontos salvos.
+                nave_player.ganhar_pontos(pontos_ganhos)
+                print(f"[{nave_player.nome}] ganhou {pontos_ganhos} pontos por abater (ram) [{bot.nome}]")
+                # --- FIM DA CORREÇÃO ---
 
     def _handle_bot_projectile_collisions(self, nave_player, grupo_projeteis_bots, grupo_obstaculos, grupo_inimigos, grupo_bots, estado_jogo, pos_ouvinte): # <-- MODIFICADO
         """ Processa colisões dos projéteis dos bots (vs tudo). """
@@ -228,21 +269,29 @@ class GameLogic:
                 continue
             for bot_atingido in bots_atingidos:
                 if bot_atingido != owner_do_tiro:
+                    
+                    # --- INÍCIO DA CORREÇÃO ---
+                    pontos_da_vitima = bot_atingido.pontos # 1. Salva os pontos ANTES de atingir.
+                    # --- FIM DA CORREÇÃO ---
+
                     dano_do_tiro = proj.dano
-                    morreu = bot_atingido.foi_atingido(dano_do_tiro, estado_jogo, proj.posicao)
+                    morreu = bot_atingido.foi_atingido(dano_do_tiro, estado_jogo, proj.posicao, atacante=owner_do_tiro)
                     if morreu:
                         if isinstance(owner_do_tiro, Nave):
-                            owner_do_tiro.ganhar_pontos(10)
-                            print(f"[{owner_do_tiro.nome}] destruiu [{bot_atingido.nome}]!")
+                            # --- INÍCIO DA CORREÇÃO ---
+                            pontos_ganhos = int(pontos_da_vitima * 0.75) # 2. Usa os pontos salvos.
+                            owner_do_tiro.ganhar_pontos(pontos_ganhos)
+                            print(f"[{owner_do_tiro.nome}] ganhou {pontos_ganhos} pontos por abater [{bot_atingido.nome}]!")
+                            # --- FIM DA CORREÇÃO ---
         
         # Bot Proj vs Player (Verificado apenas se o jogador está jogando)
         if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
             colisoes_proj_bot_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_bots, True)
             for proj in colisoes_proj_bot_player:
                 if proj.owner != nave_player: 
-                    nave_player.foi_atingido(proj.dano, estado_jogo, proj.posicao)
+                    nave_player.foi_atingido(proj.dano, estado_jogo, proj.posicao, atacante=proj.owner)
                     # (A checagem de morte do player acontece no final do update_offline_logic)
-
+                    
     def _handle_enemy_projectile_collisions_vs_bots(self, grupo_bots, grupo_projeteis_inimigos, estado_jogo):
         """ Processa colisões dos projéteis inimigos contra OS BOTS. """
         colisoes = pygame.sprite.groupcollide(grupo_bots, grupo_projeteis_inimigos, False, False)

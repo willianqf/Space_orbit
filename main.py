@@ -525,7 +525,7 @@ while game_globals["rodando"]:
     # 4b. Lógica de Jogo (Online/Offline)
     online_players_copy = {}; online_npcs_copy = {}; online_projectiles_copy = []
     
-    if estado_jogo not in ["MENU", "GET_NAME", "GET_SERVER_INFO"]:
+    if estado_jogo not in ["MENU", "GET_NAME", "GET_SERVER_INFO", "MULTIPLAYER_MODE_SELECT"]:
         if is_online:
             game_state_rede = network_client.get_state()
             online_players_copy = game_state_rede['players']
