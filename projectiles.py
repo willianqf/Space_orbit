@@ -1,9 +1,12 @@
 # projectiles.py
 import pygame
 import math
+# --- INÍCIO: CORREÇÃO (Importar DANO_POR_NIVEL) ---
 from settings import (MAP_RECT, MAX_DISTANCIA_TIRO, VERMELHO_TIRO, VERDE_TIRO_MAX,
                       MAX_NIVEL_DANO, LARANJA_TIRO_INIMIGO, ROXO_TIRO_LENTO,
-                      AZUL_TIRO_CONGELANTE, VELOCIDADE_TIRO, FOCO_TIRO) # <-- Importar nova cor
+                      AZUL_TIRO_CONGELANTE, VELOCIDADE_TIRO, FOCO_TIRO,
+                      DANO_POR_NIVEL) # <-- IMPORTAÇÃO CORRETA
+# --- FIM: CORREÇÃO ---
 
 # Projétil do Jogador/Bots Aliados (Padrão "Burro")
 class Projetil(pygame.sprite.Sprite):
@@ -11,27 +14,32 @@ class Projetil(pygame.sprite.Sprite):
         super().__init__()
         self.raio = 5
         
-        # --- INÍCIO: MODIFICAÇÃO (Correção Tiro Verde) ---
-        self.owner = owner_nave # Define self.owner PRIMEIRO
+        # --- INÍCIO: LÓGICA CORRIGIDA (Cor e Dano) ---
+        # 'nivel_dano_owner' é agora o NÍVEL (int 1-5) passado por ships.py
         
+        self.owner = owner_nave # Mantém a referência
+        
+        # 1. Determina a Cor
         cor_tiro_atual = VERMELHO_TIRO # Padrão
-        # Verifica o NÍVEL do dono para a cor, não o valor do dano
-        if self.owner and self.owner.nivel_dano >= MAX_NIVEL_DANO:
+        # Verifica o NÍVEL recebido
+        if nivel_dano_owner >= MAX_NIVEL_DANO:
             cor_tiro_atual = VERDE_TIRO_MAX
-        # --- FIM: MODIFICAÇÃO ---
+        # --- FIM: LÓGICA CORRIGIDA ---
 
         self.image = pygame.Surface((self.raio * 2, self.raio * 2), pygame.SRCALPHA)
         pygame.draw.circle(self.image, cor_tiro_atual, (self.raio, self.raio), self.raio)
         self.posicao_inicial = pygame.math.Vector2(x, y)
         self.posicao = pygame.math.Vector2(x, y) 
         self.rect = self.image.get_rect(center = self.posicao)
-        self.velocidade_valor = VELOCIDADE_TIRO # Renomeado de 'velocidade'
+        self.velocidade_valor = VELOCIDADE_TIRO
         self.angulo_radianos = angulo_radianos
         
-        # self.owner = owner_nave # <-- MOVIDO PARA CIMA
-        
-        # 'nivel_dano_owner' agora é o DANO REAL (ex: 1.6) passado por ships.py
-        self.dano = nivel_dano_owner 
+        # 2. Determina o Dano (com base no nível recebido)
+        try:
+            # Procura o valor do dano (ex: 1.6) na lista DANO_POR_NIVEL
+            self.dano = DANO_POR_NIVEL[nivel_dano_owner]
+        except IndexError:
+            self.dano = DANO_POR_NIVEL[1] # Segurança caso o nível seja inválido
         
         # Define o vetor de velocidade inicial
         self.velocidade_vetor = pygame.math.Vector2(
@@ -49,7 +57,7 @@ class Projetil(pygame.sprite.Sprite):
         if not MAP_RECT.colliderect(self.rect):
             self.kill()
 
-# --- INÍCIO DAS MODIFICAÇÕES: VELOCIDADE E DURAÇÃO ---
+# Projétil Teleguiado do Jogador
 class ProjetilTeleguiadoJogador(Projetil):
     def __init__(self, x, y, angulo_radianos, nivel_dano_owner=1, owner_nave=None, alvo_sprite=None):
         # Chama o __init__ da classe pai (Projetil)
@@ -57,9 +65,9 @@ class ProjetilTeleguiadoJogador(Projetil):
         super().__init__(x, y, angulo_radianos, nivel_dano_owner, owner_nave)
         
         self.alvo_sprite = alvo_sprite
-        self.turn_speed = FOCO_TIRO # Mantém a curva suave
+        self.turn_speed = FOCO_TIRO
         
-        # 1. Aumenta a velocidade (padrão do pai era 10)
+        # 1. Aumenta a velocidade
         self.velocidade_valor = 14 
         # Recalcula o vetor de velocidade com o novo valor
         self.velocidade_vetor = pygame.math.Vector2(
@@ -67,15 +75,15 @@ class ProjetilTeleguiadoJogador(Projetil):
             -math.cos(self.angulo_radianos)
         ) * self.velocidade_valor
         
-        # 2. Adiciona tempo de vida (1.5 segundos)
+        # 2. Adiciona tempo de vida
         self.tempo_criacao = pygame.time.get_ticks()
-        self.duracao_vida = 700 # 
+        self.duracao_vida = 700 # Duração em ms
 
     def update(self, *args, **kwargs):
         # 1. Verifica o tempo de vida
         agora = pygame.time.get_ticks()
         if agora - self.tempo_criacao > self.duracao_vida:
-            self.kill() # Projétil "morre" após 1.5 segundos
+            self.kill()
             return
         
         # 2. Lógica de "Homing" Suave
@@ -92,12 +100,11 @@ class ProjetilTeleguiadoJogador(Projetil):
         self.rect.center = self.posicao
 
         distancia_percorrida = self.posicao.distance_to(self.posicao_inicial)
-        if distancia_percorrida > MAX_DISTANCIA_TIRO: # Mantém a distância máxima como segurança
+        if distancia_percorrida > MAX_DISTANCIA_TIRO: # Segurança
             self.kill()
             return
         if not MAP_RECT.colliderect(self.rect):
             self.kill()
-# --- FIM DAS MODIFICAÇÕES ---
 
 
 # Projétil Inimigo Base

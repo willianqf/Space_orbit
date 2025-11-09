@@ -132,14 +132,17 @@ online_players_last_frame = {}
 set_global_enemy_references(grupo_explosoes, grupo_inimigos)
 set_global_ship_references(grupo_explosoes)
 
-# 8. Fundo Estrelado (Movido para o Renderer)
 lista_estrelas = []
+# 8. Fundo Estrelado (Movido para o Renderer)
 for _ in range(s.NUM_ESTRELAS):
-    pos_base = pygame.math.Vector2(random.randint(0, LARGURA_TELA), random.randint(0, ALTURA_TELA))
+    # --- INÍCIO: CORREÇÃO DO BUG (MAPA PRETO) ---
+    # As estrelas devem ser geradas no tamanho do MAPA PVE (8000x8000),
+    # não no tamanho da TELA (800x600).
+    pos_base = pygame.math.Vector2(random.randint(0, s.MAP_WIDTH), random.randint(0, s.MAP_HEIGHT))
+    # --- FIM: CORREÇÃO DO BUG ---
     raio = random.randint(1, 2)
     parallax_fator = raio * 0.1
     lista_estrelas.append((pos_base, raio, parallax_fator))
-
 # 9. Funções Auxiliares (Callbacks para os Handlers)
 
 # --- INÍCIO: MODIFICAÇÃO (Novas Funções PVP) ---
@@ -147,6 +150,7 @@ for _ in range(s.NUM_ESTRELAS):
 def distribuir_atributos_bot(nave, pontos):
     """
     Distribui aleatoriamente os pontos de atributos para os bots.
+    (Esta é uma função auxiliar para reiniciar_jogo_pvp)
     """
     opcoes = ["motor", "dano", "max_health", "escudo"]
     for _ in range(pontos):
@@ -165,12 +169,27 @@ def distribuir_atributos_bot(nave, pontos):
 
 def reiniciar_jogo_pvp():
     """ Prepara o lobby do PVP, limpando grupos e spawnando naves no centro. """
-    global estado_jogo, nave_player
+    # --- INÍCIO: CORREÇÃO (Declaração Global) ---
+    global estado_jogo, nave_player, lista_estrelas, renderer
+    # --- FIM: CORREÇÃO ---
     
     # 1. Configura o Mapa para PVP (sobrescreve as constantes de settings)
     s.MAP_WIDTH = pvp_s.MAP_WIDTH
     s.MAP_HEIGHT = pvp_s.MAP_HEIGHT
     s.MAP_RECT = pygame.Rect(0, 0, pvp_s.MAP_WIDTH, pvp_s.MAP_HEIGHT)
+    
+    # --- INÍCIO: MODIFICAÇÃO (Gera Estrelas para o Mapa PVP) ---
+    lista_estrelas.clear()
+    for _ in range(s.NUM_ESTRELAS):
+        pos_base = pygame.math.Vector2(random.randint(0, pvp_s.MAP_WIDTH), random.randint(0, pvp_s.MAP_HEIGHT))
+        raio = random.randint(1, 2)
+        parallax_fator = raio * 0.1
+        lista_estrelas.append((pos_base, raio, parallax_fator))
+    
+    # Atualiza a lista no renderer
+    renderer.lista_estrelas = lista_estrelas
+    print(f"Geradas {s.NUM_ESTRELAS} estrelas para o mapa PVP ({pvp_s.MAP_WIDTH}x{pvp_s.MAP_HEIGHT}).")
+    # --- FIM: MODIFICAÇÃO ---
     
     # 2. Reseta o estado global
     game_globals["jogador_esta_vivo_espectador"] = False
@@ -247,18 +266,34 @@ def reiniciar_jogo_pvp():
     estado_jogo = "PVP_LOBBY"
     game_globals["estado_jogo"] = "PVP_LOBBY"
 
+# --- FIM: Novas Funções (PVP) -
 # --- FIM: Novas Funções (PVP) ---
 
 
 def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"): 
     """ Prepara o jogo PVE, limpando grupos e resetando o jogador. """
-    global estado_jogo, nave_player, dificuldade_jogo_atual
+    # --- INÍCIO: CORREÇÃO (Declaração Global) ---
+    global estado_jogo, nave_player, dificuldade_jogo_atual, lista_estrelas, renderer
+    # --- FIM: CORREÇÃO ---
     
     # --- INÍCIO: MODIFICAÇÃO (Restaura Mapa PVE) ---
     s.MAP_WIDTH = pvp_s.PVE_MAP_WIDTH
     s.MAP_HEIGHT = pvp_s.PVE_MAP_HEIGHT
     s.MAP_RECT = pygame.Rect(0, 0, s.MAP_WIDTH, s.MAP_HEIGHT)
+    
+    # --- INÍCIO: MODIFICAÇÃO (Gera Estrelas para o Mapa PVE) ---
+    lista_estrelas.clear()
+    for _ in range(s.NUM_ESTRELAS):
+        pos_base = pygame.math.Vector2(random.randint(0, s.MAP_WIDTH), random.randint(0, s.MAP_HEIGHT))
+        raio = random.randint(1, 2)
+        parallax_fator = raio * 0.1
+        lista_estrelas.append((pos_base, raio, parallax_fator))
+    
+    # Atualiza a lista no renderer
+    renderer.lista_estrelas = lista_estrelas
+    print(f"Geradas {s.NUM_ESTRELAS} estrelas para o mapa PVE ({s.MAP_WIDTH}x{s.MAP_HEIGHT}).")
     # --- FIM: MODIFICAÇÃO ---
+    # --- FIM: MODIFICAÇÃO (Restaura Mapa PVE) ---
     
     game_globals["jogador_esta_vivo_espectador"] = False
     game_globals["alvo_espectador"] = None
