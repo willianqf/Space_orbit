@@ -239,6 +239,29 @@ class Renderer:
             nome_surf = s.FONT_NOME_JOGADOR.render(nome, True, s.BRANCO)
             nome_rect = nome_surf.get_rect(midbottom=(state['x'], state['y'] - 33))
             self.tela.blit(nome_surf, self.camera.apply(nome_rect))
+            
+            # --- INÍCIO DA CORREÇÃO (BUG ONLINE: Desenhar Vida do Jogador) ---
+            player_hp = state.get('hp', 0)
+            player_max_hp = state.get('max_hp', player_hp if player_hp > 0 else 5) # Usa 5 como padrão se max_hp for 0
+            
+            # (Usando a mesma lógica do offline: mostrar se a vida não estiver cheia)
+            # (Não podemos usar 'ultimo_hit_tempo' pois não é enviado pela rede)
+            if player_hp < player_max_hp: 
+                LARGURA_BARRA = 40; ALTURA_BARRA = 5; OFFSET_Y = 30 # (Valores de 'ships.py')
+                
+                # (Posicionamento da barra de vida do 'ships.py')
+                pos_x_mundo = state['x'] - LARGURA_BARRA / 2
+                pos_y_mundo = state['y'] - OFFSET_Y 
+                
+                percentual = max(0, player_hp / player_max_hp)
+                largura_vida_atual = LARGURA_BARRA * percentual
+                
+                rect_fundo_mundo = pygame.Rect(pos_x_mundo, pos_y_mundo, LARGURA_BARRA, ALTURA_BARRA)
+                rect_vida_mundo = pygame.Rect(pos_x_mundo, pos_y_mundo, largura_vida_atual, ALTURA_BARRA)
+                
+                pygame.draw.rect(self.tela, s.VERMELHO_VIDA_FUNDO, self.camera.apply(rect_fundo_mundo))
+                pygame.draw.rect(self.tela, s.VERDE_VIDA, self.camera.apply(rect_vida_mundo))
+            # --- FIM DA CORREÇÃO ---
         
         # 2. Desenhar projéteis de rede
         for proj_dict in online_projectiles_copy: 

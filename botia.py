@@ -97,8 +97,17 @@ class BotAI:
         
         # 2. Procura Players/Bots (se não houver inimigos)
         if alvo_ameacador_sprite is None:
-            lista_alvos_naves = [self.player_ref_cache] + list(self.grupo_bots_ref_cache.sprites())
+            
+            # --- INÍCIO DA CORREÇÃO (BUB OFFLINE: Bots atacam jogador morto) ---
+            # Constrói a lista de alvos VÁLIDOS (player só se estiver vivo)
+            lista_alvos_naves = []
+            if self.player_ref_cache and self.player_ref_cache.vida_atual > 0:
+                lista_alvos_naves.append(self.player_ref_cache)
+            lista_alvos_naves.extend(list(self.grupo_bots_ref_cache.sprites()))
+            # --- FIM DA CORREÇÃO ---
+            
             for alvo in lista_alvos_naves:
+                # A checagem de vida aqui é redundante, mas mantida por segurança
                 if alvo == self.bot or not alvo.groups() or alvo.vida_atual <= 0: 
                     continue
                 try:
@@ -153,14 +162,28 @@ class BotAI:
         self._processar_input_ia()
         
         # 2. Encontrar um novo alvo APENAS SE:
-        #    - O alvo atual for inválido (None ou morto)
+        #    - O alvo atual for inválido (None, morto, ou fora dos grupos)
         #    - E o estado NÃO for de fuga (FUGINDO, REGENERANDO_NA_BORDA)
         #    - E o estado NÃO for de evitar a borda (pois isso também é prioritário)
-        if (self.bot.alvo_selecionado is None or not self.bot.alvo_selecionado.groups()) and \
+        
+        # --- INÍCIO DA CORREÇÃO (BUB OFFLINE: Bots atacam jogador morto) ---
+        alvo_esta_morto = False
+        if self.bot.alvo_selecionado:
+            # Verifica se o alvo (que pode ser player, bot ou inimigo) tem vida
+            if not hasattr(self.bot.alvo_selecionado, 'vida_atual') or self.bot.alvo_selecionado.vida_atual <= 0:
+                alvo_esta_morto = True
+        
+        if (self.bot.alvo_selecionado is None or not self.bot.alvo_selecionado.groups() or alvo_esta_morto) and \
            self.estado_ia not in ["FUGINDO", "REGENERANDO_NA_BORDA", "EVITANDO_BORDA"]:
             
-            lista_alvos_naves = [player_ref] + list(grupo_bots_ref.sprites())
+            # Constrói a lista de alvos VÁLIDOS (player só se estiver vivo)
+            lista_alvos_naves = []
+            if player_ref and player_ref.vida_atual > 0:
+                lista_alvos_naves.append(player_ref)
+            lista_alvos_naves.extend(list(grupo_bots_ref.sprites()))
+            
             self._encontrar_alvo(grupo_inimigos_ref, grupo_obstaculos_ref, lista_alvos_naves, grupo_vidas_ref)
+        # --- FIM DA CORREÇÃO ---
         
         # --- FIM DA MUDANÇA ---
 

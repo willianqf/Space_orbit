@@ -69,7 +69,7 @@ RASTRO_TAMANHO_INICIAL = 4
 # VIDA_COLETADA_CURA = 1 # <-- REMOVIDO
 
 # --- INÍCIO DA ADIÇÃO (Regeneração) ---
-REGEN_POR_TICK = 0.2
+REGEN_POR_TICK = 0.35
 REGEN_TICK_RATE = 1500 # 2000ms = 1.5 segundos
 # --- FIM DA ADIÇÃO ---
 

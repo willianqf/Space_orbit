@@ -780,9 +780,11 @@ def game_loop(bot_manager):
 
             # --- PARTE 0: Gerenciar Bots ---
             bots_para_remover = bot_manager.manage_bot_population(MAX_BOTS_ONLINE)
-            for nome_bot in bots_para_remover:
-                if nome_bot in player_states:
-                    del player_states[nome_bot]
+            # --- INÍCIO DA CORREÇÃO (BUG: Regeneração de Bots) ---
+            # A remoção dos bots mortos foi movida para o final do loop (Parte 5)
+            # para garantir que eles sejam removidos da lista principal 'player_states'
+            # (Removido: for nome_bot in bots_para_remover: ... del player_states[nome_bot])
+            # --- FIM DA CORREÇÃO ---
 
             # --- PARTE 1: Obter lista de jogadores vivos ---
             all_living_players = []
@@ -799,16 +801,12 @@ def game_loop(bot_manager):
             for state in all_living_players:
                 if state.get('is_bot', False):
                     bot_manager.process_bot_logic(state, all_living_players, agora_ms)
-                elif state.get('esta_regenerando', False):
-                    if (state['teclas']['w'] or state['teclas']['a'] or 
-                         state['teclas']['s'] or state['teclas']['d'] or state['alvo_mouse'] is not None):
-                        state['esta_regenerando'] = False
-                    elif state['hp'] >= state['max_hp']:
-                        state['hp'] = state['max_hp']; state['esta_regenerando'] = False
-                    elif agora_ms - state.get('ultimo_tick_regeneracao', 0) > REGEN_TICK_RATE_MS:
-                        state['ultimo_tick_regeneracao'] = agora_ms
-                        state['hp'] = min(state['max_hp'], state['hp'] + REGEN_POR_TICK)
-                        state['ultimo_hit_tempo'] = agora_ms 
+                
+                # --- INÍCIO DA CORREÇÃO (BUG: Regeneração de Bots) ---
+                # A lógica de regeneração foi movida daqui para baixo.
+                # O 'elif' original impedia os bots de regenerar.
+                # (Removido: elif state.get('esta_regenerando', False): ...)
+                # --- FIM DA CORREÇÃO ---
                 
                 novo_proj = update_player_logic(state, agora_ms) 
                 if novo_proj:
@@ -838,9 +836,7 @@ def game_loop(bot_manager):
                                     radianos = math.radians(state['angulo'])
                                     vel_x_inicial = -math.sin(radianos) * 14; vel_y_inicial = -math.cos(radianos) * 14
                                     
-                                    # --- INÍCIO: CORREÇÃO (Bug de Dano) ---
                                     dano_calculado_aux = s.DANO_POR_NIVEL[state['nivel_dano']]
-                                    # --- FIM: CORREÇÃO ---
                                     
                                     proj_aux = {'id': f"{state['nome']}_aux{i}_{agora_ms}", 'owner_nome': state['nome'], 
                                         'x': aux_x, 'y': aux_y, 'pos_inicial_x': aux_x, 'pos_inicial_y': aux_y, 
@@ -848,6 +844,31 @@ def game_loop(bot_manager):
                                         'tipo_proj': 'teleguiado', 'velocidade': 14, 'alvo_id': target_id,
                                         'vel_x': vel_x_inicial, 'vel_y': vel_y_inicial}
                                     novos_projeteis_de_players.append(proj_aux)
+
+            # --- INÍCIO DA CORREÇÃO (BUG: Regeneração de Bots) ---
+            # A lógica de regeneração foi movida para DEPOIS da lógica da IA,
+            # e agora é um 'if' separado, aplicando-se a TODOS os 'all_living_players'.
+            for state in all_living_players:
+                if state.get('esta_regenerando', False):
+                    
+                    # Humanos param de regenerar se moverem (bots são controlados pela IA)
+                    if not state.get('is_bot', False): 
+                        if (state['teclas']['w'] or state['teclas']['a'] or 
+                             state['teclas']['s'] or state['teclas']['d'] or state['alvo_mouse'] is not None):
+                            state['esta_regenerando'] = False
+                    
+                    # Todos param se a vida estiver cheia
+                    if state['hp'] >= state['max_hp']:
+                        state['hp'] = state['max_hp']
+                        state['esta_regenerando'] = False
+                    
+                    # Se ainda estiver regenerando (e não foi parado acima), cura
+                    elif state['esta_regenerando'] and (agora_ms - state.get('ultimo_tick_regeneracao', 0) > REGEN_TICK_RATE_MS):
+                        state['ultimo_tick_regeneracao'] = agora_ms
+                        state['hp'] = min(state['max_hp'], state['hp'] + REGEN_POR_TICK)
+                        state['ultimo_hit_tempo'] = agora_ms 
+            # --- FIM DA CORREÇÃO (BUG: Regeneração de Bots) ---
+
 
             network_projectiles.extend(novos_projeteis_de_players)
 
@@ -908,24 +929,18 @@ def game_loop(bot_manager):
             for proj in projeteis_ativos:
                 if proj in projeteis_para_remover: continue
                 
-                # --- [INÍCIO DA MODIFICAÇÃO DEFINITIVA (DANO FANTASMA)] ---
                 if proj['tipo'] == 'player':
                     
-                    # 1. Encontra o 'owner_state' (PARA PONTOS)
                     owner_state = None
                     owner_nome_proj = proj.get('owner_nome')
                     if owner_nome_proj:
                         try:
-                            # Itera pelos 'values()' para funcionar com humanos (chave=conn) e bots (chave=nome)
                             for state in player_states.values(): 
                                 if state.get('nome') == owner_nome_proj:
                                     owner_state = state
                                     break
                         except RuntimeError: pass 
                     
-                    # 2. Usa o dano JÁ ARMAZENADO no projétil
-                    # Este valor foi calculado em update_player_logic (para tiros normais)
-                    # ou na lógica de auxiliares (para tiros de aux), usando s.DANO_POR_NIVEL.
                     dano_real = proj.get('dano', 1.0) 
                     
                     for npc in network_npcs:
@@ -937,10 +952,8 @@ def game_loop(bot_manager):
                         
                         if dist_sq < dist_colisao_sq:
                             
-                            # 3. Aplica o dano
                             hp_antes = npc['hp']
                             npc['hp'] -= dano_real
-                            # print(f"[DANO] {owner_nome_proj} -> {npc['tipo']}#{npc['id']}: {dano_real:.1f} dmg | HP: {hp_antes:.1f} -> {npc['hp']:.1f}")
                             
                             if npc['tipo'] in ['mothership', 'boss_congelante']:
                                 npc['ia_ultimo_hit_tempo'] = agora_ms
@@ -950,14 +963,13 @@ def game_loop(bot_manager):
                             if npc['hp'] <= 0:
                                 npcs_para_remover.append(npc) 
                                 ids_npcs_mortos_neste_tick.add(npc['id'])
-                                if owner_state: # 4. Usa o owner_state para dar os pontos
+                                if owner_state: 
                                     server_ganhar_pontos(owner_state, npc.get('pontos_por_morte', 5))
                                     print(f"[KILL] {owner_state['nome']} destruiu {npc['tipo']}#{npc['id']} (+{npc.get('pontos_por_morte', 5)} pts)")
-                            break # Projétil acerta só um NPC
+                            break 
                     
                     if proj in projeteis_para_remover: continue 
                     
-                    # Colisão PVP (Jogador vs Jogador)
                     for target_state in all_living_players:
                         if target_state['nome'] == proj['owner_nome']: continue 
                         if target_state.get('invencivel', False): continue
@@ -966,7 +978,6 @@ def game_loop(bot_manager):
                         if dist_sq < COLISAO_JOGADOR_PROJ_DIST_SQ:
                             if agora_ms - target_state.get('ultimo_hit_tempo', 0) > 150:
                                 
-                                # 5. Usa o dano do projétil para PVP
                                 dano_real_pvp = proj.get('dano', 1.0) 
                                 
                                 reducao_percent = min(target_state['nivel_escudo'] * s.REDUCAO_DANO_POR_NIVEL, 75)
@@ -977,9 +988,7 @@ def game_loop(bot_manager):
                                 projeteis_para_remover.append(proj) 
                                 if target_state['hp'] <= 0:
                                     if owner_state: server_ganhar_pontos(owner_state, 10) 
-                                break # Projétil acerta só um Jogador
-                
-                # --- [FIM DA MODIFICAÇÃO DEFINITIVA] ---
+                                break 
                 
                 elif proj['tipo'] == 'npc':
                     for player_state in all_living_players: 
@@ -999,6 +1008,13 @@ def game_loop(bot_manager):
                                 player_state['hp'] -= dano_reduzido
                                 player_state['ultimo_hit_tempo'] = agora_ms
                                 player_state['esta_regenerando'] = False 
+                                
+                                # --- INÍCIO DA CORREÇÃO (Smart AI Targeting) ---
+                                # Se o jogador atingido for um bot, informe a ele quem o atacou.
+                                if player_state.get('is_bot', False):
+                                    player_state['bot_last_attacker_id'] = proj.get('owner_nome')
+                                # --- FIM DA CORREÇÃO ---
+                                
                                 projeteis_para_remover.append(proj) 
                                 if player_state['hp'] <= 0:
                                     print(f"[LOG] Jogador {player_state['nome']} morreu!")
@@ -1024,6 +1040,12 @@ def game_loop(bot_manager):
                                 player_state['ultimo_hit_tempo'] = agora_ms
                                 player_state['esta_regenerando'] = False 
                                 
+                                # --- INÍCIO DA CORREÇÃO (Smart AI Targeting) ---
+                                # Se o jogador atingido for um bot, informe a ele quem o atacou.
+                                if player_state.get('is_bot', False):
+                                    player_state['bot_last_attacker_id'] = npc.get('id')
+                                # --- FIM DA CORREÇÃO ---
+
                                 if npc['tipo'] in ['bomba', 'minion_mothership', 'minion_congelante']:
                                     npc['hp'] = 0 
                                     npcs_para_remover.append(npc)
@@ -1062,15 +1084,21 @@ def game_loop(bot_manager):
                 
                 network_npcs = [n for n in network_npcs if n['id'] not in ids_npcs_mortos]
                 
-                # --- INÍCIO: CORREÇÃO (Bug Alvo "Pegajoso") ---
-                # Itera sobre uma cópia da lista de valores para evitar RuntimeError
                 try:
                     for state in list(player_states.values()): 
                         if state.get('alvo_lock') in ids_npcs_mortos:
                             state['alvo_lock'] = None
                 except RuntimeError:
                     print("[AVISO] RuntimeError ao limpar alvo_lock. O dicionário mudou.")
-                # --- FIM: CORREÇÃO ---
+
+            # --- INÍCIO DA CORREÇÃO (BUG: Regeneração de Bots) ---
+            # Remove os bots mortos da lista principal 'player_states'
+            # A lista 'bots_para_remover' foi preenchida na PARTE 0.
+            if bots_para_remover:
+                for nome_bot in bots_para_remover:
+                    if nome_bot in player_states:
+                        del player_states[nome_bot]
+            # --- FIM DA CORREÇÃO ---
 
             # --- PARTE 6: Processar IA dos NPCs (SÓ OS VIVOS) ---
             if posicoes_jogadores_vivos: 
@@ -1234,7 +1262,10 @@ def handle_client(conn, addr):
             'nivel_aux': 0, 'aux_cooldowns': [0, 0, 0, 0],
             # --- MUDANÇA: Adiciona campos de status ---
             'tempo_fim_lentidao': 0,
-            'tempo_fim_congelamento': 0
+            'tempo_fim_congelamento': 0,
+            # --- INÍCIO DA CORREÇÃO (Smart AI Targeting) ---
+            'bot_last_attacker_id': None # Campo para bots, mas adicionado a todos
+            # --- FIM DA CORREÇÃO ---
         }
         with game_state_lock:
             player_states[conn] = player_state 
@@ -1287,6 +1318,7 @@ def handle_client(conn, addr):
                             # --- MUDANÇA: Reseta status ---
                             player_state['tempo_fim_lentidao'] = 0
                             player_state['tempo_fim_congelamento'] = 0
+                            player_state['bot_last_attacker_id'] = None
                             print(f"[LOG] [{addr}] Jogador {player_state['nome']} respawnou.")
                     continue 
                 

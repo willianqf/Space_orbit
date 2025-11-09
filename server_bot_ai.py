@@ -11,7 +11,13 @@ from settings import (
 )
 
 # --- CONSTANTES DA IA DO BOT (Movidas de server.py) ---
-BOT_DISTANCIA_SCAN_GERAL_SQ = 800**2
+
+# --- INÍCIO DA CORREÇÃO (BUG: Bots não veem inimigos) ---
+# O valor original (800**2) era muito baixo.
+# Aumentado para 3000**2 para corresponder ao 'NPC_AGGRO_RANGE' dos inimigos.
+BOT_DISTANCIA_SCAN_GERAL_SQ = 3000**2 
+# --- FIM DA CORREÇÃO ---
+
 BOT_DISTANCIA_SCAN_INIMIGO_SQ = 600**2
 BOT_DISTANCIA_ORBITA_MAX_SQ = 300**2
 BOT_DISTANCIA_ORBITA_MIN_SQ = 200**2
@@ -197,9 +203,12 @@ class ServerBotManager:
         esta_parado_para_regen = (estado_ia == "REGENERANDO_NA_BORDA") or \
                                (estado_ia == "VAGANDO" and bot_state['hp'] < (bot_state['max_hp'] * BOT_HP_REGENERAR_PERC))
         
+        # --- INÍCIO DA CORREÇÃO (Bug: Parava de regenerar para atirar) ---
+        
         # Condições para INICIAR a regeneração
+        # (Só inicia se estiver parado, ou seja, 'alvo_mouse' é None)
         if esta_parado_para_regen and \
-           bot_state['alvo_lock'] is None and \
+           bot_state['alvo_mouse'] is None and \
            not bot_state['esta_regenerando']:
             
             # Força parada (caso VAGANDO tenha setado movimento)
@@ -211,8 +220,9 @@ class ServerBotManager:
 
         # Condições para PARAR a regeneração
         if bot_state['esta_regenerando']:
-            # Se começarmos a nos mover (VAGANDO com HP cheio) ou mirarmos, para
-            if (bot_state['alvo_mouse'] is not None or bot_state['alvo_lock'] is not None):
+            # Se começarmos a nos mover (VAGANDO com HP cheio), para
+            # (REMOVIDO: 'or bot_state['alvo_lock'] is not None')
+            if (bot_state['alvo_mouse'] is not None):
                 bot_state['esta_regenerando'] = False
                 # print(f"[LOG] {bot_state['nome']} parando regeneração (Movimento/Alvo)") # DEBUG
             elif bot_state['hp'] >= bot_state['max_hp']:
@@ -222,6 +232,8 @@ class ServerBotManager:
                 if estado_ia == "REGENERANDO_NA_BORDA":
                     # Volte a vagar (e a IA de VAGAR vai tirar ele da borda)
                     bot_state['bot_estado_ia'] = "VAGANDO"
+        
+        # --- FIM DA CORREÇÃO ---
 
     def _update_ia_decision(self, bot_state, all_living_players):
         """ O "Cérebro" do Bot. Decide o que fazer (define 'teclas', 'alvo_mouse', 'alvo_lock'). """
@@ -231,46 +243,58 @@ class ServerBotManager:
         bot_state['teclas']['a'] = False
         bot_state['teclas']['s'] = False
         bot_state['teclas']['d'] = False
-        bot_state['teclas']['space'] = False 
+        bot_state['teclas']['space'] = False # <--- COMEÇA SEM ATIRAR
         bot_state['alvo_mouse'] = None
         
+        # --- Constantes de HP (definidas antes da lógica anti-stuck) ---
+        hp_limite_fugir = bot_state['max_hp'] * BOT_HP_FUGIR_PERC # 20%
+        hp_limite_regen_obrigatorio = bot_state['max_hp'] * 0.80 # Força 80%
+
         # --- 2. Lógica Anti-Stuck (Anti-Preso) ---
-        pos_atual = (bot_state['x'], bot_state['y'])
-        pos_anterior = bot_state['bot_posicao_anterior']
-        dist_sq_movido = (pos_atual[0] - pos_anterior[0])**2 + (pos_atual[1] - pos_anterior[1])**2
         
-        if dist_sq_movido < (3**2):
-            bot_state['bot_frames_sem_movimento'] += 1
-            if bot_state['bot_frames_sem_movimento'] > 60: 
-                print(f"[LOG] [BOT] {bot_state['nome']} está preso. A forçar novo 'wander target'.")
-                bot_state['bot_estado_ia'] = "VAGANDO"
-                bot_state['alvo_lock'] = None
-                bot_state['alvo_mouse'] = None
-                bot_state['bot_wander_target'] = None 
+        # (Correção do bug "está preso" da sua mensagem anterior)
+        esta_parado_para_regen = (
+            bot_state['bot_estado_ia'] == "REGENERANDO_NA_BORDA" or
+            (bot_state['bot_estado_ia'] == "VAGANDO" and bot_state['hp'] < hp_limite_regen_obrigatorio)
+        )
+
+        if not esta_parado_para_regen:
+            pos_atual = (bot_state['x'], bot_state['y'])
+            pos_anterior = bot_state['bot_posicao_anterior']
+            dist_sq_movido = (pos_atual[0] - pos_anterior[0])**2 + (pos_atual[1] - pos_anterior[1])**2
+            
+            if dist_sq_movido < (3**2):
+                bot_state['bot_frames_sem_movimento'] += 1
+                if bot_state['bot_frames_sem_movimento'] > 60: 
+                    # print(f"[LOG] [BOT] {bot_state['nome']} está preso. A forçar novo 'wander target'.") # Log removido para limpar console
+                    bot_state['bot_estado_ia'] = "VAGANDO"
+                    bot_state['alvo_lock'] = None
+                    bot_state['alvo_mouse'] = None
+                    bot_state['bot_wander_target'] = None 
+                    bot_state['bot_frames_sem_movimento'] = 0
+            else:
                 bot_state['bot_frames_sem_movimento'] = 0
+            
+            bot_state['bot_posicao_anterior'] = pos_atual
+        
         else:
             bot_state['bot_frames_sem_movimento'] = 0
-        bot_state['bot_posicao_anterior'] = pos_atual
+            bot_state['bot_posicao_anterior'] = (bot_state['x'], bot_state['y'])
+        # --- Fim da Correção "preso" ---
 
-        # --- Constantes de HP ---
-        hp_limite_fugir = bot_state['max_hp'] * BOT_HP_FUGIR_PERC # 20%
-        hp_limite_regen_obrigatorio = bot_state['max_hp'] * BOT_HP_REGENERAR_PERC # 80% (BOT_HP_REGENERAR_PERC é 0.50, vamos usar 0.80)
-        hp_limite_regen_obrigatorio = bot_state['max_hp'] * 0.80 # Força 80%
-        
+
         # === PRIORIDADE 0: JÁ ESTÁ REGENERANDO FORÇADAMENTE? ===
         if bot_state['bot_estado_ia'] == "REGENERANDO_NA_BORDA":
             if bot_state['hp'] < hp_limite_regen_obrigatorio:
                 bot_state['alvo_mouse'] = None # Fica parado
                 bot_state['bot_flee_destination'] = None
                 
-                # Procura alvos para se defender (kiting parado)
                 bot_state['alvo_lock'] = self._find_closest_threat_online(bot_state, all_living_players)
                 if bot_state['alvo_lock']:
-                    bot_state['teclas']['space'] = True
-                return # Decisão final: Ficar parado e atirar
+                    bot_state['teclas']['space'] = True # Atira para se defender
+                return 
             else:
-                # Atingiu 80%! Volta a vagar.
-                print(f"[{bot_state['nome']}] Regeneração concluída. Voltando a vagar.")
+                # print(f"[{bot_state['nome']}] Regeneração concluída. Voltando a vagar.") # Log removido para limpar console
                 bot_state['bot_estado_ia'] = "VAGANDO"
                 bot_state['bot_flee_destination'] = None
 
@@ -284,13 +308,11 @@ class ServerBotManager:
                               bot_state['y'] > self.s.MAP_HEIGHT - zona_perigo)
 
             if em_zona_perigo:
-                # 3A. CHEGOU NA BORDA: PARAR E REGENERAR
                 bot_state['bot_estado_ia'] = "REGENERANDO_NA_BORDA"
                 bot_state['alvo_mouse'] = None 
                 bot_state['bot_flee_destination'] = None 
             
             else:
-                # 3B. PRECISA FUGIR (AINDA NÃO ESTÁ NA BORDA)
                 if bot_state['bot_estado_ia'] != "FUGINDO":
                     bot_state['bot_estado_ia'] = "FUGINDO"
                     bot_state['bot_flee_destination'] = self._find_closest_edge_point(bot_state['x'], bot_state['y'])
@@ -299,12 +321,11 @@ class ServerBotManager:
                 if bot_state['bot_flee_destination']:
                     bot_state['alvo_mouse'] = bot_state['bot_flee_destination']
 
-            # LÓGICA DE KITING (atirar enquanto foge/regenera)
             bot_state['alvo_lock'] = self._find_closest_threat_online(bot_state, all_living_players)
             if bot_state['alvo_lock']:
-                bot_state['teclas']['space'] = True
+                bot_state['teclas']['space'] = True # Atira para se defender
             
-            return # Fuga/Regeneração é prioridade máxima
+            return 
             
         # --- 4. RESETAR ESTADO DE FUGA (Se HP > 20% e não estava regenerando) ---
         if bot_state['bot_estado_ia'] == "FUGINDO":
@@ -329,8 +350,6 @@ class ServerBotManager:
         if not alvo_ainda_valido:
             bot_state['alvo_lock'] = None
             bot_state['bot_estado_ia'] = "VAGANDO"
-
-            # Busca alvo (só se não tiver um)
             bot_state['alvo_lock'] = self._find_closest_threat_online(bot_state, all_living_players)
             
             if bot_state['alvo_lock']:
@@ -368,6 +387,7 @@ class ServerBotManager:
                 if dist_sq_alvo > BOT_DISTANCIA_SCAN_INIMIGO_SQ:
                     bot_state['bot_estado_ia'] = "CAÇANDO"
                     bot_state['alvo_mouse'] = (alvo_x, alvo_y) 
+                    # NÃO ATIRA (space = False)
                 
                 else:
                     bot_state['bot_estado_ia'] = "ATACANDO"
@@ -395,8 +415,12 @@ class ServerBotManager:
                             ponto_movimento = (bot_state['x'] + vec_orbita.x, bot_state['y'] + vec_orbita.y)
 
                     bot_state['alvo_mouse'] = ponto_movimento
+                    
+                    # --- INÍCIO DA CORREÇÃO (Atirando de Longe) ---
+                    bot_state['teclas']['space'] = True # SÓ ATIRA SE ESTIVER ATACANDO
+                    # --- FIM DA CORREÇÃO ---
                 
-                bot_state['teclas']['space'] = True
+                # (A linha 'space = True' foi movida daqui para dentro do 'else' acima)
 
         # --- Lógica de Vagar (WANDER) ---
         if bot_state['bot_estado_ia'] == "VAGANDO":
@@ -447,31 +471,37 @@ class ServerBotManager:
     
     def _find_closest_threat_online(self, bot_state, all_living_players):
         """
-        Encontra a ameaça (Inimigo ou Player/Bot) mais próxima para a IA online.
+        Encontra a ameaça (Inimigo ou Player/Bot) MAIS PRÓXIMA para a IA online.
         Retorna o ID da ameaça (str), ou None.
         """
-        alvo_ameacador_entidade = None
+        
+        # --- INÍCIO DA CORREÇÃO (Bug: Focando em alvos distantes) ---
+        
+        alvo_final_id = None
+        # Começa com a distância máxima de scan
         dist_min_sq = BOT_DISTANCIA_SCAN_GERAL_SQ 
 
-        # 1. Procura NPCs
+        # 1. Procura o NPC mais próximo
         for npc in self.network_npcs:
             if npc['hp'] <= 0: continue
             dist_sq = (npc['x'] - bot_state['x'])**2 + (npc['y'] - bot_state['y'])**2
+            
+            # Se este NPC está dentro do range E é mais perto que o alvo anterior
             if dist_sq < dist_min_sq:
-                dist_min_sq = dist_sq
-                alvo_ameacador_entidade = npc
-        
-        # 2. Procura Players/Bots (se não houver inimigos)
-        if alvo_ameacador_entidade is None:
-            for player in all_living_players:
-                if player['nome'] == bot_state['nome']: continue 
-                dist_sq = (player['x'] - bot_state['x'])**2 + (player['y'] - bot_state['y'])**2
-                if dist_sq < dist_min_sq:
-                    dist_min_sq = dist_sq
-                    alvo_ameacador_entidade = player
+                dist_min_sq = dist_sq       # Atualiza a menor distância
+                alvo_final_id = npc['id'] # Salva o ID deste NPC
 
-        if alvo_ameacador_entidade:
-            # Retorna o 'id' (para NPCs) ou 'nome' (para Players/Bots)
-            return alvo_ameacador_entidade.get('id', alvo_ameacador_entidade.get('nome'))
+        # 2. Procura o Player/Bot mais próximo
+        for player in all_living_players:
+            if player['nome'] == bot_state['nome']: continue 
+            dist_sq = (player['x'] - bot_state['x'])**2 + (player['y'] - bot_state['y'])**2
+            
+            # Se este Player está dentro do range E é mais perto que o alvo anterior
+            # (que pode ser o NPC do loop acima)
+            if dist_sq < dist_min_sq:
+                dist_min_sq = dist_sq         # Atualiza a menor distância
+                alvo_final_id = player['nome'] # Salva o NOME deste Player
         
-        return None
+        # 3. Retorna o ID/Nome do alvo que for o mais próximo de TODOS
+        return alvo_final_id
+        # --- FIM DA CORREÇÃO ---
