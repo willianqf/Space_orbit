@@ -29,7 +29,12 @@ class GameLogic:
         """
         Processa toda a lógica de jogo PVE offline (spawns, updates, colisões).
         """
-        
+        # --- INÍCIO: TRAVA DE SEGURANÇA (NOVO) ---
+        # Se por algum motivo esta função for chamada no mapa PVP, pare.
+        if s.MAP_WIDTH < 5000: # O mapa PVE tem 8000, o PVP tem 1500
+            print("[ALERTA DE LÓGICA] update_offline_logic (PVE) chamada no mapa PVP. Abortando.")
+            return game_state["estado_jogo"] # Retorna sem fazer nada
+        # --- FIM: TRAVA DE SEGURANÇA ---
         # Extrai variáveis de estado
         estado_jogo = game_state["estado_jogo"]
         
@@ -156,12 +161,17 @@ class GameLogic:
 
         elif estado_jogo == "PVP_COUNTDOWN":
             if agora > game_state["pvp_lobby_timer_fim"]:
-                print("[LOGIC] Contagem terminada. Teleportando e iniciando partida.")
-                estado_jogo = "PVP_PLAYING"
-                game_state["estado_jogo"] = "PVP_PLAYING"
-                game_state["pvp_partida_timer_fim"] = agora + (pvp_s.PVP_PARTIDA_DURACAO_SEGUNDOS * 1000)
+                print("[LOGIC] Contagem terminada. Teleportando para os cantos (freeze 5s).")
                 
+                # --- INÍCIO: MODIFICAÇÃO (Novo Estado) ---
+                estado_jogo = "PVP_PRE_MATCH"
+                game_state["estado_jogo"] = "PVP_PRE_MATCH"
+                # Define o timer de 5 segundos de congelamento
+                game_state["pvp_pre_match_timer_fim"] = agora + (5 * 1000) 
+                # --- FIM: MODIFICAÇÃO ---
+
                 # --- Lógica de Teleporte para os Cantos ---
+                # (O resto deste bloco, linhas 167-183, está CORRETO e não muda)
                 # Pega todos os jogadores/bots vivos
                 jogadores_para_spawnar = [p for p in grupo_pvp_jogadores if p.vida_atual > 0]
                 
@@ -178,6 +188,17 @@ class GameLogic:
                     else:
                         # Se houver mais de 4, remove (não deve acontecer)
                         nave.kill()
+        
+        elif estado_jogo == "PVP_PRE_MATCH":
+            # Naves estão congeladas (jogador não atualiza em main.py, bots não atualizam acima)
+            # Apenas espera o timer de 5 segundos acabar
+            if agora > game_state["pvp_pre_match_timer_fim"]:
+                print("[LOGIC] Congelamento 5s terminou. Partida PVP iniciada!")
+                estado_jogo = "PVP_PLAYING"
+                game_state["estado_jogo"] = "PVP_PLAYING"
+                # AGORA sim, define o timer de 3 minutos da partida
+                game_state["pvp_partida_timer_fim"] = agora + (pvp_s.PVP_PARTIDA_DURACAO_SEGUNDOS * 1000)
+        # --- FIM: ADICIONAR NOVO ESTADO ---
         
         elif estado_jogo == "PVP_PLAYING":
             # --- 2. Checar Condições de Fim de Jogo ---
@@ -208,56 +229,62 @@ class GameLogic:
             lista_alvos_naves_pvp = [p for p in grupo_pvp_jogadores if p.vida_atual > 0]
             
             # Atualiza Bots (eles se veem como inimigos)
-            for bot in grupo_bots:
-                if bot.vida_atual > 0:
-                    bot.update(
-                        player_ref=nave_player, 
-                        grupo_projeteis_bots=grupo_projeteis_bots,
-                        grupo_bots_ref=grupo_pvp_jogadores,
-                        grupo_inimigos_ref=grupo_pvp_jogadores, # <--- AQUI ELES MIRAM EM TODOS
-                        grupo_obstaculos_ref=grupo_obstaculos,
-                        grupo_efeitos_visuais_ref=grupo_efeitos_visuais,
-                        pos_ouvinte=pos_ouvinte
-                    )
-            
+            if estado_jogo == "PVP_PLAYING":
+                for bot in grupo_bots:
+                    if bot.vida_atual > 0:
+                        bot.update(
+                            player_ref=nave_player, 
+                            grupo_projeteis_bots=grupo_projeteis_bots,
+                            grupo_bots_ref=grupo_pvp_jogadores,
+                            grupo_inimigos_ref=grupo_pvp_jogadores, # <--- AQUI ELES MIRAM EM TODOS
+                            grupo_obstaculos_ref=grupo_obstaculos,
+                            grupo_efeitos_visuais_ref=grupo_efeitos_visuais,
+                            pos_ouvinte=pos_ouvinte
+                        )
+                # --- 4. Lógica de Colisão PVP (SÓ RODA SE ESTIVER EM "PVP_PLAYING") ---
+                
+                # Colisão: Projéteis do Player vs Bots
+                colisoes_player_vs_bot = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_bots, True, False)
+                for proj, bots_atingidos in colisoes_player_vs_bot.items():
+                    for bot in bots_atingidos:
+                        bot.foi_atingido(proj.dano, "JOGANDO", proj.posicao, atacante=nave_player)
+
+                # Colisão: Projéteis do Player vs Obstáculos
+                pygame.sprite.groupcollide(grupo_projeteis_player, grupo_obstaculos, True, True)
+
+                # Colisão: Projéteis de Bots vs Player
+                colisoes_bot_vs_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_bots, True)
+                for proj in colisoes_bot_vs_player:
+                    if nave_player.vida_atual > 0:
+                        nave_player.foi_atingido(proj.dano, "JOGANDO", proj.posicao, atacante=proj.owner)
+                
+                # Colisão: Projéteis de Bots vs outros Bots
+                colisoes_bot_vs_bot = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_bots, True, False)
+                for proj, bots_atingidos in colisoes_bot_vs_bot.items():
+                    owner = proj.owner
+                    for bot in bots_atingidos:
+                        if bot != owner: # Não atirar em si mesmo
+                            bot.foi_atingido(proj.dano, "JOGANDO", proj.posicao, atacante=owner)
+
+                # Colisão: Projéteis de Bots vs Obstáculos
+                pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_obstaculos, True, True)
+
+                # --- INÍCIO: CORREÇÃO (Mover Ramming para dentro do IF) ---
+                # Colisão: Ramming (Corpo a Corpo) entre todos
+                colisoes_ramming = pygame.sprite.groupcollide(grupo_pvp_jogadores, grupo_pvp_jogadores, False, False)
+                for nave_a, naves_colididas in colisoes_ramming.items():
+                    for nave_b in naves_colididas:
+                        if nave_a != nave_b and nave_a.vida_atual > 0 and nave_b.vida_atual > 0: # Só colide com os outros
+                            # Aplica um pequeno dano de ramming
+                            nave_a.foi_atingido(0.1, "JOGANDO", nave_b.posicao, atacante=nave_b)
+                # --- FIM: CORREÇÃO ---
+                            
             grupo_projeteis_player.update()
             grupo_projeteis_bots.update()
 
-            # --- 4. Lógica de Colisão PVP ---
-            
-            # Colisão: Projéteis do Player vs Bots
-            colisoes_player_vs_bot = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_bots, True, False)
-            for proj, bots_atingidos in colisoes_player_vs_bot.items():
-                for bot in bots_atingidos:
-                    bot.foi_atingido(proj.dano, "JOGANDO", proj.posicao, atacante=nave_player)
-
-            # Colisão: Projéteis do Player vs Obstáculos
-            pygame.sprite.groupcollide(grupo_projeteis_player, grupo_obstaculos, True, True)
-
-            # Colisão: Projéteis de Bots vs Player
-            colisoes_bot_vs_player = pygame.sprite.spritecollide(nave_player, grupo_projeteis_bots, True)
-            for proj in colisoes_bot_vs_player:
-                if nave_player.vida_atual > 0:
-                    nave_player.foi_atingido(proj.dano, "JOGANDO", proj.posicao, atacante=proj.owner)
-            
-            # Colisão: Projéteis de Bots vs outros Bots
-            colisoes_bot_vs_bot = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_bots, True, False)
-            for proj, bots_atingidos in colisoes_bot_vs_bot.items():
-                owner = proj.owner
-                for bot in bots_atingidos:
-                    if bot != owner: # Não atirar em si mesmo
-                        bot.foi_atingido(proj.dano, "JOGANDO", proj.posicao, atacante=owner)
-
-            # Colisão: Projéteis de Bots vs Obstáculos
-            pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_obstaculos, True, True)
-
-            # Colisão: Ramming (Corpo a Corpo) entre todos
-            colisoes_ramming = pygame.sprite.groupcollide(grupo_pvp_jogadores, grupo_pvp_jogadores, False, False)
-            for nave_a, naves_colididas in colisoes_ramming.items():
-                for nave_b in naves_colididas:
-                    if nave_a != nave_b and nave_a.vida_atual > 0 and nave_b.vida_atual > 0: # Só colide com os outros
-                        # Aplica um pequeno dano de ramming
-                        nave_a.foi_atingido(0.1, "JOGANDO", nave_b.posicao, atacante=nave_b)
+            # --- INÍCIO: REMOÇÃO DO BLOCO DUPLICADO ---
+            # O bloco de colisão que estava aqui (linhas 288-324 do arquivo original) foi removido.
+            # --- FIM: REMOÇÃO DO BLOCO DUPLICADO ---
 
         return estado_jogo
     # --- FIM DA NOVA FUNÇÃO PVP ---

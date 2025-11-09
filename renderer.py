@@ -491,6 +491,18 @@ class Renderer:
             pos_x = (LARGURA_TELA - texto_timer.get_width()) // 2
             self.tela.blit(texto_timer, (pos_x, 50))
 
+        elif estado_jogo == "PVP_PRE_MATCH":
+            tempo_restante_ms = game_globals.get("pvp_pre_match_timer_fim", 0) - pygame.time.get_ticks()
+            if tempo_restante_ms < 0: tempo_restante_ms = 0
+            tempo_s = math.ceil(tempo_restante_ms / 1000) # 5, 4, 3...
+            
+            texto_timer = pvp_s.FONT_TITULO_PVP.render(f"{tempo_s}", True, pvp_s.VERMELHO)
+            # Centraliza na tela
+            pos_x = (LARGURA_TELA - texto_timer.get_width()) // 2
+            pos_y = (ALTURA_TELA - texto_timer.get_height()) // 2
+            self.tela.blit(texto_timer, (pos_x, pos_y))
+        # --- FIM: ADICIONAR ESTE BLOCO ---
+
         elif estado_jogo == "PVP_PLAYING":
             tempo_restante_ms = game_globals.get("pvp_partida_timer_fim", 0) - pygame.time.get_ticks()
             if tempo_restante_ms < 0: tempo_restante_ms = 0

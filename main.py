@@ -180,11 +180,31 @@ def reiniciar_jogo_pvp():
     
     # --- INÍCIO: MODIFICAÇÃO (Gera Estrelas para o Mapa PVP) ---
     lista_estrelas.clear()
-    for _ in range(s.NUM_ESTRELAS):
+        
+    # Calcula a densidade proporcional de estrelas
+    area_pve = float(pvp_s.PVE_MAP_WIDTH * pvp_s.PVE_MAP_HEIGHT)
+    area_pvp = float(pvp_s.MAP_WIDTH * pvp_s.MAP_HEIGHT)
+    
+    if area_pve == 0: area_pve = 1.0 # Evita divisão por zero
+    
+    proporcao = area_pvp / area_pve
+    num_estrelas_pvp = int(s.NUM_ESTRELAS * proporcao) # s.NUM_ESTRELAS é 10000
+    
+    # Garante um número mínimo de estrelas
+    if num_estrelas_pvp < 100: num_estrelas_pvp = 100 
+
+    print(f"Calculando estrelas PVP: {num_estrelas_pvp} (Baseado em {proporcao*100:.1f}% da área PVE)")
+    
+    for _ in range(num_estrelas_pvp): # <-- USA O NÚMERO CORRIGIDO
         pos_base = pygame.math.Vector2(random.randint(0, pvp_s.MAP_WIDTH), random.randint(0, pvp_s.MAP_HEIGHT))
         raio = random.randint(1, 2)
         parallax_fator = raio * 0.1
         lista_estrelas.append((pos_base, raio, parallax_fator))
+    
+    # Atualiza a lista no renderer
+    renderer.lista_estrelas = lista_estrelas
+    print(f"Geradas {num_estrelas_pvp} estrelas (proporcional) para o mapa PVP ({pvp_s.MAP_WIDTH}x{pvp_s.MAP_HEIGHT}).")
+    # --- FIM: MODIFICAÇÃO ---
     
     # Atualiza a lista no renderer
     renderer.lista_estrelas = lista_estrelas
@@ -585,7 +605,9 @@ game_globals = {
     "max_bots_atual": s.MAX_BOTS,
     "LARGURA_TELA": LARGURA_TELA, "ALTURA_TELA": ALTURA_TELA,
     "nave_player": nave_player, # <-- Adiciona a nave player ao dicionário
-    
+    "estado_anterior_loja": "JOGANDO",
+    "estado_anterior_pause": "JOGANDO", # <-- ADICIONE ESTA LINHA
+    "estado_anterior_terminal": "JOGANDO", # <-- ADICIONE ESTA LINHA
     "pvp_disponivel": True, # <-- MODIFICAÇÃO: PVP está disponível
     
     # --- INÍCIO: MODIFICAÇÃO (Estado PVP) ---
@@ -823,7 +845,7 @@ while game_globals["rodando"]:
                     game_globals["estado_jogo"] = novo_estado_jogo # Atualiza o global
                 
                 # Roda a lógica PVE (como era antes)
-                elif estado_jogo not in ["PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_GAME_OVER"]:
+                elif estado_jogo == "JOGANDO":
                     game_state_logica = game_globals.copy()
                     game_state_logica["estado_jogo"] = estado_jogo
                     game_state_logica["dificuldade_jogo_atual"] = dificuldade_jogo_atual
@@ -863,7 +885,7 @@ while game_globals["rodando"]:
     # --- FIM: MODIFICAÇÃO ---
         if not is_online:
             # --- MODIFICAÇÃO: Passa a posição do ouvinte ---
-            nave_player.update(grupo_projeteis_player, camera, None, posicao_ouvinte_som)
+            nave_player.update(grupo_projeteis_player, camera, None, posicao_ouvinte_som, estado_jogo)
             # --- FIM DA MODIFICAÇÃO ---
 
     # 5. Desenho (Etapa 4)

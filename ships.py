@@ -103,9 +103,9 @@ class NaveAuxiliar(pygame.sprite.Sprite):
                         self.ultimo_tiro_tempo = agora
                         radianos = math.radians(self.angulo)
                         
-                        dano_real_aux = DANO_POR_NIVEL[self.owner.nivel_dano]
+                        # (A linha 'dano_real_aux = ...' foi removida)
                         proj = ProjetilTeleguiadoJogador(self.posicao.x, self.posicao.y, radianos, 
-                                                       dano_real_aux, 
+                                                       self.owner.nivel_dano, # <--- CORRIGIDO
                                                        owner_nave=self.owner, 
                                                        alvo_sprite=self.alvo_atual)
                         
@@ -338,15 +338,15 @@ class Nave(pygame.sprite.Sprite):
         pos_x = self.posicao.x + (-math.sin(radianos) * offset_ponta); pos_y = self.posicao.y + (-math.cos(radianos) * offset_ponta)
         
         # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
-        dano_real = DANO_POR_NIVEL[self.nivel_dano]
+        # (A linha 'dano_real = ...' foi removida, pois o projétil calcula o dano)
         
         if self.alvo_selecionado and self.alvo_selecionado.groups():
             return ProjetilTeleguiadoJogador(pos_x, pos_y, radianos, 
-                                           dano_real, # self.nivel_dano, 
+                                           self.nivel_dano, # <--- CORRIGIDO
                                            owner_nave=self, 
                                            alvo_sprite=self.alvo_selecionado)
         else:
-            return Projetil(pos_x, pos_y, radianos, dano_real, owner_nave=self) # self.nivel_dano, owner_nave=self)
+            return Projetil(pos_x, pos_y, radianos, self.nivel_dano, owner_nave=self) # <--- CORRIGIDO
         # --- FIM: MODIFICAÇÃO ---
     
     def lidar_com_tiros(self, grupo_destino, pos_ouvinte=None): # <-- MODIFICADO
@@ -612,7 +612,7 @@ class Player(Nave):
         # --- MODIFICADO: Passa o atacante para a classe base ---
         return super().foi_atingido(dano, estado_jogo_atual, proj_pos, atacante=atacante)
 
-    def update(self, grupo_projeteis_jogador, camera, client_socket=None, pos_ouvinte=None): # <-- MODIFICADO
+    def update(self, grupo_projeteis_jogador, camera, client_socket=None, pos_ouvinte=None, estado_jogo="JOGANDO"): # <-- MODIFICADO
         if client_socket is None:
             # --- INÍCIO DA CORREÇÃO ---
             # O 'camera' DEVE ser passado para processar_input_humano
@@ -622,7 +622,8 @@ class Player(Nave):
             self.rotacionar()
             self.mover()
             # --- MODIFICADO: Passa pos_ouvinte ---
-            self.lidar_com_tiros(grupo_projeteis_jogador, pos_ouvinte if pos_ouvinte is not None else self.posicao)
+            if estado_jogo == "JOGANDO" or estado_jogo == "PVP_PLAYING":
+                self.lidar_com_tiros(grupo_projeteis_jogador, pos_ouvinte if pos_ouvinte is not None else self.posicao)
         else:
             self.quer_virar_esquerda = False
             self.quer_virar_direita = False

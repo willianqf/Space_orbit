@@ -201,14 +201,20 @@ class EventHandler:
                     
                     # 'V' para Loja (Permitido no Lobby, Countdown e Jogando PVE/PVP)
                     if event.key == pygame.K_v and estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN"]: 
+                        novos_estados["estado_anterior_loja"] = estado_jogo 
                         novos_estados["estado_jogo"] = "LOJA"; print("Abrindo loja...")
                     
-                    # 'QUOTE' para Terminal (Permitido em todos)
+                    # 'QUOTE' para Terminal (Permitido APENAS no PVE)
                     elif event.key == pygame.K_QUOTE: 
-                        novos_estados["estado_jogo"] = "TERMINAL"; novos_estados["variavel_texto_terminal"] = ""; print("Abrindo terminal de cheats...")
+                        if estado_jogo == "JOGANDO": # <--- SÓ PERMITE NO PVE
+                            novos_estados["estado_anterior_terminal"] = estado_jogo # <-- SALVA MEMÓRIA
+                            novos_estados["estado_jogo"] = "TERMINAL"; novos_estados["variavel_texto_terminal"] = ""; print("Abrindo terminal de cheats...")
+                        else:
+                            print("[PVP] Terminal desabilitado no modo PVP.") # <--- BLOQUEIA NO PVP
                     
                     # 'ESC' para Pause (Permitido em todos)
                     elif event.key == pygame.K_ESCAPE: 
+                        novos_estados["estado_anterior_pause"] = estado_jogo # <-- SALVA MEMÓRIA
                         novos_estados["estado_jogo"] = "PAUSE"; print("Jogo Pausado.")
                     
                     # 'R' para Regenerar (Permitido APENAS no PVE)
@@ -244,6 +250,7 @@ class EventHandler:
                     if event.button == 1: # Esquerdo (LMB)
                         # Botão Upgrade (Permitido no Lobby e Countdown)
                         if ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela) and estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN"]:
+                             novos_estados["estado_anterior_loja"] = estado_jogo
                              novos_estados["estado_jogo"] = "LOJA"; print("Abrindo loja via clique no botão HUD...")
                         
                         # Botão Regenerar (Permitido APENAS no PVE)
@@ -357,7 +364,7 @@ class EventHandler:
                 # --- INÍCIO: MODIFICAÇÃO (Voltar do Pause no PVP) ---
                 if action == "RESUME_GAME":
                     # Verifica o estado ANTES de pausar (que está em 'game_state')
-                    estado_anterior = game_state.get("estado_jogo", "JOGANDO")
+                    estado_anterior = game_state.get("estado_anterior_pause", "JOGANDO") # <-- CORRIGIDO
                     
                     if estado_anterior.startswith("PVP_"):
                         novos_estados["estado_jogo"] = estado_anterior # Volta para PVP_LOBBY, PVP_PLAYING, etc.
@@ -437,14 +444,14 @@ class EventHandler:
                         novos_estados["max_bots_atual"] += 1
             
             elif estado_jogo == "LOJA":
-                # --- INÍCIO: MODIFICAÇÃO (Voltar da Loja no PVP) ---
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_v:
-                    # Descobre de qual estado o jogador veio (PVP ou PVE)
-                    estado_anterior = game_state.get("estado_jogo", "JOGANDO")
-                    if estado_anterior.startswith("PVP_"):
-                        novos_estados["estado_jogo"] = estado_anterior # Volta para PVP_LOBBY, etc.
-                    else:
-                         novos_estados["estado_jogo"] = "JOGANDO"
+                    # --- INÍCIO: MODIFICAÇÃO (Voltar da Loja) ---
+                    # Lê o estado salvo (ex: "PVP_LOBBY" ou "JOGANDO")
+                    estado_para_retornar = game_state.get("estado_anterior_loja", "JOGANDO")
+                    novos_estados["estado_jogo"] = estado_para_retornar
+                    print(f"Fechando loja, retornando para: {estado_para_retornar}")
+                    # --- FIM: MODIFICAÇÃO ---
+                    
                 # --- FIM: MODIFICAÇÃO ---
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     mouse_pos = pygame.mouse.get_pos()
@@ -468,9 +475,10 @@ class EventHandler:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN:
                         self.cb_processar_cheat(novos_estados["variavel_texto_terminal"], nave_player)
-                        novos_estados["estado_jogo"] = "JOGANDO"
+                        novos_estados["estado_jogo"] = game_state.get("estado_anterior_terminal", "JOGANDO")
                     elif event.key == pygame.K_BACKSPACE: novos_estados["variavel_texto_terminal"] = novos_estados["variavel_texto_terminal"][:-1]
-                    elif event.key == pygame.K_QUOTE: novos_estados["estado_jogo"] = "JOGANDO"
+                    elif event.key == pygame.K_QUOTE: 
+                        novos_estados["estado_jogo"] = game_state.get("estado_anterior_terminal", "JOGANDO") # <--- CORRIGIDO
                     else:
                         if len(novos_estados["variavel_texto_terminal"]) < 50: novos_estados["variavel_texto_terminal"] += event.unicode
             

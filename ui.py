@@ -671,10 +671,16 @@ def desenhar_ranking(surface, lista_top_5, nave_player):
         
         # --- INÍCIO: MODIFICAÇÃO (Ranking PVP por Vida) ---
         # Se os pontos forem 0, assume que é PVP e mostra a vida
-        if nave.pontos == 0:
-             texto_pontos = f"{int(nave.vida_atual)} HP"
+        if hasattr(nave, 'max_vida'):
+            # Se for 'Nave' (Offline) E tiver 0 pontos, é PVP, mostra HP
+            if nave.pontos == 0:
+                 texto_pontos = f"{int(nave.vida_atual)} HP"
+            # Se for 'Nave' (Offline) E tiver >0 pontos, é PVE, mostra Pontos
+            else:
+                 texto_pontos = f"{nave.pontos}"
+        # Senão, é um 'RankingEntry' (Online), SEMPRE mostra pontos
         else:
-             texto_pontos = f"{nave.pontos}"
+            texto_pontos = f"{nave.pontos}"
         # --- FIM: MODIFICAÇÃO ---
         
         pontos_surf = FONT_RANKING.render(texto_pontos, True, cor_texto)
