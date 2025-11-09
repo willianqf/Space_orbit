@@ -67,10 +67,11 @@ class NaveAuxiliar(pygame.sprite.Sprite):
         self.angulo = self.owner.angulo; self.alvo_atual = None; self.distancia_tiro = 600; self.cooldown_tiro = 1000; self.ultimo_tiro_tempo = 0
 
     # --- INÍCIO DA MODIFICAÇÃO (Assinatura e lógica Online) ---
-    def update(self, lista_alvos, grupo_projeteis_destino, estado_jogo_atual, nave_player_ref, client_socket=None, online_players={}, online_npcs={}):
+    def update(self, lista_alvos, grupo_projeteis_destino, estado_jogo_atual, nave_player_ref, client_socket=None, online_players={}, online_npcs={}, pos_ouvinte=None): # <-- MODIFICADO
         """
         lista_alvos: (Offline) lista de sprites. (Online) Vazio.
         online_players/online_npcs: (Online) Dicionários de estado.
+        pos_ouvinte: (Offline) Posição da câmera/jogador.
         """
         parar_ataque = (self.owner == nave_player_ref and estado_jogo_atual == "GAME_OVER")
         offset_rotacionado = self.offset_pos.rotate(-self.owner.angulo); posicao_alvo_seguir = self.owner.posicao + offset_rotacionado
@@ -109,7 +110,10 @@ class NaveAuxiliar(pygame.sprite.Sprite):
                                                        alvo_sprite=self.alvo_atual)
                         
                         grupo_projeteis_destino.add(proj)
-                        tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, nave_player_ref.posicao, VOLUME_BASE_TIRO_PLAYER)
+                        
+                        # --- MODIFICADO: Usa pos_ouvinte ---
+                        ouvinte_real = pos_ouvinte if pos_ouvinte is not None else nave_player_ref.posicao
+                        tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, ouvinte_real, VOLUME_BASE_TIRO_PLAYER)
                 else:
                     self.angulo = self.owner.angulo
             else: 
@@ -340,7 +344,7 @@ class Nave(pygame.sprite.Sprite):
             return Projetil(pos_x, pos_y, radianos, dano_real, owner_nave=self) # self.nivel_dano, owner_nave=self)
         # --- FIM: MODIFICAÇÃO ---
     
-    def lidar_com_tiros(self, grupo_destino, pos_ouvinte=None):
+    def lidar_com_tiros(self, grupo_destino, pos_ouvinte=None): # <-- MODIFICADO
         agora = pygame.time.get_ticks() 
         # --- MUDANÇA: Verifica congelamento ---
         if agora < self.tempo_fim_congelamento:
@@ -350,6 +354,8 @@ class Nave(pygame.sprite.Sprite):
             if agora - self.ultimo_tiro_tempo > self.cooldown_tiro:
                 self.ultimo_tiro_tempo = agora 
                 grupo_destino.add(self.criar_projetil())
+                
+                # --- MODIFICADO: Usa pos_ouvinte ---
                 ouvinte_real = pos_ouvinte if pos_ouvinte is not None else self.posicao
                 tocar_som_posicional(s.SOM_TIRO_PLAYER, self.posicao, ouvinte_real, VOLUME_BASE_TIRO_PLAYER)
     
@@ -595,7 +601,7 @@ class Player(Nave):
             return False 
         return super().foi_atingido(dano, estado_jogo_atual, proj_pos)
 
-    def update(self, grupo_projeteis_jogador, camera, client_socket=None):
+    def update(self, grupo_projeteis_jogador, camera, client_socket=None, pos_ouvinte=None): # <-- MODIFICADO
         if client_socket is None:
             # --- INÍCIO DA CORREÇÃO ---
             # O 'camera' DEVE ser passado para processar_input_humano
@@ -604,7 +610,8 @@ class Player(Nave):
             self.update_regeneracao()
             self.rotacionar()
             self.mover()
-            self.lidar_com_tiros(grupo_projeteis_jogador, self.posicao)
+            # --- MODIFICADO: Passa pos_ouvinte ---
+            self.lidar_com_tiros(grupo_projeteis_jogador, pos_ouvinte if pos_ouvinte is not None else self.posicao)
         else:
             self.quer_virar_esquerda = False
             self.quer_virar_direita = False
@@ -706,7 +713,7 @@ class NaveBot(Nave):
             self.parar_regeneracao() 
         return morreu
         
-    def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref):
+    def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref, pos_ouvinte=None): # <-- MODIFICADO
         # --- MUDANÇA: Passa grupo_efeitos_visuais (para NaveRegeneradora) ---
         self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref)
 
@@ -714,7 +721,8 @@ class NaveBot(Nave):
         self.rotacionar() 
         self.mover()      
         
-        self.lidar_com_tiros(grupo_projeteis_bots, player_ref.posicao)
+        # --- MODIFICADO: Passa pos_ouvinte ---
+        self.lidar_com_tiros(grupo_projeteis_bots, pos_ouvinte if pos_ouvinte is not None else player_ref.posicao)
         self.processar_upgrades_ia()
         
         # --- INÍCIO DA MODIFICAÇÃO (Correção da lógica de regeneração) ---

@@ -33,7 +33,8 @@ class Renderer:
         self.ui = ui 
 
     def draw(self, estado_jogo: str, game_globals: dict, game_groups: dict, 
-             online_data: dict, online_trackers: dict, alvo_camera_final: pygame.sprite.Sprite):
+             online_data: dict, online_trackers: dict, alvo_camera_final: pygame.sprite.Sprite,
+             pos_ouvinte: pygame.math.Vector2): # <-- MODIFICADO
         """
         Desenha um único frame completo do jogo.
         Substitui todo o bloco "13. Desenho" do main.py.
@@ -45,6 +46,7 @@ class Renderer:
             online_data: Dicionário com os estados atuais de rede (players, npcs, projectiles).
             online_trackers: Dicionário com os estados da rede do frame anterior (last_frame).
             alvo_camera_final: O sprite que a câmera deve seguir.
+            pos_ouvinte: A posição do "ouvinte" de áudio (câmera).
         """
         
         # --- Extrair dados necessários ---
@@ -100,9 +102,10 @@ class Renderer:
             # 3. Entidades (Online vs Offline)
             if is_online:
                 # 3a. Desenho Online
+                # --- MODIFICADO: Passa pos_ouvinte ---
                 self._draw_online_entities(nave_player, online_players_copy, online_npcs_copy, online_projectiles_copy,
                                            online_players_last_frame, online_npcs_last_frame, online_projectile_ids_last_frame,
-                                           grupo_explosoes)
+                                           grupo_explosoes, pos_ouvinte)
             else:
                 # 3b. Desenho Offline
                 self._draw_offline_entities(grupo_inimigos, grupo_bots, grupo_projeteis_player,
@@ -134,7 +137,7 @@ class Renderer:
     
     def _draw_online_entities(self, nave_player, online_players_copy, online_npcs_copy, online_projectiles_copy,
                               online_players_last_frame, online_npcs_last_frame, online_projectile_ids_last_frame,
-                              grupo_explosoes):
+                              grupo_explosoes, pos_ouvinte: pygame.math.Vector2): # <-- MODIFICADO
         """ Desenha todas as entidades de rede (outros players, NPCs, projéteis). """
         
         # --- Lógica de Som/Efeitos de Morte (amarrada ao desenho) ---
@@ -154,7 +157,8 @@ class Renderer:
             else: 
                 som_a_tocar = s.SOM_TIRO_PLAYER; vol_base = s.VOLUME_BASE_TIRO_PLAYER
             
-            tocar_som_posicional(som_a_tocar, pos_som, nave_player.posicao, vol_base)
+            # --- MODIFICADO: Usa pos_ouvinte ---
+            tocar_som_posicional(som_a_tocar, pos_som, pos_ouvinte, vol_base)
 
         
         current_npc_ids = set(online_npcs_copy.keys())
@@ -179,9 +183,11 @@ class Renderer:
                     grupo_explosoes.add(explosao)
                     
                     if npc['tipo'] in ['mothership', 'boss_congelante']:
-                        tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, pos_npc, nave_player.posicao, s.VOLUME_BASE_EXPLOSAO_BOSS)
+                        # --- MODIFICADO: Usa pos_ouvinte ---
+                        tocar_som_posicional(s.SOM_EXPLOSAO_BOSS, pos_npc, pos_ouvinte, s.VOLUME_BASE_EXPLOSAO_BOSS)
                     else:
-                        tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_npc, nave_player.posicao, s.VOLUME_BASE_EXPLOSAO_NPC)
+                        # --- MODIFICADO: Usa pos_ouvinte ---
+                        tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_npc, pos_ouvinte, s.VOLUME_BASE_EXPLOSAO_NPC)
         
         current_player_names = set(online_players_copy.keys())
         dead_player_states = [player for name, player in online_players_last_frame.items() if name not in current_player_names]
@@ -190,7 +196,8 @@ class Renderer:
              pos_player = pygame.math.Vector2(player['x'], player['y'])
              explosao = Explosao(pos_player, 30 // 2 + 10) 
              grupo_explosoes.add(explosao)
-             tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_player, nave_player.posicao, s.VOLUME_BASE_EXPLOSAO_NPC)
+             # --- MODIFICADO: Usa pos_ouvinte ---
+             tocar_som_posicional(s.SOM_EXPLOSAO_NPC, pos_player, pos_ouvinte, s.VOLUME_BASE_EXPLOSAO_NPC)
 
         # --- Desenho das Entidades de Rede ---
         MEU_NOME_REDE = self.network_client.get_my_name()

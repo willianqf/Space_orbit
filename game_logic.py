@@ -24,7 +24,7 @@ class GameLogic:
         self.cb_spawnar_mothership = main_callbacks["spawnar_mothership"]
         self.cb_spawnar_boss_congelante = main_callbacks["spawnar_boss_congelante"]
 
-    def update_offline_logic(self, game_state: dict, game_groups: dict):
+    def update_offline_logic(self, game_state: dict, game_groups: dict, pos_ouvinte: pygame.math.Vector2): # <-- MODIFICADO
         """
         Processa toda a lógica de jogo offline (spawns, updates, colisões).
         (CORRIGIDO: Colisões de Bots agora rodam fora do estado "JOGANDO")
@@ -50,8 +50,9 @@ class GameLogic:
         # --- 1. Atualização de Grupos ---
         lista_alvos_naves = game_state["lista_alvos_naves"] # Pega a lista já filtrada
 
-        grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos, grupo_efeitos_visuais)
-        grupo_inimigos.update(lista_alvos_naves, grupo_projeteis_inimigos, s.DESPAWN_DIST)
+        # --- MODIFICADO: Passa pos_ouvinte ---
+        grupo_bots.update(nave_player, grupo_projeteis_bots, grupo_bots, grupo_inimigos, grupo_obstaculos, grupo_efeitos_visuais, pos_ouvinte)
+        grupo_inimigos.update(lista_alvos_naves, grupo_projeteis_inimigos, s.DESPAWN_DIST, pos_ouvinte)
         
         grupo_projeteis_player.update()
         grupo_projeteis_bots.update()
@@ -86,25 +87,29 @@ class GameLogic:
         # (Mesmo se o jogador estiver espectando)
 
         # Colisões de Projéteis de Bots (vs Obstáculos, Inimigos, e outros Bots)
-        self._handle_bot_projectile_collisions(nave_player, grupo_projeteis_bots, grupo_obstaculos, grupo_inimigos, grupo_bots, estado_jogo)
+        # --- MODIFICADO: Passa pos_ouvinte ---
+        self._handle_bot_projectile_collisions(nave_player, grupo_projeteis_bots, grupo_obstaculos, grupo_inimigos, grupo_bots, estado_jogo, pos_ouvinte)
         
         # Colisões de Projéteis Inimigos (vs Bots)
         self._handle_enemy_projectile_collisions_vs_bots(grupo_bots, grupo_projeteis_inimigos, estado_jogo)
         
         # Colisões de Ramming (Bots vs Inimigos)
-        self._handle_ramming_collisions_bots_vs_enemies(grupo_bots, grupo_inimigos, estado_jogo, nave_player)
+        # --- MODIFICADO: Passa pos_ouvinte ---
+        self._handle_ramming_collisions_bots_vs_enemies(grupo_bots, grupo_inimigos, estado_jogo, nave_player, pos_ouvinte)
         
         # --- Bloco 3B: Colisões que SÓ AFETAM O JOGADOR ---
         if (estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL"):
         
             # Colisões de Projéteis de Jogador (vs Obstáculos, Inimigos, Bots)
-            self._handle_player_projectile_collisions(nave_player, grupo_projeteis_player, grupo_obstaculos, grupo_inimigos, grupo_bots, estado_jogo)
+            # --- MODIFICADO: Passa pos_ouvinte ---
+            self._handle_player_projectile_collisions(nave_player, grupo_projeteis_player, grupo_obstaculos, grupo_inimigos, grupo_bots, estado_jogo, pos_ouvinte)
             
             # Colisões de Projéteis Inimigos (vs Jogador)
             self._handle_enemy_projectile_collisions_vs_player(nave_player, grupo_projeteis_inimigos, estado_jogo)
             
             # Colisões de Ramming (Jogador vs Inimigos)
-            self._handle_ramming_collisions_player_vs_enemies(nave_player, grupo_inimigos, estado_jogo)
+            # --- MODIFICADO: Passa pos_ouvinte ---
+            self._handle_ramming_collisions_player_vs_enemies(nave_player, grupo_inimigos, estado_jogo, pos_ouvinte)
             
             # Colisões de Ramming (Jogador vs Bots)
             self._handle_ramming_collisions_player_vs_bots(nave_player, grupo_bots, estado_jogo)
@@ -131,7 +136,7 @@ class GameLogic:
 
     # --- FUNÇÕES DE COLISÃO DO JOGADOR (SÓ RODAM QUANDO VIVO) ---
 
-    def _handle_player_projectile_collisions(self, nave_player, grupo_projeteis_player, grupo_obstaculos, grupo_inimigos, grupo_bots, estado_jogo):
+    def _handle_player_projectile_collisions(self, nave_player, grupo_projeteis_player, grupo_obstaculos, grupo_inimigos, grupo_bots, estado_jogo, pos_ouvinte): # <-- MODIFICADO
         """ Processa colisões dos projéteis do jogador. """
         
         # Player Proj vs Obstáculos
@@ -147,7 +152,7 @@ class GameLogic:
                 morreu = inimigo.foi_atingido(proj.dano)
                 if morreu:
                     nave_player.ganhar_pontos(inimigo.pontos_por_morte)
-                    self._tocar_som_explosao(inimigo, nave_player.posicao)
+                    self._tocar_som_explosao(inimigo, pos_ouvinte) # <-- MODIFICADO
         
         # Player Proj vs Bots (PVP Amigável)
         colisoes = pygame.sprite.groupcollide(grupo_projeteis_player, grupo_bots, True, False)
@@ -170,7 +175,7 @@ class GameLogic:
             proj.kill()
             # (A checagem de morte do player acontece no final do update_offline_logic)
 
-    def _handle_ramming_collisions_player_vs_enemies(self, nave_player, grupo_inimigos, estado_jogo):
+    def _handle_ramming_collisions_player_vs_enemies(self, nave_player, grupo_inimigos, estado_jogo, pos_ouvinte): # <-- MODIFICADO
         """ Processa colisões de corpo a corpo (Jogador vs Inimigos). """
         colisoes_ram_inimigo_player = pygame.sprite.spritecollide(nave_player, grupo_inimigos, False)
         for inimigo in colisoes_ram_inimigo_player:
@@ -180,7 +185,7 @@ class GameLogic:
             morreu = inimigo.foi_atingido(1)
             if morreu:
                 nave_player.ganhar_pontos(inimigo.pontos_por_morte)
-                self._tocar_som_explosao(inimigo, nave_player.posicao)
+                self._tocar_som_explosao(inimigo, pos_ouvinte) # <-- MODIFICADO
             # (A checagem de morte do player acontece no final)
 
     def _handle_ramming_collisions_player_vs_bots(self, nave_player, grupo_bots, estado_jogo):
@@ -193,7 +198,7 @@ class GameLogic:
 
     # --- FUNÇÕES DE COLISÃO DOS BOTS (SEMPRE RODAM) ---
 
-    def _handle_bot_projectile_collisions(self, nave_player, grupo_projeteis_bots, grupo_obstaculos, grupo_inimigos, grupo_bots, estado_jogo):
+    def _handle_bot_projectile_collisions(self, nave_player, grupo_projeteis_bots, grupo_obstaculos, grupo_inimigos, grupo_bots, estado_jogo, pos_ouvinte): # <-- MODIFICADO
         """ Processa colisões dos projéteis dos bots (vs tudo). """
 
         # Bot Proj vs Obstáculos
@@ -213,7 +218,7 @@ class GameLogic:
                     morreu = inimigo.foi_atingido(proj.dano)
                     if morreu:
                         owner_do_tiro.ganhar_pontos(inimigo.pontos_por_morte)
-                        self._tocar_som_explosao(inimigo, nave_player.posicao)
+                        self._tocar_som_explosao(inimigo, pos_ouvinte) # <-- MODIFICADO
 
         # Bot Proj vs Bots (PVP Amigável)
         colisoes_bot_vs_bot = pygame.sprite.groupcollide(grupo_projeteis_bots, grupo_bots, True, False)
@@ -251,7 +256,7 @@ class GameLogic:
                     bot.foi_atingido(1, estado_jogo, proj.posicao)
                 proj.kill()
                 
-    def _handle_ramming_collisions_bots_vs_enemies(self, grupo_bots, grupo_inimigos, estado_jogo, nave_player):
+    def _handle_ramming_collisions_bots_vs_enemies(self, grupo_bots, grupo_inimigos, estado_jogo, nave_player, pos_ouvinte): # <-- MODIFICADO
         """ Processa colisões de corpo a corpo (Bots vs Inimigos). """
         for bot in grupo_bots:
             inimigos_colididos = pygame.sprite.spritecollide(bot, grupo_inimigos, False)
@@ -261,4 +266,4 @@ class GameLogic:
                 morreu = inimigo.foi_atingido(1)
                 if morreu: 
                     bot.ganhar_pontos(inimigo.pontos_por_morte)
-                    self._tocar_som_explosao(inimigo, nave_player.posicao)
+                    self._tocar_som_explosao(inimigo, pos_ouvinte) # <-- MODIFICADO

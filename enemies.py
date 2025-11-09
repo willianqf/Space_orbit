@@ -82,12 +82,13 @@ class InimigoBase(pygame.sprite.Sprite):
             # --- FIM CORREÇÃO ---
 
     # Método update padrão (será sobrescrito pelas classes filhas)
-    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn): pass
+    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn, pos_ouvinte=None): # <-- MODIFICADO
+        pass
 
 
 # --- Minion Congelante --- (Definido ANTES do Boss)
 class MinionCongelante(InimigoBase):
-    # ... (código da classe MinionCongelante inalterado) ...
+    # ... (código da classe MinionCongelante init inalterado) ...
     def __init__(self, x, y, owner_boss, index, max_minions): # <-- MODIFICADO
         # Chama o init base com stats corretos do minion
         super().__init__(x, y, tamanho=18, cor=AZUL_MINION_CONGELANTE, vida=HP_MINION_CONGELANTE)
@@ -109,7 +110,7 @@ class MinionCongelante(InimigoBase):
         # --- FIM DA MODIFICAÇÃO ---
 
 
-    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
+    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn, pos_ouvinte=None): # <-- MODIFICADO
         # --- Verificações Iniciais ---
         if not self.owner or not self.owner.groups():
             self.kill(); return
@@ -123,13 +124,7 @@ class MinionCongelante(InimigoBase):
         alvo_tiro = None
         dist_min_tiro = float('inf')
         
-        # --- MODIFICAÇÃO: Encontra o ouvinte (player) ---
-        pos_ouvinte = None
-        for alvo in lista_alvos_naves:
-            if type(alvo).__name__ == 'Player':
-                pos_ouvinte = alvo.posicao
-                break # Encontrou o player, pode parar
-        # --- FIM MODIFICAÇÃO ---
+        # --- MODIFICAÇÃO: Bloco de encontrar 'pos_ouvinte' REMOVIDO ---
 
         # Prioriza atacante do boss
         atacante_do_boss = None
@@ -304,21 +299,16 @@ class BossCongelante(InimigoBase):
         return morreu
 
     # ... (código do update inalterado) ...
-    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
+    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn, pos_ouvinte=None): # <-- MODIFICADO
         # Lógica base de despawn
         pos_referencia = self.posicao
         alvo_mais_proximo_geral = None
         dist_min_geral = float('inf')
         
-        # --- MODIFICAÇÃO: Encontra o ouvinte (player) ---
-        pos_ouvinte = None
-        # --- FIM MODIFICAÇÃO ---
+        # --- MODIFICAÇÃO: Bloco de encontrar 'pos_ouvinte' REMOVIDO ---
         
         for alvo in lista_alvos_naves:
-             # --- MODIFICAÇÃO: Pega a posição do player ---
-            if type(alvo).__name__ == 'Player':
-                pos_ouvinte = alvo.posicao
-             # --- FIM MODIFICAÇÃO ---
+             # --- MODIFICAÇÃO: Pega a posição do player (REMOVIDO) ---
 
             is_player = type(alvo).__name__ == 'Player'
             is_active_bot = type(alvo).__name__ == 'NaveBot' and alvo.groups()
@@ -434,18 +424,13 @@ class InimigoPerseguidor(InimigoBase):
         self.ultimo_tiro_tempo = 0; self.distancia_tiro = 500; self.pontos_por_morte = 5
         self.distancia_deteccao = s.NPC_AGGRO_RANGE
 
-    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
+    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn, pos_ouvinte=None): # <-- MODIFICADO
         alvo_mais_proximo = None; dist_min = float('inf')
         
-        # --- MODIFICAÇÃO: Encontra o ouvinte (player) ---
-        pos_ouvinte = None
-        # --- FIM MODIFICAÇÃO ---
+        # --- MODIFICAÇÃO: Bloco de encontrar 'pos_ouvinte' REMOVIDO ---
 
         for alvo in lista_alvos_naves:
-             # --- MODIFICAÇÃO: Pega a posição do player ---
-            if type(alvo).__name__ == 'Player':
-                pos_ouvinte = alvo.posicao
-             # --- FIM MODIFICAÇÃO ---
+             # --- MODIFICAÇÃO: Pega a posição do player (REMOVIDO) ---
         
             is_player = type(alvo).__name__ == 'Player'
             is_active_bot = type(alvo).__name__ == 'NaveBot' and alvo.groups()
@@ -505,7 +490,7 @@ class InimigoBomba(InimigoBase):
         self.velocidade = 3; self.DANO_EXPLOSAO = 3; self.pontos_por_morte = 3
         self.distancia_deteccao = s.NPC_AGGRO_RANGE
 
-    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
+    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn, pos_ouvinte=None): # <-- MODIFICADO
         alvo_mais_proximo = None; dist_min = float('inf')
         for alvo in lista_alvos_naves:
             is_player = type(alvo).__name__ == 'Player'
@@ -608,18 +593,13 @@ class InimigoAtordoador(InimigoPerseguidor):
         self.velocidade = 1.0; self.cooldown_tiro = 5000; self.pontos_por_morte = 25
 
     # Update precisa passar o sprite do alvo para 'atirar'
-    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
+    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn, pos_ouvinte=None): # <-- MODIFICADO
         alvo_mais_proximo = None; dist_min = float('inf')
         
-        # --- MODIFICAÇÃO: Encontra o ouvinte (player) ---
-        pos_ouvinte = None
-        # --- FIM MODIFICAÇÃO ---
+        # --- MODIFICAÇÃO: Bloco de encontrar 'pos_ouvinte' REMOVIDO ---
 
         for alvo in lista_alvos_naves:
-             # --- MODIFICAÇÃO: Pega a posição do player ---
-            if type(alvo).__name__ == 'Player':
-                pos_ouvinte = alvo.posicao
-             # --- FIM MODIFICAÇÃO ---
+             # --- MODIFICAÇÃO: Pega a posição do player (REMOVIDO) ---
         
             is_player = type(alvo).__name__ == 'Player'
             is_active_bot = type(alvo).__name__ == 'NaveBot' and alvo.groups()
@@ -691,7 +671,7 @@ class InimigoMinion(InimigoBase):
             if tocar_som_posicional and pos_ouvinte and s.SOM_TIRO_INIMIGO_SIMPLES:
                 tocar_som_posicional(s.SOM_TIRO_INIMIGO_SIMPLES, self.posicao, pos_ouvinte, VOLUME_BASE_TIRO_INIMIGO)
 
-    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
+    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn, pos_ouvinte=None): # <-- MODIFICADO
         # Verifica se dono ou alvo ainda existem e se estão perto
         
         # --- INÍCIO DA MODIFICAÇÃO (MOTHERSHIP MINION TARGETING) ---
@@ -717,16 +697,7 @@ class InimigoMinion(InimigoBase):
         # --- FIM DA MODIFICAÇÃO (MOTHERSHIP MINION TARGETING) ---
 
         
-        # --- MODIFICAÇÃO: Encontra o ouvinte (player) ---
-        pos_ouvinte = None
-        if self.target and type(self.target).__name__ == 'Player':
-            pos_ouvinte = self.target.posicao
-        else: # Procura o player na lista
-             for alvo in lista_alvos_naves:
-                if type(alvo).__name__ == 'Player':
-                    pos_ouvinte = alvo.posicao
-                    break
-        # --- FIM MODIFICAÇÃO ---
+        # --- MODIFICAÇÃO: Bloco de encontrar 'pos_ouvinte' REMOVIDO ---
 
         # Órbita
         self.angulo_orbita_atual = (self.angulo_orbita_atual + self.velocidade_orbita) % 360; rad = math.radians(self.angulo_orbita_atual)
@@ -816,7 +787,7 @@ class InimigoMothership(InimigoPerseguidor):
         return morreu
 
 
-    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn):
+    def update(self, lista_alvos_naves, grupo_projeteis_inimigos, dist_despawn, pos_ouvinte=None): # <-- MODIFICADO
         # Lógica base de despawn
         pos_referencia = self.posicao
         alvo_mais_proximo_ref = None

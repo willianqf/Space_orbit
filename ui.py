@@ -441,11 +441,17 @@ def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height,
     ratio_x = MINIMAP_WIDTH / map_width
     ratio_y = MINIMAP_HEIGHT / map_height
     def get_pos_minimapa(pos_mundo_vec):
-        map_x = int((pos_mundo_vec.x * ratio_x) + MINIMAP_POS_X)
-        map_y = int((pos_mundo_vec.y * ratio_y) + MINIMAP_POS_Y)
-        map_x = max(MINIMAP_POS_X + 1, min(map_x, MINIMAP_POS_X + MINIMAP_WIDTH - 2))
-        map_y = max(MINIMAP_POS_Y + 1, min(map_y, MINIMAP_POS_Y + MINIMAP_HEIGHT - 2))
-        return (map_x, map_y)
+        # Proteção contra pos_mundo_vec None
+        if pos_mundo_vec is None:
+            return (0, 0) # Posição inválida
+        try:
+            map_x = int((pos_mundo_vec.x * ratio_x) + MINIMAP_POS_X)
+            map_y = int((pos_mundo_vec.y * ratio_y) + MINIMAP_POS_Y)
+            map_x = max(MINIMAP_POS_X + 1, min(map_x, MINIMAP_POS_X + MINIMAP_WIDTH - 2))
+            map_y = max(MINIMAP_POS_Y + 1, min(map_y, MINIMAP_POS_Y + MINIMAP_HEIGHT - 2))
+            return (map_x, map_y)
+        except (AttributeError, TypeError):
+             return (0, 0) # Retorno seguro
 
     # --- MODIFICAÇÃO 2: Adicionar lógica da visão ampla ---
     # --- INÍCIO DA NOVA LÓGICA DE ZOOM (VISÃO AMPLA) ---
@@ -489,17 +495,60 @@ def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height,
     else:
         for bot in bots:
             pygame.draw.circle(surface, LARANJA_BOT, get_pos_minimapa(bot.posicao), 2)
+            
+            
+    # --- INÍCIO DA MODIFICAÇÃO: Desenhar Trilha "Serrilhada" ---
+    # Verifica se o jogador tem um alvo de clique (posicao_alvo_mouse) e está vivo
+    if (estado_jogo == "JOGANDO" and player.posicao_alvo_mouse and player.vida_atual > 0):
+        
+        start_mini_v = pygame.math.Vector2(get_pos_minimapa(player.posicao))
+        end_mini_v = pygame.math.Vector2(get_pos_minimapa(player.posicao_alvo_mouse))
+        
+        vec = end_mini_v - start_mini_v
+        length = vec.length()
+        
+        if length > 0:
+            try:
+                direction = vec.normalize()
+                dash_len = 4  # Comprimento do traço
+                gap_len = 3   # Comprimento do espaço
+                total_step = dash_len + gap_len
+                current_dist = 0
+                
+                # Desenha a linha tracejada
+                while current_dist < length:
+                    start_dash = start_mini_v + direction * current_dist
+                    end_dist = min(current_dist + dash_len, length)
+                    end_dash = start_mini_v + direction * end_dist
+                    
+                    # Desenha o segmento
+                    pygame.draw.line(surface, BRANCO, (start_dash.x, start_dash.y), (end_dash.x, end_dash.y), 1)
+                    
+                    current_dist += total_step
+            except ValueError:
+                pass # Evita crash se o vetor for (0,0)
+    # --- FIM DA MODIFICAÇÃO ---
+
     
-    # --- INÍCIO DA MODIFICAÇÃO 2 (BUG 3): Condição de desenho do player ---
-    # Só desenha o ícone azul do jogador se ele estiver jogando E vivo E
-    # NÃO estiver no modo "espectador-vivo" (voluntário)
-        # --- INÍCIO: CORREÇÃO (Não desenha jogador espectador no minimapa) ---
-    if estado_jogo == "JOGANDO" and player.vida_atual > 0:
-        pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(player.posicao), 3)
-    elif estado_jogo == "ESPECTADOR" and not jogador_esta_vivo_espectador and player.vida_atual > 0:
-        # Desenha se estiver espectando morto (mas com vida) - caso raro de respawn
-        pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(player.posicao), 3)
-    # --- FIM: CORREÇÃO ---)
+    # --- INÍCIO DA MODIFICAÇÃO (Foco do Espectador no Minimapa) ---
+    # A lógica anterior foi removida.
+    # O ponto azul (AZUL_NAVE) agora representa o 'alvo_camera_atual'.
+    
+    # No modo JOGANDO, o alvo é o player. Só desenhamos se ele estiver vivo.
+    if estado_jogo == "JOGANDO":
+        if player.vida_atual > 0:
+            # alvo_camera_atual == player, então usamos sua posição
+            pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(alvo_camera_atual.posicao), 3)
+            
+    # No modo ESPECTADOR, sempre desenhamos o 'alvo_camera_atual'
+    # (seja o bot, player ciclado, ou a câmera livre).
+    elif estado_jogo == "ESPECTADOR":
+        # Verifica se o alvo_camera_atual não é None (pode acontecer brevemente)
+        if alvo_camera_atual:
+            pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(alvo_camera_atual.posicao), 3)
+
+    # --- FIM DA MODIFICAÇÃO ---
+    # --- FIM DA MODIFICAÇÃO ---
 
 def desenhar_ranking(surface, lista_top_5, nave_player):
     pos_x_base = MINIMAP_POS_X

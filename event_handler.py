@@ -213,7 +213,41 @@ class EventHandler:
                             nave_player.quer_mover_tras = False
 
                     elif event.button == 3: # Direito (RMB)
-                        if agora > nave_player.tempo_spawn_protecao_input:
+                        mouse_pos_tela = pygame.mouse.get_pos() # Pega a posição do mouse aqui
+
+                        # --- INÍCIO DA MODIFICAÇÃO: Clique no Minimapa ---
+                        if (agora > nave_player.tempo_spawn_protecao_input and 
+                            ui.MINIMAP_RECT.collidepoint(mouse_pos_tela) and
+                            not is_online): # Clique no minimapa (só funciona offline por enquanto)
+                            
+                            print("Clique no Minimapa detectado!") # Log
+
+                            # 1. Calcula a posição relativa do clique dentro do minimapa
+                            click_x_rel = mouse_pos_tela[0] - ui.MINIMAP_RECT.left
+                            click_y_rel = mouse_pos_tela[1] - ui.MINIMAP_RECT.top
+                            
+                            # 2. Calcula a proporção do mapa para o minimapa
+                            ratio_x = s.MAP_WIDTH / ui.MINIMAP_WIDTH
+                            ratio_y = s.MAP_HEIGHT / ui.MINIMAP_HEIGHT
+                            
+                            # 3. Converte a posição relativa em coordenada do mundo
+                            world_x = click_x_rel * ratio_x
+                            world_y = click_y_rel * ratio_y
+                            
+                            # 4. Define o alvo de movimento do jogador
+                            destino = pygame.math.Vector2(world_x, world_y)
+                            nave_player.posicao_alvo_mouse = destino
+                            
+                            # Limpa intenções de movimento por tecla
+                            nave_player.quer_mover_frente = False 
+                            nave_player.quer_mover_tras = False
+                            
+                            # Limpa o alvo de mira
+                            nave_player.alvo_selecionado = None
+                        
+                        # --- FIM DA MODIFICAÇÃO ---
+
+                        elif agora > nave_player.tempo_spawn_protecao_input: # Lógica original de mirar
                             mouse_pos_mundo = self.camera.get_mouse_world_pos(mouse_pos_tela)
                             
                             if is_online:

@@ -517,6 +517,10 @@ while game_globals["rodando"]:
          alvo_camera_final = nave_player 
     camera.update(alvo_camera_final)
 
+    # --- INÍCIO DA MODIFICAÇÃO: Posição do Ouvinte de Áudio ---
+    # O ouvinte de áudio é SEMPRE o alvo final da câmera
+    posicao_ouvinte_som = alvo_camera_final.posicao
+    # --- FIM DA MODIFICAÇÃO ---
 
     # 4b. Lógica de Jogo (Online/Offline)
     online_players_copy = {}; online_npcs_copy = {}; online_projectiles_copy = []
@@ -605,7 +609,9 @@ while game_globals["rodando"]:
                 game_state_logica["estado_jogo"] = estado_jogo
                 game_state_logica["dificuldade_jogo_atual"] = dificuldade_jogo_atual
                 
-                novo_estado_jogo = game_logic_handler.update_offline_logic(game_state_logica, game_groups)
+                # --- MODIFICAÇÃO: Passa a posição do ouvinte ---
+                novo_estado_jogo = game_logic_handler.update_offline_logic(game_state_logica, game_groups, posicao_ouvinte_som)
+                # --- FIM DA MODIFICAÇÃO ---
                 
                 if novo_estado_jogo == "ESPECTADOR" and estado_jogo != "ESPECTADOR":
                     estado_jogo = "ESPECTADOR"
@@ -617,13 +623,15 @@ while game_globals["rodando"]:
                     espectador_dummy_alvo.posicao = nave_player.posicao.copy()
             # --- FIM DA CORREÇÃO ---
         
+        # --- MODIFICAÇÃO: Passa a posição do ouvinte para os updates dos auxiliares ---
         for bot in grupo_bots: 
-            bot.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_bots, estado_jogo, nave_player, None, {}, {})
+            bot.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_bots, estado_jogo, nave_player, None, {}, {}, posicao_ouvinte_som)
         if nave_player.vida_atual > 0:
             nave_player.grupo_auxiliares_ativos.update(
                 lista_todos_alvos_para_aux, grupo_projeteis_player, estado_jogo, nave_player, 
-                network_client.client_socket, online_players_copy, online_npcs_copy     
+                network_client.client_socket, online_players_copy, online_npcs_copy, posicao_ouvinte_som     
             )
+        # --- FIM DA MODIFICAÇÃO ---
             
         # --- INÍCIO DA CORREÇÃO (BUG DO PAUSE) ---
         # Os efeitos visuais (como explosões) também devem pausar.
@@ -633,7 +641,9 @@ while game_globals["rodando"]:
 
     if estado_jogo == "JOGANDO":
         if not is_online:
-            nave_player.update(grupo_projeteis_player, camera, None)
+            # --- MODIFICAÇÃO: Passa a posição do ouvinte ---
+            nave_player.update(grupo_projeteis_player, camera, None, posicao_ouvinte_som)
+            # --- FIM DA MODIFICAÇÃO ---
 
     # 5. Desenho (Etapa 4)
     online_data = {
@@ -648,8 +658,10 @@ while game_globals["rodando"]:
     }
     
     # Chamada nova (correta):
+    # --- MODIFICAÇÃO: Passa a posição do ouvinte ---
     renderer.draw(estado_jogo, game_globals, game_groups, online_data, 
-                  online_trackers, alvo_camera_final)
+                  online_trackers, alvo_camera_final, posicao_ouvinte_som)
+    # --- FIM DA MODIFICAÇÃO ---
 
 
     # 6. Atualização de Trackers (Pós-Desenho)
