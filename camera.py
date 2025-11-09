@@ -43,8 +43,14 @@ class Camera:
         return pygame.Rect(final_x, final_y, scaled_w, scaled_h)
 
 
-    def update(self, alvo):
+    def update(self, alvo, map_width=None, map_height=None):
         """ Atualiza o offset da câmera para centralizar o 'alvo'. """
+        
+        # Usa MAP_WIDTH e MAP_HEIGHT de settings se não forem fornecidos
+        if map_width is None:
+            map_width = MAP_WIDTH
+        if map_height is None:
+            map_height = MAP_HEIGHT
         
         # O alvo deve ter um atributo 'posicao' (pygame.math.Vector2)
         x = -alvo.posicao.x + int(self.largura / 2)
@@ -59,9 +65,9 @@ class Camera:
         else:
             # Limita o scroll às bordas do mapa (lógica original)
             x = min(0, x)  # Borda esquerda
-            x = max(-(MAP_WIDTH - self.largura), x)  # Borda direita
+            x = max(-(map_width - self.largura), x)  # Borda direita
             y = min(0, y)  # Borda superior
-            y = max(-(MAP_HEIGHT - self.altura), y)  # Borda inferior
+            y = max(-(map_height - self.altura), y)  # Borda inferior
 
         self.camera_rect.topleft = (x, y)
 

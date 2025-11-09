@@ -11,6 +11,7 @@ from ships import Player, NaveBot, NaveAuxiliar, Nave, NaveRegeneradora, tocar_s
 # --- FIM: MODIFICAÇÃO ---
 from effects import Explosao
 from entities import Obstaculo
+from multi import pvp_settings as pvp_s
 
 class Renderer:
     def __init__(self, tela: pygame.Surface, camera: Camera, pause_manager: PauseMenu, 
@@ -348,9 +349,11 @@ class Renderer:
         """ Desenha o sprite do jogador principal, se aplicável. """
         jogador_visivel = False
         
-        if estado_jogo in ["JOGANDO", "PAUSE", "LOJA", "TERMINAL"]:
+        # --- MODIFICAÇÃO PVP: Trata estados PVP como "JOGANDO" ---
+        if estado_jogo in ["JOGANDO", "PAUSE", "LOJA", "TERMINAL", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
             if nave_player.vida_atual > 0:
                 jogador_visivel = True
+        # --- FIM MODIFICAÇÃO PVP ---
         
         elif estado_jogo == "ESPECTADOR" and jogador_esta_vivo_espectador:
             if is_online and nave_player.vida_atual > 0:
@@ -368,33 +371,60 @@ class Renderer:
                           grupo_bots, alvo_camera_final):
         """ Desenha os elementos de UI (HUD, Minimapa, Ranking). """
         
-        if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
+        # --- MODIFICAÇÃO PVP: Determina se está em modo PVP ---
+        em_modo_pvp = estado_jogo in ["PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_GAME_OVER"]
+        # --- FIM MODIFICAÇÃO PVP ---
+        
+        # HUD
+        if estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
              self.ui.desenhar_hud(self.tela, nave_player, estado_jogo)
         
-        if estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", "ESPECTADOR"]:
+        # Minimapa e Ranking
+        if estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", "ESPECTADOR", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
             MEU_NOME_REDE = self.network_client.get_my_name()
             
-            self.ui.desenhar_minimapa(self.tela, nave_player, grupo_bots, estado_jogo, s.MAP_WIDTH, s.MAP_HEIGHT, 
+            # --- MODIFICAÇÃO PVP: Usa dimensões corretas do mapa ---
+            map_width = s.MAP_WIDTH
+            map_height = s.MAP_HEIGHT
+            # --- FIM MODIFICAÇÃO PVP ---
+            
+            self.ui.desenhar_minimapa(self.tela, nave_player, grupo_bots, estado_jogo, map_width, map_height, 
                                  online_players_copy, MEU_NOME_REDE, alvo_camera_final, self.camera.zoom,
                                  game_globals["jogador_esta_vivo_espectador"]) 
             
-            # Lógica do Ranking
-            if self.network_client.is_connected():
-                class RankingEntry: # Helper class
-                    def __init__(self, nome, pontos): self.nome = nome; self.pontos = pontos
-                lista_ranking = []
-                for nome, state in online_players_copy.items():
-                    if state.get('hp', 0) <= 0: continue
-                    lista_ranking.append(RankingEntry(nome, state.get('pontos', 0)))
-                lista_ordenada = sorted(lista_ranking, key=lambda entry: entry.pontos, reverse=True); top_5 = lista_ordenada[:5]
-            else:
+            # --- MODIFICAÇÃO PVP: Lógica do Ranking ---
+            if em_modo_pvp:
+                # No PVP, ranking é baseado em VIDA, não pontos
                 todos_os_jogadores = []
-                if nave_player.vida_atual > 0 and not game_globals["jogador_esta_vivo_espectador"]:
+                if nave_player.vida_atual > 0:
                     todos_os_jogadores.append(nave_player)
                 todos_os_jogadores.extend([bot for bot in grupo_bots.sprites() if bot.vida_atual > 0])
-                lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
-            
-            self.ui.desenhar_ranking(self.tela, top_5, nave_player)
+                
+                # Ordena por vida (maior vida primeiro)
+                lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.vida_atual, reverse=True)
+                top_5 = lista_ordenada[:5]
+                
+                # Desenha ranking PVP (mostra vida ao invés de pontos)
+                self.ui.desenhar_ranking_pvp(self.tela, top_5, nave_player)
+            else:
+                # Ranking PVE (baseado em pontos)
+                if self.network_client.is_connected():
+                    class RankingEntry: # Helper class
+                        def __init__(self, nome, pontos): self.nome = nome; self.pontos = pontos
+                    lista_ranking = []
+                    for nome, state in online_players_copy.items():
+                        if state.get('hp', 0) <= 0: continue
+                        lista_ranking.append(RankingEntry(nome, state.get('pontos', 0)))
+                    lista_ordenada = sorted(lista_ranking, key=lambda entry: entry.pontos, reverse=True); top_5 = lista_ordenada[:5]
+                else:
+                    todos_os_jogadores = []
+                    if nave_player.vida_atual > 0 and not game_globals["jogador_esta_vivo_espectador"]:
+                        todos_os_jogadores.append(nave_player)
+                    todos_os_jogadores.extend([bot for bot in grupo_bots.sprites() if bot.vida_atual > 0])
+                    lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
+                
+                self.ui.desenhar_ranking(self.tela, top_5, nave_player)
+            # --- FIM MODIFICAÇÃO PVP ---
 
     def _draw_overlays(self, estado_jogo, nave_player, game_globals, is_online, num_bots_ativos,
                        LARGURA_TELA, ALTURA_TELA):
@@ -441,3 +471,89 @@ class Renderer:
             self.tela.blit(texto_ajuda2, (pos_x_spec, pos_y_spec)); pos_y_spec += texto_ajuda2.get_height() + 2
             texto_ajuda3 = s.FONT_HUD_DETALHES.render("ESC: Menu de Pausa", True, s.BRANCO)
             self.tela.blit(texto_ajuda3, (pos_x_spec, pos_y_spec))
+        
+        # --- INÍCIO: MODIFICAÇÃO (Overlays PVP) ---
+        elif estado_jogo == "PVP_LOBBY":
+            # Overlay de Lobby
+            overlay = pygame.Surface((LARGURA_TELA, ALTURA_TELA), pygame.SRCALPHA)
+            overlay.fill(pvp_s.PVP_COR_OVERLAY)
+            self.tela.blit(overlay, (0, 0))
+            
+            # Título
+            texto_titulo = pvp_s.PVP_FONT_TITULO.render(pvp_s.PVP_MSG_AGUARDANDO, True, pvp_s.PVP_COR_TEXTO_DESTAQUE)
+            rect_titulo = texto_titulo.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA // 3))
+            self.tela.blit(texto_titulo, rect_titulo)
+            
+            # Instruções
+            texto_instrucoes = pvp_s.PVP_FONT_INSTRUCOES.render(pvp_s.PVP_MSG_INSTRUCOES_LOBBY, True, pvp_s.PVP_COR_TEXTO_PRINCIPAL)
+            rect_instrucoes = texto_instrucoes.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA // 2))
+            self.tela.blit(texto_instrucoes, rect_instrucoes)
+        
+        elif estado_jogo == "PVP_COUNTDOWN":
+            # Overlay de Countdown
+            overlay = pygame.Surface((LARGURA_TELA, ALTURA_TELA), pygame.SRCALPHA)
+            overlay.fill(pvp_s.PVP_COR_OVERLAY)
+            self.tela.blit(overlay, (0, 0))
+            
+            # Calcula tempo restante
+            countdown_inicio = game_globals.get("pvp_countdown_inicio", pygame.time.get_ticks())
+            tempo_decorrido = pygame.time.get_ticks() - countdown_inicio
+            segundos_restantes = max(0, (pvp_s.PVP_TEMPO_LOBBY - tempo_decorrido) // 1000)
+            
+            # Mensagem
+            texto_msg = pvp_s.PVP_FONT_SUBTITULO.render(pvp_s.PVP_MSG_CONTAGEM, True, pvp_s.PVP_COR_TEXTO_PRINCIPAL)
+            rect_msg = texto_msg.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA // 3))
+            self.tela.blit(texto_msg, rect_msg)
+            
+            # Timer
+            texto_timer = pvp_s.PVP_FONT_TIMER.render(str(segundos_restantes), True, pvp_s.PVP_COR_CONTAGEM)
+            rect_timer = texto_timer.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA // 2))
+            self.tela.blit(texto_timer, rect_timer)
+        
+        elif estado_jogo == "PVP_PLAYING":
+            # Timer da partida (no topo da tela)
+            tempo_fim = game_globals.get("pvp_partida_timer_fim", 0)
+            agora = pygame.time.get_ticks()
+            tempo_restante_ms = max(0, tempo_fim - agora)
+            minutos = tempo_restante_ms // 60000
+            segundos = (tempo_restante_ms % 60000) // 1000
+            
+            texto_timer = pvp_s.PVP_FONT_TIMER.render(f"{minutos}:{segundos:02d}", True, pvp_s.PVP_COR_TEXTO_DESTAQUE)
+            rect_timer = texto_timer.get_rect(center=(LARGURA_TELA // 2, 30))
+            
+            # Fundo semi-transparente para o timer
+            padding = 10
+            fundo_rect = pygame.Rect(rect_timer.left - padding, rect_timer.top - padding,
+                                     rect_timer.width + 2*padding, rect_timer.height + 2*padding)
+            pygame.draw.rect(self.tela, (0, 0, 0, 180), fundo_rect)
+            
+            self.tela.blit(texto_timer, rect_timer)
+        
+        elif estado_jogo == "PVP_GAME_OVER":
+            # Overlay de Game Over
+            overlay = pygame.Surface((LARGURA_TELA, ALTURA_TELA), pygame.SRCALPHA)
+            overlay.fill(pvp_s.PVP_COR_OVERLAY)
+            self.tela.blit(overlay, (0, 0))
+            
+            vencedor_nome = game_globals.get("pvp_vencedor_nome", None)
+            
+            if vencedor_nome:
+                # Há um vencedor
+                texto_vencedor = pvp_s.PVP_FONT_TITULO.render(pvp_s.PVP_MSG_VENCEDOR, True, pvp_s.PVP_COR_TEXTO_PRINCIPAL)
+                rect_vencedor = texto_vencedor.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA // 3))
+                self.tela.blit(texto_vencedor, rect_vencedor)
+                
+                texto_nome = pvp_s.PVP_FONT_SUBTITULO.render(vencedor_nome, True, pvp_s.PVP_COR_VENCEDOR)
+                rect_nome = texto_nome.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA // 2))
+                self.tela.blit(texto_nome, rect_nome)
+            else:
+                # Empate
+                texto_empate = pvp_s.PVP_FONT_TITULO.render(pvp_s.PVP_MSG_EMPATE, True, pvp_s.PVP_COR_TEXTO_DESTAQUE)
+                rect_empate = texto_empate.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA // 2))
+                self.tela.blit(texto_empate, rect_empate)
+            
+            # Instruções
+            texto_instrucoes = pvp_s.PVP_FONT_INSTRUCOES.render(pvp_s.PVP_MSG_INSTRUCOES_FIM, True, pvp_s.PVP_COR_TEXTO_PRINCIPAL)
+            rect_instrucoes = texto_instrucoes.get_rect(center=(LARGURA_TELA // 2, ALTURA_TELA * 2 // 3))
+            self.tela.blit(texto_instrucoes, rect_instrucoes)
+        # --- FIM: MODIFICAÇÃO (Overlays PVP) ---

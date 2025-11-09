@@ -29,6 +29,7 @@ class EventHandler:
         self.cb_processar_cheat = main_callbacks["processar_cheat"]
         self.cb_ciclar_alvo_espectador = main_callbacks["ciclar_alvo_espectador"]
         self.cb_respawn_player_offline = main_callbacks["respawn_player_offline"]
+        self.cb_reiniciar_jogo_pvp = main_callbacks["reiniciar_jogo_pvp"]
     ####
     def processar_eventos(self, game_state: dict):
         """
@@ -173,10 +174,9 @@ class EventHandler:
                         novos_estados["estado_jogo"] = "GET_SERVER_INFO"
                         novos_estados["input_connect_ativo"] = "nome"
                     elif ui.RECT_BOTAO_PVP_ONLINE.collidepoint(mouse_pos):
-                        # Ainda não implementado, apenas imprime um aviso
-                        print("[AVISO] Modo PVP (Jogador VS Jogador) ainda não implementado.")
-                        # (Opcional: voltar ao menu)
-                        # novos_estados["estado_jogo"] = "MENU"
+                        # Muda para o estado PVP_START que iniciará o lobby PVP
+                        print("[PVP] Iniciando modo PVP...")
+                        novos_estados["estado_jogo"] = "PVP_START"
             # --- FIM: MODIFICAÇÃO ---
             
             elif estado_jogo == "JOGANDO":
@@ -306,14 +306,48 @@ class EventHandler:
                                             alvo_clicado = alvo
                                     nave_player.alvo_selecionado = alvo_clicado
             
+            # --- INÍCIO: MODIFICAÇÃO (Estados PVP) ---
+            elif estado_jogo in ["PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_v and estado_jogo == "PVP_LOBBY":
+                        # Permite abrir loja apenas no lobby
+                        novos_estados["estado_jogo"] = "LOJA"
+                        novos_estados["estado_pvp_anterior"] = estado_jogo  # Armazena estado PVP
+                        print("Abrindo loja PVP...")
+                    elif event.key == pygame.K_ESCAPE:
+                        novos_estados["estado_pvp_anterior"] = estado_jogo  # Armazena estado PVP
+                        novos_estados["estado_jogo"] = "PAUSE"
+                        print("Jogo PVP Pausado.")
+                    elif event.key == pygame.K_r and estado_jogo != "PVP_COUNTDOWN":
+                        # Regeneração não disponível durante countdown
+                        grupo_fx = novos_estados.get("grupo_efeitos_visuais")
+                        if grupo_fx is not None:
+                            nave_player.toggle_regeneracao(grupo_fx)
+            
+            elif estado_jogo == "PVP_GAME_OVER":
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        self.cb_resetar_para_menu()
+                        novos_estados["estado_jogo"] = "MENU"
+            # --- FIM: MODIFICAÇÃO (Estados PVP) ---
+            
             elif estado_jogo == "PAUSE":
                 action = self.pause_manager.handle_event(event, is_online)
 
                 if action == "RESUME_GAME":
-                    if novos_estados["jogador_esta_vivo_espectador"] or nave_player.vida_atual <= 0:
+                    # --- MODIFICAÇÃO PVP: Retorna ao estado correto ---
+                    # Verifica se temos um estado PVP anterior armazenado
+                    estado_anterior_pvp = novos_estados.get("estado_pvp_anterior", None)
+                    
+                    if estado_anterior_pvp in ["PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
+                        # Retorna ao estado PVP correto
+                        novos_estados["estado_jogo"] = estado_anterior_pvp
+                        novos_estados["estado_pvp_anterior"] = None
+                    elif novos_estados["jogador_esta_vivo_espectador"] or nave_player.vida_atual <= 0:
                         novos_estados["estado_jogo"] = "ESPECTADOR"
                     else:
                         novos_estados["estado_jogo"] = "JOGANDO"
+                    # --- FIM MODIFICAÇÃO PVP ---
                 
                 elif action == "GOTO_MENU":
                     self.cb_resetar_para_menu() # Chama a função do main.py
@@ -372,7 +406,15 @@ class EventHandler:
                         novos_estados["max_bots_atual"] += 1
             
             elif estado_jogo == "LOJA":
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_v: novos_estados["estado_jogo"] = "JOGANDO"
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_v:
+                    # --- MODIFICAÇÃO PVP: Retorna ao estado correto ---
+                    estado_anterior_pvp = novos_estados.get("estado_pvp_anterior", None)
+                    if estado_anterior_pvp in ["PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
+                        novos_estados["estado_jogo"] = estado_anterior_pvp
+                        novos_estados["estado_pvp_anterior"] = None
+                    else:
+                        novos_estados["estado_jogo"] = "JOGANDO"
+                    # --- FIM MODIFICAÇÃO PVP ---
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     mouse_pos = pygame.mouse.get_pos()
                     if ui.RECT_BOTAO_MOTOR.collidepoint(mouse_pos):
