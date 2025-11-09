@@ -554,6 +554,7 @@ game_globals = {
     "pvp_lobby_timer_fim": None,
     "pvp_partida_timer_fim": None,
     "pvp_vencedor_nome": None,
+    "estado_pvp_anterior": None,
 }
 
 # --- Dicionário de Grupos de Sprites ---
