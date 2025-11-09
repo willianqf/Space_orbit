@@ -479,4 +479,3 @@ class GameLogic:
                 return "PVP_GAME_OVER"
         
         return None
-                    self._tocar_som_explosao(inimigo, pos_ouvinte) # <-- MODIFICADO
