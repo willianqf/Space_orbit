@@ -42,15 +42,16 @@ class Camera:
         
         return pygame.Rect(final_x, final_y, scaled_w, scaled_h)
 
-
-    def update(self, alvo):
+    # --- INÍCIO: MODIFICAÇÃO (Assinatura do Update) ---
+    def update(self, alvo, map_width=MAP_WIDTH, map_height=MAP_HEIGHT):
+    # --- FIM: MODIFICAÇÃO ---
         """ Atualiza o offset da câmera para centralizar o 'alvo'. """
         
         # O alvo deve ter um atributo 'posicao' (pygame.math.Vector2)
         x = -alvo.posicao.x + int(self.largura / 2)
         y = -alvo.posicao.y + int(self.altura / 2)
 
-        # --- MODIFICAÇÃO: Limites do zoom ---
+        # --- MODIFICAÇÃO: Limites do zoom e do mapa ---
         if self.zoom < 1.0:
             # Quando com zoom out, queremos que o 'alvo' (centro do mapa)
             # fique no centro da tela. A lógica acima (x = ...) já faz isso.
@@ -58,10 +59,12 @@ class Camera:
             pass
         else:
             # Limita o scroll às bordas do mapa (lógica original)
+            # AGORA USA OS VALORES PASSADOS (map_width, map_height)
             x = min(0, x)  # Borda esquerda
-            x = max(-(MAP_WIDTH - self.largura), x)  # Borda direita
+            x = max(-(map_width - self.largura), x)  # Borda direita
             y = min(0, y)  # Borda superior
-            y = max(-(MAP_HEIGHT - self.altura), y)  # Borda inferior
+            y = max(-(map_height - self.altura), y)  # Borda inferior
+        # --- FIM DA MODIFICAÇÃO ---
 
         self.camera_rect.topleft = (x, y)
 

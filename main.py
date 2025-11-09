@@ -9,6 +9,7 @@ from settings import (MAX_TOTAL_UPGRADES, VOLUME_BASE_EXPLOSAO_BOSS, VOLUME_BASE
                       )
 # 1. Importações dos Módulos
 import settings as s 
+import multi.pvp_settings as pvp_s # <-- MODIFICAÇÃO: Importa as configs PVP
 from camera import Camera
 from projectiles import Projetil, ProjetilInimigo, ProjetilInimigoRapido, ProjetilTeleguiadoLento, ProjetilCongelante, ProjetilTeleguiadoJogador
 from entities import Obstaculo, NaveRegeneradora 
@@ -36,6 +37,7 @@ from game_logic import GameLogic
 from renderer import Renderer
 # --- FIM: IMPORTAÇÃO ---
 
+# <-- MODIFICAÇÃO: A importação do 'pvp_manager' foi REMOVIDA daqui -->
 
 # 2. Inicialização do Pygame e Tela
 pygame.mixer.pre_init(44100, -16, 2, 512)
@@ -140,9 +142,123 @@ for _ in range(s.NUM_ESTRELAS):
 
 # 9. Funções Auxiliares (Callbacks para os Handlers)
 
+# --- INÍCIO: MODIFICAÇÃO (Novas Funções PVP) ---
+
+def distribuir_atributos_bot(nave, pontos):
+    """
+    Distribui aleatoriamente os pontos de atributos para os bots.
+    """
+    opcoes = ["motor", "dano", "max_health", "escudo"]
+    for _ in range(pontos):
+        upgrade_escolhido = random.choice(opcoes)
+        
+        # Tenta comprar, se falhar (ex: nível máximo), tenta outro
+        if not nave.comprar_upgrade(upgrade_escolhido):
+            # Tenta as outras opções em ordem
+            for opt in opcoes:
+                if nave.comprar_upgrade(opt):
+                    break
+    
+    print(f"[{nave.nome}] Atributos PVP distribuídos.")
+    # Reseta a vida para o máximo após os upgrades
+    nave.vida_atual = nave.max_vida
+
+def reiniciar_jogo_pvp():
+    """ Prepara o lobby do PVP, limpando grupos e spawnando naves no centro. """
+    global estado_jogo, nave_player
+    
+    # 1. Configura o Mapa para PVP (sobrescreve as constantes de settings)
+    s.MAP_WIDTH = pvp_s.MAP_WIDTH
+    s.MAP_HEIGHT = pvp_s.MAP_HEIGHT
+    s.MAP_RECT = pygame.Rect(0, 0, pvp_s.MAP_WIDTH, pvp_s.MAP_HEIGHT)
+    
+    # 2. Reseta o estado global
+    game_globals["jogador_esta_vivo_espectador"] = False
+    game_globals["alvo_espectador"] = None
+    game_globals["alvo_espectador_nome"] = None
+    game_globals["spectator_overlay_hidden"] = False
+    camera.set_zoom(1.0) 
+
+    print("Iniciando Lobby PVP...")
+
+    # 3. Limpa todos os grupos
+    for group in game_groups.values():
+        group.empty()
+
+    # 4. Spawna o Jogador Humano
+    nave_player.nome = game_globals["nome_jogador_input"].strip() if game_globals["nome_jogador_input"].strip() else "Jogador"
+    pos_spawn = pvp_s.SPAWN_LOBBY # Spawna no centro (Lobby)
+    
+    # Reseta o player
+    nave_player.posicao = pygame.math.Vector2(pos_spawn.x, pos_spawn.y)
+    nave_player.rect.center = nave_player.posicao
+    nave_player.grupo_auxiliares_ativos.empty()
+    nave_player.lista_todas_auxiliares = [] 
+    for pos in Nave.POSICOES_AUXILIARES:
+        nova_aux = NaveAuxiliar(nave_player, pos)
+        nave_player.lista_todas_auxiliares.append(nova_aux)
+    
+    # Reseta status e dá os pontos de atributo
+    nave_player.pontos = 0
+    nave_player.nivel_motor = 1
+    nave_player.nivel_dano = 1
+    nave_player.nivel_max_vida = 1
+    nave_player.nivel_escudo = 0
+    nave_player.nivel_aux = 0 
+    nave_player.velocidade_movimento_base = 4 + (nave_player.nivel_motor * 0.5)
+    nave_player.max_vida = VIDA_POR_NIVEL[nave_player.nivel_max_vida]
+    nave_player.vida_atual = nave_player.max_vida
+    nave_player.pontos_upgrade_disponiveis = pvp_s.PONTOS_ATRIBUTOS_INICIAIS # <--- PONTOS!
+    nave_player.total_upgrades_feitos = 0
+    nave_player._pontos_acumulados_para_upgrade = 0
+    nave_player._indice_limiar = 0
+    nave_player._limiar_pontos_atual = s.PONTOS_LIMIARES_PARA_UPGRADE[0]
+    nave_player.alvo_selecionado = None
+    nave_player.posicao_alvo_mouse = None
+    nave_player.ultimo_hit_tempo = 0
+    nave_player.tempo_fim_lentidao = 0
+    nave_player.tempo_fim_congelamento = 0
+    nave_player.rastro_particulas = []
+    nave_player.parar_regeneracao() 
+    nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
+    
+    grupo_player.add(nave_player) # Adiciona ao grupo principal
+    
+    # 5. Spawna os Bots (para teste)
+    for i in range(1, pvp_s.MAX_JOGADORES_PVP):
+        # Spawna perto do jogador para o lobby
+        pos_bot = pygame.math.Vector2(pos_spawn.x + random.randint(-50, 50), pos_spawn.y + random.randint(-50, 50))
+        bot = NaveBot(pos_bot.x, pos_bot.y, "Dificil") # Bots no difícil
+        bot.nome = f"BotPVP_{i}"
+        
+        # Dá os pontos de atributo aos bots
+        bot.pontos_upgrade_disponiveis = pvp_s.PONTOS_ATRIBUTOS_INICIAIS
+        distribuir_atributos_bot(bot, pvp_s.PONTOS_ATRIBUTOS_INICIAIS)
+        
+        grupo_bots.add(bot)
+
+    # 6. Adiciona alguns obstáculos
+    for _ in range(15):
+        x = random.randint(100, pvp_s.MAP_WIDTH - 100)
+        y = random.randint(100, pvp_s.MAP_HEIGHT - 100)
+        raio = random.randint(s.OBSTACULO_RAIO_MIN, s.OBSTACULO_RAIO_MAX)
+        grupo_obstaculos.add(Obstaculo(x, y, raio))
+        
+    estado_jogo = "PVP_LOBBY"
+    game_globals["estado_jogo"] = "PVP_LOBBY"
+
+# --- FIM: Novas Funções (PVP) ---
+
+
 def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"): 
-    """ Prepara o jogo, limpando grupos e resetando o jogador. """
+    """ Prepara o jogo PVE, limpando grupos e resetando o jogador. """
     global estado_jogo, nave_player, dificuldade_jogo_atual
+    
+    # --- INÍCIO: MODIFICAÇÃO (Restaura Mapa PVE) ---
+    s.MAP_WIDTH = pvp_s.PVE_MAP_WIDTH
+    s.MAP_HEIGHT = pvp_s.PVE_MAP_HEIGHT
+    s.MAP_RECT = pygame.Rect(0, 0, s.MAP_WIDTH, s.MAP_HEIGHT)
+    # --- FIM: MODIFICAÇÃO ---
     
     game_globals["jogador_esta_vivo_espectador"] = False
     game_globals["alvo_espectador"] = None
@@ -150,7 +266,7 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     game_globals["spectator_overlay_hidden"] = False # <-- ADICIONADO (Reset)
     camera.set_zoom(1.0) 
 
-    print("Reiniciando o Jogo...")
+    print("Reiniciando o Jogo PVE...")
     
     dificuldade_jogo_atual = dificuldade 
     game_globals["dificuldade_selecionada"] = dificuldade 
@@ -161,10 +277,9 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     else:
         nave_player.nome = game_globals["nome_jogador_input"].strip() if game_globals["nome_jogador_input"].strip() else "Jogador"
     
-    grupo_obstaculos.empty(); grupo_inimigos.empty(); grupo_motherships.empty() 
-    grupo_boss_congelante.empty(); grupo_bots.empty(); grupo_projeteis_player.empty()
-    grupo_projeteis_bots.empty(); grupo_projeteis_inimigos.empty()
-    grupo_explosoes.empty(); grupo_efeitos_visuais.empty()
+    # Limpa grupos (já limpo em reiniciar_jogo_pvp, mas seguro garantir)
+    for group in game_groups.values():
+        group.empty()
 
     spawn_x, spawn_y = 0, 0
     if pos_spawn:
@@ -189,7 +304,8 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     nave_player.velocidade_movimento_base = 4 + (nave_player.nivel_motor * 0.5)
     nave_player.max_vida = VIDA_POR_NIVEL[nave_player.nivel_max_vida]
     nave_player.vida_atual = nave_player.max_vida
-    nave_player.pontos_upgrade_disponiveis = 0; nave_player.total_upgrades_feitos = 0
+    nave_player.pontos_upgrade_disponiveis = 0 # <-- PVE começa com 0
+    nave_player.total_upgrades_feitos = 0
     nave_player._pontos_acumulados_para_upgrade = 0; nave_player._indice_limiar = 0
     nave_player._limiar_pontos_atual = s.PONTOS_LIMIARES_PARA_UPGRADE[0]
     nave_player.alvo_selecionado = None; nave_player.posicao_alvo_mouse = None
@@ -197,6 +313,8 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     nave_player.tempo_fim_congelamento = 0; nave_player.rastro_particulas = []
     nave_player.parar_regeneracao() 
     nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
+    
+    grupo_player.add(nave_player) # <-- MODIFICAÇÃO: Adiciona o player de volta
 
     if pos_spawn is None:
         print("Gerando entidades (Obstáculos, Bots)...")
@@ -209,6 +327,14 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
 
 def respawn_player_offline(nave):
     global estado_jogo
+    
+    # --- INÍCIO: MODIFICAÇÃO (Restaura Mapa PVE) ---
+    # Garante que o respawn offline seja sempre no mapa PVE
+    s.MAP_WIDTH = pvp_s.PVE_MAP_WIDTH
+    s.MAP_HEIGHT = pvp_s.PVE_MAP_HEIGHT
+    s.MAP_RECT = pygame.Rect(0, 0, s.MAP_WIDTH, s.MAP_HEIGHT)
+    # --- FIM: MODIFICAÇÃO ---
+    
     game_globals["jogador_esta_vivo_espectador"] = False
     game_globals["alvo_espectador"] = None
     game_globals["spectator_overlay_hidden"] = False # <-- ADICIONADO (Reset)
@@ -245,6 +371,13 @@ def respawn_player_offline(nave):
 
 def resetar_para_menu():
     global estado_jogo
+    
+    # --- INÍCIO: MODIFICAÇÃO (Restaura Mapa PVE) ---
+    s.MAP_WIDTH = pvp_s.PVE_MAP_WIDTH
+    s.MAP_HEIGHT = pvp_s.PVE_MAP_HEIGHT
+    s.MAP_RECT = pygame.Rect(0, 0, s.MAP_WIDTH, s.MAP_HEIGHT)
+    # --- FIM: MODIFICAÇÃO ---
+    
     game_globals["jogador_pediu_para_espectar"] = False
     game_globals["jogador_esta_vivo_espectador"] = False
     game_globals["alvo_espectador"] = None
@@ -328,13 +461,22 @@ def ciclar_alvo_espectador(game_globals_dict, avancar=True):
                 lista_alvos_vivos.append({'nome': nome, 'state': state})
                 lista_nomes_alvos_vivos.append(nome)
     else: 
-        # (Correção da semana passada: Não adiciona o player se HP=0)
-        if nave_player.vida_atual > 0:
-             lista_alvos_vivos.append(nave_player)
-        # Adiciona TODOS os bots que estão vivos.
-        for bot in grupo_bots:
-            if bot.vida_atual > 0:
-                lista_alvos_vivos.append(bot)
+        # --- INÍCIO: MODIFICAÇÃO (Ciclar Alvos PVP) ---
+        # Se estiver em um estado PVP, os alvos são os bots + player
+        if game_globals_dict["estado_jogo"].startswith("PVP_"):
+            if nave_player.vida_atual > 0:
+                 lista_alvos_vivos.append(nave_player)
+            for bot in grupo_bots:
+                if bot.vida_atual > 0:
+                    lista_alvos_vivos.append(bot)
+        # Senão, é PVE
+        else:
+            if nave_player.vida_atual > 0:
+                 lista_alvos_vivos.append(nave_player)
+            for bot in grupo_bots:
+                if bot.vida_atual > 0:
+                    lista_alvos_vivos.append(bot)
+        # --- FIM: MODIFICAÇÃO ---
 
     if not lista_alvos_vivos:
         print("[Espectador] Nenhum alvo vivo para ciclar.")
@@ -376,11 +518,15 @@ ui.recalculate_ui_positions(LARGURA_TELA, ALTURA_TELA)
 # --- Instância dos Gerenciadores ---
 pause_manager = PauseMenu()
 
+# --- INÍCIO: MODIFICAÇÃO (Callback PVP) ---
 main_callbacks_eventos = {
     "reiniciar_jogo": reiniciar_jogo, "resetar_para_menu": resetar_para_menu,
     "processar_cheat": processar_cheat, "ciclar_alvo_espectador": ciclar_alvo_espectador,
     "respawn_player_offline": respawn_player_offline,
+    "reiniciar_jogo_pvp": reiniciar_jogo_pvp, # <-- ADICIONADO
 }
+# --- FIM: MODIFICAÇÃO ---
+
 main_callbacks_logica = {
     "spawnar_bot": spawnar_bot, "spawnar_obstaculo": spawnar_obstaculo,
     "spawnar_inimigo_aleatorio": spawnar_inimigo_aleatorio,
@@ -404,6 +550,15 @@ game_globals = {
     "max_bots_atual": s.MAX_BOTS,
     "LARGURA_TELA": LARGURA_TELA, "ALTURA_TELA": ALTURA_TELA,
     "nave_player": nave_player, # <-- Adiciona a nave player ao dicionário
+    
+    "pvp_disponivel": True, # <-- MODIFICAÇÃO: PVP está disponível
+    
+    # --- INÍCIO: MODIFICAÇÃO (Estado PVP) ---
+    "pvp_lobby_timer_fim": 0,
+    "pvp_partida_timer_fim": 0,
+    "pvp_vencedor_nome": "Ninguém",
+    # --- FIM: MODIFICAÇÃO ---
+
     # Referências de grupos
     "grupo_efeitos_visuais": grupo_efeitos_visuais, "grupo_inimigos": grupo_inimigos,
     "grupo_bots": grupo_bots, "grupo_obstaculos": grupo_obstaculos,
@@ -461,6 +616,13 @@ while game_globals["rodando"]:
 
     if not game_globals["rodando"]: break
 
+    # --- INÍCIO: MODIFICAÇÃO (Estado de transição PVP) ---
+    if estado_jogo == "PVP_START":
+        print("[MAIN] Estado PVP_START detectado. Iniciando lobby...")
+        reiniciar_jogo_pvp() 
+        estado_jogo = game_globals["estado_jogo"] # Pega o novo estado ("PVP_LOBBY")
+    # --- FIM: MODIFICAÇÃO ---
+    
     # --- INÍCIO DA CORREÇÃO: Nova Lógica de Verificação ---
     # Compara o tamanho ANTIGO (antes dos eventos) com o NOVO (depois dos eventos)
     if LARGURA_ANTIGA != LARGURA_TELA or ALTURA_ANTIGA != ALTURA_TELA:
@@ -515,7 +677,12 @@ while game_globals["rodando"]:
     else: 
          if estado_jogo != "PAUSE" and not game_globals["jogador_pediu_para_espectar"]: camera.set_zoom(1.0) 
          alvo_camera_final = nave_player 
-    camera.update(alvo_camera_final)
+    
+    # --- INÍCIO: MODIFICAÇÃO (Câmera com Mapa Dinâmico) ---
+    # Passa o tamanho ATUAL do mapa (que pode ser 1500 ou 8000) para a câmera
+    # (Isso requer uma mudança em camera.py, que faremos no próximo prompt)
+    camera.update(alvo_camera_final, s.MAP_WIDTH, s.MAP_HEIGHT)
+    # --- FIM: MODIFICAÇÃO ---
 
     # --- INÍCIO DA MODIFICAÇÃO: Posição do Ouvinte de Áudio ---
     # O ouvinte de áudio é SEMPRE o alvo final da câmera
@@ -587,42 +754,59 @@ while game_globals["rodando"]:
                         espectador_dummy_alvo.posicao = nave_player.posicao.copy()
             if estado_jogo != "ESPECTADOR": nave_player.rect.center = nave_player.posicao
             
+        # --- INÍCIO: MODIFICAÇÃO (Lógica de Alvos PVP) ---
         lista_alvos_naves = []
         if nave_player.vida_atual > 0 and not game_globals["jogador_esta_vivo_espectador"]:
             lista_alvos_naves.append(nave_player)
-        lista_alvos_naves.extend([bot for bot in grupo_bots if bot.vida_atual > 0])
-        game_globals["lista_alvos_naves"] = lista_alvos_naves 
 
-        if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
-             lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + [nave_player] + list(grupo_bots)
+        # Se for PVP, os alvos são os outros bots/jogadores
+        if estado_jogo.startswith("PVP_"):
+            lista_alvos_naves.extend([bot for bot in grupo_bots if bot.vida_atual > 0])
+            game_globals["lista_alvos_naves"] = lista_alvos_naves
+            lista_todos_alvos_para_aux = list(grupo_obstaculos) + lista_alvos_naves
+        
+        # Senão, é PVE (lógica antiga)
         else:
-            lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + list(grupo_bots)
+            lista_alvos_naves.extend([bot for bot in grupo_bots if bot.vida_atual > 0])
+            game_globals["lista_alvos_naves"] = lista_alvos_naves 
+
+            if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
+                 lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + [nave_player] + list(grupo_bots)
+            else:
+                lista_todos_alvos_para_aux = list(grupo_inimigos) + list(grupo_obstaculos) + list(grupo_bots)
+        # --- FIM: MODIFICAÇÃO ---
 
         if not is_online:
             
-            # --- INÍCIO DA CORREÇÃO (BUG DO PAUSE) ---
-            # Só executa a lógica do jogo se o jogo NÃO estiver pausado.
-            # O modo ESPECTADOR agora está CORRETAMENTE PERMITIDO aqui.
             if estado_jogo not in ["PAUSE"]:
             
-                game_state_logica = game_globals.copy()
-                game_state_logica["estado_jogo"] = estado_jogo
-                game_state_logica["dificuldade_jogo_atual"] = dificuldade_jogo_atual
+                # --- INÍCIO: MODIFICAÇÃO (Chama a lógica PVE ou PVP) ---
+                if estado_jogo.startswith("PVP_"):
+                    # Roda a lógica de atualização PVP (que criaremos em game_logic.py)
+                    novo_estado_jogo = game_logic_handler.update_pvp_logic(game_globals, game_groups, posicao_ouvinte_som)
+                    estado_jogo = novo_estado_jogo # Atualiza o estado (ex: se o jogo acabou)
+                    game_globals["estado_jogo"] = novo_estado_jogo # Atualiza o global
                 
-                # --- MODIFICAÇÃO: Passa a posição do ouvinte ---
-                novo_estado_jogo = game_logic_handler.update_offline_logic(game_state_logica, game_groups, posicao_ouvinte_som)
-                # --- FIM DA MODIFICAÇÃO ---
-                
-                if novo_estado_jogo == "ESPECTADOR" and estado_jogo != "ESPECTADOR":
-                    estado_jogo = "ESPECTADOR"
-                    game_globals["jogador_esta_vivo_espectador"] = False
-                    game_globals["alvo_espectador"] = None; game_globals["alvo_espectador_nome"] = None
+                # Roda a lógica PVE (como era antes)
+                elif estado_jogo not in ["PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_GAME_OVER"]:
+                    game_state_logica = game_globals.copy()
+                    game_state_logica["estado_jogo"] = estado_jogo
+                    game_state_logica["dificuldade_jogo_atual"] = dificuldade_jogo_atual
                     
-                    game_globals["spectator_overlay_hidden"] = False # (Correção anterior)
+                    # --- MODIFICAÇÃO: Passa a posição do ouvinte ---
+                    novo_estado_jogo = game_logic_handler.update_offline_logic(game_state_logica, game_groups, posicao_ouvinte_som)
+                    # --- FIM DA MODIFICAÇÃO ---
                     
-                    espectador_dummy_alvo.posicao = nave_player.posicao.copy()
-            # --- FIM DA CORREÇÃO ---
-        
+                    if novo_estado_jogo == "ESPECTADOR" and estado_jogo != "ESPECTADOR":
+                        estado_jogo = "ESPECTADOR"
+                        game_globals["jogador_esta_vivo_espectador"] = False
+                        game_globals["alvo_espectador"] = None; game_globals["alvo_espectador_nome"] = None
+                        
+                        game_globals["spectator_overlay_hidden"] = False # (Correção anterior)
+                        
+                        espectador_dummy_alvo.posicao = nave_player.posicao.copy()
+                # --- FIM: MODIFICAÇÃO ---
+            
         # --- MODIFICAÇÃO: Passa a posição do ouvinte para os updates dos auxiliares ---
         for bot in grupo_bots: 
             bot.grupo_auxiliares_ativos.update(lista_todos_alvos_para_aux, grupo_projeteis_bots, estado_jogo, nave_player, None, {}, {}, posicao_ouvinte_som)
@@ -639,7 +823,9 @@ while game_globals["rodando"]:
             grupo_efeitos_visuais.update() 
         # --- FIM DA CORREÇÃO ---
 
-    if estado_jogo == "JOGANDO":
+    # --- INÍCIO: MODIFICAÇÃO (Permite update do player no lobby/countdown) ---
+    if estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
+    # --- FIM: MODIFICAÇÃO ---
         if not is_online:
             # --- MODIFICAÇÃO: Passa a posição do ouvinte ---
             nave_player.update(grupo_projeteis_player, camera, None, posicao_ouvinte_som)

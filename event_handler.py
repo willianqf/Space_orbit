@@ -29,7 +29,12 @@ class EventHandler:
         self.cb_processar_cheat = main_callbacks["processar_cheat"]
         self.cb_ciclar_alvo_espectador = main_callbacks["ciclar_alvo_espectador"]
         self.cb_respawn_player_offline = main_callbacks["respawn_player_offline"]
-    ####
+        
+        # --- INÍCIO DA MODIFICAÇÃO (PVP) ---
+        # Adiciona a nova callback (com segurança .get() caso não exista)
+        self.cb_reiniciar_jogo_pvp = main_callbacks.get("reiniciar_jogo_pvp", lambda: print("[ERRO] cb_reiniciar_jogo_pvp não foi definido no event_handler."))
+        # --- FIM DA MODIFICAÇÃO ---
+        
     def processar_eventos(self, game_state: dict):
         """
         Processa todos os eventos pendentes do Pygame e atualiza o game_state.
@@ -160,7 +165,7 @@ class EventHandler:
                     else:
                         novos_estados["input_connect_ativo"] = "none"
             
-            # --- INÍCIO: MODIFICAÇÃO (Adiciona novo estado) ---
+            # --- INÍCIO: MODIFICAÇÃO (LÓGICA DO CLIQUE PVP) ---
             elif estado_jogo == "MULTIPLAYER_MODE_SELECT":
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
@@ -172,20 +177,42 @@ class EventHandler:
                         # Este é o fluxo original: vai para a tela de conexão
                         novos_estados["estado_jogo"] = "GET_SERVER_INFO"
                         novos_estados["input_connect_ativo"] = "nome"
+                    
+                    # --- SUBSTITUA ESTE BLOCO ---
                     elif ui.RECT_BOTAO_PVP_ONLINE.collidepoint(mouse_pos):
-                        # Ainda não implementado, apenas imprime um aviso
-                        print("[AVISO] Modo PVP (Jogador VS Jogador) ainda não implementado.")
-                        # (Opcional: voltar ao menu)
-                        # novos_estados["estado_jogo"] = "MENU"
+                        # Verifica a flag que o main.py nos deu
+                        pvp_disponivel = novos_estados.get("pvp_disponivel", False)
+                        
+                        if pvp_disponivel:
+                            print("[EVENT] Botão PVP clicado. Mudando estado para PVP_START.")
+                            # Apenas muda o estado. O 'main.py' vai pegar isso 
+                            # no próximo loop e chamar 'reiniciar_jogo_pvp'.
+                            novos_estados["estado_jogo"] = "PVP_START" 
+                        else:
+                            print("[AVISO] Modo PVP clicado, mas não foi carregado (PVP_DISPONIVEL=False).")
+                    # --- FIM DA SUBSTITUIÇÃO ---
             # --- FIM: MODIFICAÇÃO ---
             
-            elif estado_jogo == "JOGANDO":
+            # --- INÍCIO: MODIFICAÇÃO (PERMITE LOJA/PAUSE NO PVP) ---
+            # Adicione os novos estados a esta checagem
+            elif estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
+            # --- FIM: MODIFICAÇÃO ---
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_v: novos_estados["estado_jogo"] = "LOJA"; print("Abrindo loja...")
-                    elif event.key == pygame.K_QUOTE: novos_estados["estado_jogo"] = "TERMINAL"; novos_estados["variavel_texto_terminal"] = ""; print("Abrindo terminal de cheats...")
-                    elif event.key == pygame.K_ESCAPE: novos_estados["estado_jogo"] = "PAUSE"; print("Jogo Pausado.")
                     
-                    elif event.key == pygame.K_r:
+                    # 'V' para Loja (Permitido no Lobby, Countdown e Jogando PVE/PVP)
+                    if event.key == pygame.K_v and estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN"]: 
+                        novos_estados["estado_jogo"] = "LOJA"; print("Abrindo loja...")
+                    
+                    # 'QUOTE' para Terminal (Permitido em todos)
+                    elif event.key == pygame.K_QUOTE: 
+                        novos_estados["estado_jogo"] = "TERMINAL"; novos_estados["variavel_texto_terminal"] = ""; print("Abrindo terminal de cheats...")
+                    
+                    # 'ESC' para Pause (Permitido em todos)
+                    elif event.key == pygame.K_ESCAPE: 
+                        novos_estados["estado_jogo"] = "PAUSE"; print("Jogo Pausado.")
+                    
+                    # 'R' para Regenerar (Permitido APENAS no PVE)
+                    elif event.key == pygame.K_r and estado_jogo == "JOGANDO":
                         if is_online:
                             self.network_client.send("TOGGLE_REGEN")
                         else:
@@ -196,7 +223,7 @@ class EventHandler:
                             else:
                                 print("[AVISO] grupo_efeitos_visuais não encontrado para regeneração offline.")
 
-                    elif is_online:
+                    elif is_online: # Controles de rede
                         if event.key == pygame.K_w or event.key == pygame.K_UP: self.network_client.send("W_DOWN")
                         elif event.key == pygame.K_a or event.key == pygame.K_LEFT: self.network_client.send("A_DOWN")
                         elif event.key == pygame.K_s or event.key == pygame.K_DOWN: self.network_client.send("S_DOWN")
@@ -215,10 +242,12 @@ class EventHandler:
                     mouse_pos_tela = pygame.mouse.get_pos()
                     
                     if event.button == 1: # Esquerdo (LMB)
-                        if ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela):
+                        # Botão Upgrade (Permitido no Lobby e Countdown)
+                        if ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela) and estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN"]:
                              novos_estados["estado_jogo"] = "LOJA"; print("Abrindo loja via clique no botão HUD...")
                         
-                        elif ui.RECT_BOTAO_REGEN_HUD.collidepoint(mouse_pos_tela):
+                        # Botão Regenerar (Permitido APENAS no PVE)
+                        elif ui.RECT_BOTAO_REGEN_HUD.collidepoint(mouse_pos_tela) and estado_jogo == "JOGANDO":
                             if is_online:
                                 self.network_client.send("TOGGLE_REGEN")
                             else: 
@@ -226,6 +255,7 @@ class EventHandler:
                                 if grupo_fx is not None:
                                     nave_player.toggle_regeneracao(grupo_fx)
                         
+                        # Clique de movimento (offline)
                         elif not is_online and agora > nave_player.tempo_spawn_protecao_input:
                             mouse_pos_mundo = self.camera.get_mouse_world_pos(mouse_pos_tela)
                             nave_player.posicao_alvo_mouse = mouse_pos_mundo
@@ -233,41 +263,39 @@ class EventHandler:
                             nave_player.quer_mover_tras = False
 
                     elif event.button == 3: # Direito (RMB)
-                        mouse_pos_tela = pygame.mouse.get_pos() # Pega a posição do mouse aqui
+                        mouse_pos_tela = pygame.mouse.get_pos() 
 
-                        # --- INÍCIO DA MODIFICAÇÃO: Clique no Minimapa ---
+                        # Clique no Minimapa (offline)
                         if (agora > nave_player.tempo_spawn_protecao_input and 
                             ui.MINIMAP_RECT.collidepoint(mouse_pos_tela) and
-                            not is_online): # Clique no minimapa (só funciona offline por enquanto)
+                            not is_online): 
                             
-                            print("Clique no Minimapa detectado!") # Log
+                            print("Clique no Minimapa detectado!") 
 
-                            # 1. Calcula a posição relativa do clique dentro do minimapa
                             click_x_rel = mouse_pos_tela[0] - ui.MINIMAP_RECT.left
                             click_y_rel = mouse_pos_tela[1] - ui.MINIMAP_RECT.top
                             
-                            # 2. Calcula a proporção do mapa para o minimapa
-                            ratio_x = s.MAP_WIDTH / ui.MINIMAP_WIDTH
-                            ratio_y = s.MAP_HEIGHT / ui.MINIMAP_HEIGHT
+                            # --- INÍCIO: MODIFICAÇÃO (Minimapa PVP) ---
+                            # Usa o tamanho de mapa correto (PVE ou PVP)
+                            map_w = s.MAP_WIDTH
+                            map_h = s.MAP_HEIGHT
+                            # --- FIM: MODIFICAÇÃO ---
+
+                            ratio_x = map_w / ui.MINIMAP_WIDTH
+                            ratio_y = map_h / ui.MINIMAP_HEIGHT
                             
-                            # 3. Converte a posição relativa em coordenada do mundo
                             world_x = click_x_rel * ratio_x
                             world_y = click_y_rel * ratio_y
                             
-                            # 4. Define o alvo de movimento do jogador
                             destino = pygame.math.Vector2(world_x, world_y)
                             nave_player.posicao_alvo_mouse = destino
                             
-                            # Limpa intenções de movimento por tecla
                             nave_player.quer_mover_frente = False 
                             nave_player.quer_mover_tras = False
-                            
-                            # Limpa o alvo de mira
                             nave_player.alvo_selecionado = None
                         
-                        # --- FIM DA MODIFICAÇÃO ---
-
-                        elif agora > nave_player.tempo_spawn_protecao_input: # Lógica original de mirar
+                        # Clique de Mirar (Lógica original de mirar)
+                        elif agora > nave_player.tempo_spawn_protecao_input: 
                             mouse_pos_mundo = self.camera.get_mouse_world_pos(mouse_pos_tela)
                             
                             if is_online:
@@ -291,63 +319,100 @@ class EventHandler:
                                 
                             else: # Offline
                                 alvo_clicado = None
-                                # Precisamos dos grupos...
                                 grupo_inimigos = novos_estados.get("grupo_inimigos")
                                 grupo_bots = novos_estados.get("grupo_bots")
                                 grupo_obstaculos = novos_estados.get("grupo_obstaculos")
                                 
-                                if grupo_inimigos and grupo_bots and grupo_obstaculos:
-                                    todos_alvos_clicaveis = list(grupo_inimigos) + list(grupo_bots) + list(grupo_obstaculos)
-                                    dist_min_sq = (s.TARGET_CLICK_SIZE / 2)**2
-                                    for alvo in todos_alvos_clicaveis:
-                                        dist_sq = alvo.posicao.distance_squared_to(mouse_pos_mundo)
-                                        if dist_sq < dist_min_sq:
-                                            dist_min_sq = dist_sq
-                                            alvo_clicado = alvo
-                                    nave_player.alvo_selecionado = alvo_clicado
+                                # --- INÍCIO: MODIFICAÇÃO (Mirar no PVP) ---
+                                todos_alvos_clicaveis = []
+                                # Se PVP, os alvos são os bots e obstáculos
+                                if estado_jogo.startswith("PVP_"):
+                                    if grupo_bots:
+                                        todos_alvos_clicaveis.extend(list(grupo_bots))
+                                    if grupo_obstaculos:
+                                        todos_alvos_clicaveis.extend(list(grupo_obstaculos))
+                                # Senão, PVE (lógica antiga)
+                                else:
+                                    if grupo_inimigos: todos_alvos_clicaveis.extend(list(grupo_inimigos))
+                                    if grupo_bots: todos_alvos_clicaveis.extend(list(grupo_bots))
+                                    if grupo_obstaculos: todos_alvos_clicaveis.extend(list(grupo_obstaculos))
+                                # --- FIM: MODIFICAÇÃO ---
+                                    
+                                dist_min_sq = (s.TARGET_CLICK_SIZE / 2)**2
+                                for alvo in todos_alvos_clicaveis:
+                                    # --- INÍCIO: MODIFICAÇÃO (PVP) ---
+                                    # Não deixa mirar em si mesmo
+                                    if alvo == nave_player:
+                                        continue
+                                    # --- FIM: MODIFICAÇÃO ---
+                                    dist_sq = alvo.posicao.distance_squared_to(mouse_pos_mundo)
+                                    if dist_sq < dist_min_sq:
+                                        dist_min_sq = dist_sq
+                                        alvo_clicado = alvo
+                                nave_player.alvo_selecionado = alvo_clicado
             
             elif estado_jogo == "PAUSE":
                 action = self.pause_manager.handle_event(event, is_online)
 
+                # --- INÍCIO: MODIFICAÇÃO (Voltar do Pause no PVP) ---
                 if action == "RESUME_GAME":
-                    if novos_estados["jogador_esta_vivo_espectador"] or nave_player.vida_atual <= 0:
+                    # Verifica o estado ANTES de pausar (que está em 'game_state')
+                    estado_anterior = game_state.get("estado_jogo", "JOGANDO")
+                    
+                    if estado_anterior.startswith("PVP_"):
+                        novos_estados["estado_jogo"] = estado_anterior # Volta para PVP_LOBBY, PVP_PLAYING, etc.
+                    elif novos_estados["jogador_esta_vivo_espectador"] or nave_player.vida_atual <= 0:
                         novos_estados["estado_jogo"] = "ESPECTADOR"
                     else:
                         novos_estados["estado_jogo"] = "JOGANDO"
+                # --- FIM: MODIFICAÇÃO ---
                 
                 elif action == "GOTO_MENU":
-                    self.cb_resetar_para_menu() # Chama a função do main.py
+                    self.cb_resetar_para_menu() # Chama a função do main.py (que agora restaura o mapa PVE)
                     novos_estados["estado_jogo"] = "MENU" # Garante a mudança
 
                 elif action == "REQ_SPECTATOR":
-                    if is_online:
-                        novos_estados["jogador_pediu_para_espectar"] = True
-                        novos_estados["jogador_esta_vivo_espectador"] = True
-                        self.network_client.send("ENTER_SPECTATOR")
-                        novos_estados["estado_jogo"] = "JOGANDO" # Espera a desconexão
-                    else:
-                        # --- CORREÇÃO (BUGS 1 e 2) ---
-                        # "Mata" o jogador localmente para que ele não possa ser 
-                        # espectado e para que o respawn funcione
-                        nave_player.vida_atual = 0 
-                        # --- FIM DA CORREÇÃO ---
+                    # --- INÍCIO: MODIFICAÇÃO (PVP) ---
+                    # (Não permite entrar em espectador se estiver no PVP)
+                    if not game_state.get("estado_jogo", "").startswith("PVP_"):
+                    # --- FIM: MODIFICAÇÃO ---
+                        if is_online:
+                            novos_estados["jogador_pediu_para_espectar"] = True
+                            novos_estados["jogador_esta_vivo_espectador"] = True
+                            self.network_client.send("ENTER_SPECTATOR")
+                            novos_estados["estado_jogo"] = "JOGANDO" # Espera a desconexão
+                        else:
+                            # --- CORREÇÃO (BUGS 1 e 2) ---
+                            # "Mata" o jogador localmente para que ele não possa ser 
+                            # espectado e para que o respawn funcione
+                            nave_player.vida_atual = 0 
+                            # --- FIM DA CORREÇÃO ---
+                            
+                            novos_estados["estado_jogo"] = "ESPECTADOR"
+                            novos_estados["jogador_esta_vivo_espectador"] = True
+                            
+                            novos_estados["alvo_espectador"] = None
+                            novos_estados["alvo_espectador_nome"] = None
+                            novos_estados["espectador_dummy_alvo"].posicao = nave_player.posicao.copy()
                         
-                        novos_estados["estado_jogo"] = "ESPECTADOR"
-                        novos_estados["jogador_esta_vivo_espectador"] = True
-                        
+                        zoom_w = novos_estados["LARGURA_TELA"] / s.MAP_WIDTH
+                        zoom_h = novos_estados["ALTURA_TELA"] / s.MAP_HEIGHT
+                        self.camera.set_zoom(min(zoom_w, zoom_h))
                         novos_estados["alvo_espectador"] = None
                         novos_estados["alvo_espectador_nome"] = None
-                        novos_estados["espectador_dummy_alvo"].posicao = nave_player.posicao.copy()
-                    
-                    zoom_w = novos_estados["LARGURA_TELA"] / s.MAP_WIDTH
-                    zoom_h = novos_estados["ALTURA_TELA"] / s.MAP_HEIGHT
-                    self.camera.set_zoom(min(zoom_w, zoom_h))
-                    novos_estados["alvo_espectador"] = None
-                    novos_estados["alvo_espectador_nome"] = None
+                    # --- INÍCIO: MODIFICAÇÃO (PVP) ---
+                    else:
+                        print("[PVP] Modo espectador desabilitado durante partida PVP.")
+                    # --- FIM: MODIFICAÇÃO ---
 
                 elif action == "REQ_RESPAWN":
+                    # --- INÍCIO: MODIFICAÇÃO (Respawn no PVP) ---
+                    # Não permite respawn manual no PVP
+                    if game_state.get("estado_jogo", "").startswith("PVP_"):
+                        print("[PVP] Respawn manual desabilitado no modo PVP.")
+                    # --- FIM: MODIFICAÇÃO ---
                     # (Lógica da semana passada: checa se está morto OU se é vivo-espectador)
-                    if nave_player.vida_atual <= 0 or novos_estados["jogador_esta_vivo_espectador"]:
+                    elif nave_player.vida_atual <= 0 or novos_estados["jogador_esta_vivo_espectador"]:
                         if is_online:
                             self.network_client.send("RESPAWN_ME")
                         else:
@@ -372,7 +437,15 @@ class EventHandler:
                         novos_estados["max_bots_atual"] += 1
             
             elif estado_jogo == "LOJA":
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_v: novos_estados["estado_jogo"] = "JOGANDO"
+                # --- INÍCIO: MODIFICAÇÃO (Voltar da Loja no PVP) ---
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_v:
+                    # Descobre de qual estado o jogador veio (PVP ou PVE)
+                    estado_anterior = game_state.get("estado_jogo", "JOGANDO")
+                    if estado_anterior.startswith("PVP_"):
+                        novos_estados["estado_jogo"] = estado_anterior # Volta para PVP_LOBBY, etc.
+                    else:
+                         novos_estados["estado_jogo"] = "JOGANDO"
+                # --- FIM: MODIFICAÇÃO ---
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     mouse_pos = pygame.mouse.get_pos()
                     if ui.RECT_BOTAO_MOTOR.collidepoint(mouse_pos):
@@ -400,6 +473,14 @@ class EventHandler:
                     elif event.key == pygame.K_QUOTE: novos_estados["estado_jogo"] = "JOGANDO"
                     else:
                         if len(novos_estados["variavel_texto_terminal"]) < 50: novos_estados["variavel_texto_terminal"] += event.unicode
+            
+            # --- INÍCIO: MODIFICAÇÃO (ESC no Fim do PVP) ---
+            elif estado_jogo == "PVP_GAME_OVER":
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE or event.key == pygame.K_SPACE:
+                        self.cb_resetar_para_menu() # Volta ao menu principal
+                        novos_estados["estado_jogo"] = "MENU"
+            # --- FIM: MODIFICAÇÃO ---
 
             elif estado_jogo == "ESPECTADOR":
                 if event.type == pygame.KEYDOWN:

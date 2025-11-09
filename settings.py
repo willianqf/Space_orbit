@@ -16,8 +16,8 @@ except pygame.error as e:
 # 1. Configurações da Tela e Mapa
 LARGURA_TELA_INICIAL = 800
 ALTURA_TELA_INICIAL = 600
-MAP_WIDTH = 8000
-MAP_HEIGHT = 8000
+MAP_WIDTH = 8000 # <-- MODIFICAÇÃO: Garantido que é 8000
+MAP_HEIGHT = 8000 # <-- MODIFICAÇÃO: Garantido que é 8000
 MAP_RECT = pygame.Rect(0, 0, MAP_WIDTH, MAP_HEIGHT)
 
 # 2. Constantes do Jogo

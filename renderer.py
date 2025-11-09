@@ -2,6 +2,7 @@
 import pygame
 import math
 import settings as s
+import multi.pvp_settings as pvp_s # <-- MODIFICAÇÃO: Importa configs PVP
 import ui
 from camera import Camera
 from pause_menu import PauseMenu
@@ -88,7 +89,10 @@ class Renderer:
         
         # --- INÍCIO: MODIFICAÇÃO (Adiciona o novo estado) ---
         elif estado_jogo == "MULTIPLAYER_MODE_SELECT":
-            self.ui.desenhar_tela_modo_multiplayer(self.tela, LARGURA_TELA, ALTURA_TELA)
+            # --- SUBSTITUA ESTE BLOCO ---
+            pvp_disponivel = game_globals.get("pvp_disponivel", False) # Pega a flag
+            self.ui.desenhar_tela_modo_multiplayer(self.tela, LARGURA_TELA, ALTURA_TELA, pvp_disponivel) # Passa a flag
+            # --- FIM DA SUBSTITUIÇÃO ---
         # --- FIM: MODIFICAÇÃO ---
 
         else: 
@@ -96,11 +100,18 @@ class Renderer:
             self.tela.fill(s.PRETO)
             
             # 1. Fundo Parallax
+            # --- INÍCIO: MODIFICAÇÃO (Fundo Parallax PVP) ---
+            # Determina o tamanho do mapa correto para o parallax
+            map_w = pvp_s.MAP_WIDTH if estado_jogo.startswith("PVP_") else s.MAP_WIDTH
+            map_h = pvp_s.MAP_HEIGHT if estado_jogo.startswith("PVP_") else s.MAP_HEIGHT
+
             pos_camera = alvo_camera_final.posicao
             for pos_base, raio, parallax_fator in self.lista_estrelas:
-                pos_tela_x = (pos_base.x - (pos_camera.x * parallax_fator)) % LARGURA_TELA
-                pos_tela_y = (pos_base.y - (pos_camera.y * parallax_fator)) % ALTURA_TELA
+                # Usa o tamanho do mapa correto
+                pos_tela_x = (pos_base.x - (pos_camera.x * parallax_fator)) % map_w
+                pos_tela_y = (pos_base.y - (pos_camera.y * parallax_fator)) % map_h
                 pygame.draw.circle(self.tela, s.CORES_ESTRELAS[raio - 1], (int(pos_tela_x), int(pos_tela_y)), raio)
+            # --- FIM: MODIFICAÇÃO ---
 
             # 2. Sprites Estáticos
             for obst in grupo_obstaculos: 
@@ -115,11 +126,25 @@ class Renderer:
                                            grupo_explosoes, pos_ouvinte)
             else:
                 # 3b. Desenho Offline
-                self._draw_offline_entities(grupo_inimigos, grupo_bots, grupo_projeteis_player,
-                                            grupo_projeteis_bots, grupo_projeteis_inimigos)
+                # --- INÍCIO: MODIFICAÇÃO (PVP) ---
+                # Não desenha inimigos PVE no modo PVP
+                if not estado_jogo.startswith("PVP_"):
+                    self._draw_offline_entities(grupo_inimigos, grupo_bots, grupo_projeteis_player,
+                                                grupo_projeteis_bots, grupo_projeteis_inimigos)
+                else:
+                    # No PVP, desenhamos apenas os bots (como jogadores) e seus projéteis
+                    self._draw_offline_entities(pygame.sprite.Group(), grupo_bots, grupo_projeteis_player,
+                                                grupo_projeteis_bots, pygame.sprite.Group())
+                # --- FIM: MODIFICAÇÃO ---
             
             # 4. Desenho do Jogador (e seus auxiliares)
-            self._draw_player(nave_player, estado_jogo, is_online, game_globals["jogador_esta_vivo_espectador"])
+            # --- INÍCIO: MODIFICAÇÃO (PVP) ---
+            # Mostra o jogador em todos os estados PVP (Lobby, Countdown, etc.)
+            if estado_jogo.startswith("PVP_"):
+                 self._draw_player(nave_player, "JOGANDO", is_online, False) # Trata como "JOGANDO"
+            else:
+                 self._draw_player(nave_player, estado_jogo, is_online, game_globals["jogador_esta_vivo_espectador"])
+            # --- FIM: MODIFICAÇÃO ---
             
             # 5. Efeitos Visuais (Explosões, Regeneração)
             for efeito in grupo_efeitos_visuais:
@@ -129,8 +154,13 @@ class Renderer:
                     efeito.draw(self.tela, self.camera) # Explosões
 
             # 6. UI (HUD, Minimapa, Ranking)
+            # --- INÍCIO: MODIFICAÇÃO (PVP) ---
+            # Passa o mapa correto para o minimapa
+            map_w_ui = pvp_s.MAP_WIDTH if estado_jogo.startswith("PVP_") else s.MAP_WIDTH
+            map_h_ui = pvp_s.MAP_HEIGHT if estado_jogo.startswith("PVP_") else s.MAP_HEIGHT
             self._draw_ui_elements(estado_jogo, nave_player, game_globals, online_players_copy,
-                                   grupo_bots, alvo_camera_final)
+                                   grupo_bots, alvo_camera_final, map_w_ui, map_h_ui)
+            # --- FIM: MODIFICAÇÃO ---
                 
             # 7. Overlays (Menus por cima do jogo)
             self._draw_overlays(estado_jogo, nave_player, game_globals, is_online, len(grupo_bots),
@@ -258,12 +288,9 @@ class Renderer:
             player_hp = state.get('hp', 0)
             player_max_hp = state.get('max_hp', player_hp if player_hp > 0 else 5) # Usa 5 como padrão se max_hp for 0
             
-            # (Usando a mesma lógica do offline: mostrar se a vida não estiver cheia)
-            # (Não podemos usar 'ultimo_hit_tempo' pois não é enviado pela rede)
             if player_hp < player_max_hp: 
                 LARGURA_BARRA = 40; ALTURA_BARRA = 5; OFFSET_Y = 30 # (Valores de 'ships.py')
                 
-                # (Posicionamento da barra de vida do 'ships.py')
                 pos_x_mundo = state['x'] - LARGURA_BARRA / 2
                 pos_y_mundo = state['y'] - OFFSET_Y 
                 
@@ -348,7 +375,11 @@ class Renderer:
         """ Desenha o sprite do jogador principal, se aplicável. """
         jogador_visivel = False
         
-        if estado_jogo in ["JOGANDO", "PAUSE", "LOJA", "TERMINAL"]:
+        # --- INÍCIO: MODIFICAÇÃO (PVP) ---
+        # Trata os estados PVP como "JOGANDO" para esta lógica
+        if estado_jogo in ["JOGANDO", "PAUSE", "LOJA", "TERMINAL", 
+                           "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
+        # --- FIM: MODIFICAÇÃO ---
             if nave_player.vida_atual > 0:
                 jogador_visivel = True
         
@@ -364,22 +395,47 @@ class Renderer:
             for aux in nave_player.grupo_auxiliares_ativos: 
                 aux.desenhar(self.tela, self.camera)
 
+    # --- INÍCIO: MODIFICAÇÃO (Assinatura de _draw_ui_elements) ---
     def _draw_ui_elements(self, estado_jogo, nave_player, game_globals, online_players_copy,
-                          grupo_bots, alvo_camera_final):
+                          grupo_bots, alvo_camera_final, map_width, map_height):
+    # --- FIM: MODIFICAÇÃO ---
         """ Desenha os elementos de UI (HUD, Minimapa, Ranking). """
         
-        if estado_jogo == "JOGANDO" or estado_jogo == "LOJA" or estado_jogo == "TERMINAL":
+        # --- INÍCIO: MODIFICAÇÃO (PVP) ---
+        # Mostra o HUD (vida, pontos) em todos os estados de jogo PVP
+        if estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", 
+                           "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
+        # --- FIM: MODIFICAÇÃO ---
              self.ui.desenhar_hud(self.tela, nave_player, estado_jogo)
         
-        if estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", "ESPECTADOR"]:
+        # --- INÍCIO: MODIFICAÇÃO (PVP) ---
+        # Mostra o Minimapa em todos os estados de jogo PVP
+        if estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", "ESPECTADOR",
+                           "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_GAME_OVER"]:
+        # --- FIM: MODIFICAÇÃO ---
             MEU_NOME_REDE = self.network_client.get_my_name()
             
-            self.ui.desenhar_minimapa(self.tela, nave_player, grupo_bots, estado_jogo, s.MAP_WIDTH, s.MAP_HEIGHT, 
+            # --- INÍCIO: MODIFICAÇÃO (PVP) ---
+            # Passa o map_width e map_height corretos
+            self.ui.desenhar_minimapa(self.tela, nave_player, grupo_bots, estado_jogo, map_width, map_height, 
                                  online_players_copy, MEU_NOME_REDE, alvo_camera_final, self.camera.zoom,
                                  game_globals["jogador_esta_vivo_espectador"]) 
+            # --- FIM: MODIFICAÇÃO ---
             
             # Lógica do Ranking
-            if self.network_client.is_connected():
+            # --- INÍCIO: MODIFICAÇÃO (PVP) ---
+            # No PVP, o ranking são os jogadores do grupo_bots + player
+            top_5 = [] # Inicializa
+            if estado_jogo.startswith("PVP_"):
+                todos_os_jogadores = []
+                if nave_player.vida_atual > 0:
+                    todos_os_jogadores.append(nave_player)
+                todos_os_jogadores.extend([bot for bot in grupo_bots.sprites() if bot.vida_atual > 0])
+                # Ordena por VIDA (em vez de pontos)
+                lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.vida_atual, reverse=True)
+                top_5 = lista_ordenada[:5] # Mostra os 4
+            # --- FIM: MODIFICAÇÃO ---
+            elif self.network_client.is_connected():
                 class RankingEntry: # Helper class
                     def __init__(self, nome, pontos): self.nome = nome; self.pontos = pontos
                 lista_ranking = []
@@ -387,14 +443,21 @@ class Renderer:
                     if state.get('hp', 0) <= 0: continue
                     lista_ranking.append(RankingEntry(nome, state.get('pontos', 0)))
                 lista_ordenada = sorted(lista_ranking, key=lambda entry: entry.pontos, reverse=True); top_5 = lista_ordenada[:5]
-            else:
+            else: # Lógica ranking PVE Offline
                 todos_os_jogadores = []
                 if nave_player.vida_atual > 0 and not game_globals["jogador_esta_vivo_espectador"]:
                     todos_os_jogadores.append(nave_player)
                 todos_os_jogadores.extend([bot for bot in grupo_bots.sprites() if bot.vida_atual > 0])
                 lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
             
-            self.ui.desenhar_ranking(self.tela, top_5, nave_player)
+            # --- INÍCIO: MODIFICAÇÃO (PVP) ---
+            # Desenha o ranking PVE ou PVP (Ranking PVP é por vida)
+            if estado_jogo.startswith("PVP_"):
+                self.ui.desenhar_ranking(self.tela, top_5, nave_player) # Reutiliza a função
+            elif estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", "ESPECTADOR"]:
+                self.ui.desenhar_ranking(self.tela, top_5, nave_player)
+            # --- FIM: MODIFICAÇÃO ---
+
 
     def _draw_overlays(self, estado_jogo, nave_player, game_globals, is_online, num_bots_ativos,
                        LARGURA_TELA, ALTURA_TELA):
@@ -410,6 +473,54 @@ class Renderer:
         elif estado_jogo == "TERMINAL":
             self.ui.desenhar_terminal(self.tela, game_globals["variavel_texto_terminal"], LARGURA_TELA, ALTURA_TELA)
             
+        # --- INÍCIO: ADIÇÃO (Overlays PVP) ---
+        elif estado_jogo == "PVP_LOBBY":
+            texto_lobby = pvp_s.FONT_TITULO_PVP.render("Aguardando Jogadores...", True, pvp_s.BRANCO)
+            pos_x = (LARGURA_TELA - texto_lobby.get_width()) // 2
+            self.tela.blit(texto_lobby, (pos_x, 50))
+            texto_instr = pvp_s.FONT_TITULO_PVP.render("Use 'V' para distribuir seus 10 pontos!", True, pvp_s.AMARELO)
+            pos_x_instr = (LARGURA_TELA - texto_instr.get_width()) // 2
+            self.tela.blit(texto_instr, (pos_x_instr, 100))
+
+        elif estado_jogo == "PVP_COUNTDOWN":
+            tempo_restante_ms = game_globals.get("pvp_lobby_timer_fim", 0) - pygame.time.get_ticks()
+            if tempo_restante_ms < 0: tempo_restante_ms = 0
+            tempo_s = math.ceil(tempo_restante_ms / 1000)
+            
+            texto_timer = pvp_s.FONT_TITULO_PVP.render(f"Iniciando em {tempo_s}", True, pvp_s.AMARELO)
+            pos_x = (LARGURA_TELA - texto_timer.get_width()) // 2
+            self.tela.blit(texto_timer, (pos_x, 50))
+
+        elif estado_jogo == "PVP_PLAYING":
+            tempo_restante_ms = game_globals.get("pvp_partida_timer_fim", 0) - pygame.time.get_ticks()
+            if tempo_restante_ms < 0: tempo_restante_ms = 0
+            minutos = int(tempo_restante_ms / 60000)
+            segundos = int((tempo_restante_ms % 60000) / 1000)
+            cor_timer = pvp_s.BRANCO if tempo_restante_ms > 10000 else pvp_s.VERMELHO
+            
+            texto_timer = pvp_s.FONT_TIMER_PVP.render(f"{minutos:02d}:{segundos:02d}", True, cor_timer)
+            pos_x = (LARGURA_TELA - texto_timer.get_width()) // 2
+            self.tela.blit(texto_timer, (pos_x, 20))
+
+        elif estado_jogo == "PVP_GAME_OVER":
+            fundo_overlay = pygame.Surface((LARGURA_TELA, ALTURA_TELA), pygame.SRCALPHA)
+            fundo_overlay.fill(s.PRETO_TRANSPARENTE_PAUSA)
+            self.tela.blit(fundo_overlay, (0, 0))
+            
+            vencedor = game_globals.get("pvp_vencedor_nome", "Ninguém")
+            texto_fim = pvp_s.FONT_TITULO_PVP.render("Fim de Jogo!", True, pvp_s.VERMELHO)
+            pos_x_fim = (LARGURA_TELA - texto_fim.get_width()) // 2
+            self.tela.blit(texto_fim, (pos_x_fim, ALTURA_TELA // 3))
+            
+            texto_venc = pvp_s.FONT_VENCEDOR_PVP.render(f"Vencedor: {vencedor}", True, pvp_s.VERDE)
+            pos_x_venc = (LARGURA_TELA - texto_venc.get_width()) // 2
+            self.tela.blit(texto_venc, (pos_x_venc, ALTURA_TELA // 2))
+            
+            texto_instr = s.FONT_PADRAO.render("Pressione ESC para voltar ao Menu", True, pvp_s.BRANCO)
+            pos_x_instr = (LARGURA_TELA - texto_instr.get_width()) // 2
+            self.tela.blit(texto_instr, (pos_x_instr, ALTURA_TELA * 0.7))
+        # --- FIM: ADIÇÃO (Overlays PVP) ---
+            
         elif estado_jogo == "ESPECTADOR":
             
             # --- INÍCIO DA CORREÇÃO (BUG 2) ---
@@ -417,8 +528,6 @@ class Renderer:
             is_dead_spectator = (nave_player.vida_atual <= 0 and not game_globals["jogador_esta_vivo_espectador"])
             
             # 1. Botão de Respawn (se morto E flag NÃO está ativa)
-            # Só desenha o overlay "Você Morreu" se o jogador estiver morto
-            # E a flag 'spectator_overlay_hidden' for Falsa.
             if is_dead_spectator and not game_globals.get("spectator_overlay_hidden", False):
                  self.ui.desenhar_game_over(self.tela, LARGURA_TELA, ALTURA_TELA)
             # --- FIM DA CORREÇÃO ---

@@ -2,6 +2,7 @@
 import pygame
 # Importa todas as constantes e fontes de settings
 from settings import *
+import multi.pvp_settings as pvp_s # <-- MODIFICAÇÃO: CORREÇÃO DO BUG (importação)
 
 # --- Variáveis Globais de UI (Tamanho e Posição) ---
 # Tamanhos Fixos
@@ -293,9 +294,10 @@ def desenhar_tela_nome(surface, nome_jogador_atual, input_nome_ativo, dificuldad
     texto_botao_rect = texto_botao.get_rect(center=RECT_LOGIN_BOTAO.center)
     surface.blit(texto_botao, texto_botao_rect)
 
-# --- INÍCIO: MODIFICAÇÃO (Adicionada nova função de desenho) ---
-def desenhar_tela_modo_multiplayer(surface, largura_tela, altura_tela):
+# --- INÍCIO: MODIFICAÇÃO (Assinatura da Função) ---
+def desenhar_tela_modo_multiplayer(surface, largura_tela, altura_tela, pvp_disponivel=False):
     """ Desenha a tela de seleção de modo multiplayer (PVE vs PVP). """
+# --- FIM: MODIFICAÇÃO ---
     surface.fill(PRETO) 
 
     # Desenha o logo ou título
@@ -318,8 +320,13 @@ def desenhar_tela_modo_multiplayer(surface, largura_tela, altura_tela):
     # Botão 1: Jogador VS Todos (Modo PVE Online)
     draw_menu_button(RECT_BOTAO_PVE_ONLINE, "Jogador VS Todos")
     
-    # Botão 2: Jogador VS Jogador (Modo PVP Online) - Desabilitado por enquanto
-    draw_menu_button(RECT_BOTAO_PVP_ONLINE, "Jogador VS Jogador", text_color=PRETO, button_color=CINZA_BOTAO_DESLIGADO)
+    # --- INÍCIO: MODIFICAÇÃO (Cor do Botão PVP) ---
+    # Botão 2: Jogador VS Jogador (Modo PVP Online) - Agora dinâmico
+    if pvp_disponivel:
+        draw_menu_button(RECT_BOTAO_PVP_ONLINE, "Jogador VS Jogador", text_color=PRETO, button_color=BRANCO)
+    else:
+        draw_menu_button(RECT_BOTAO_PVP_ONLINE, "Jogador VS Jogador", text_color=PRETO, button_color=CINZA_BOTAO_DESLIGADO)
+    # --- FIM: MODIFICAÇÃO ---
     
     # Instrução para voltar
     texto_voltar = FONT_PADRAO.render("ESC para Voltar", True, CINZA_BOTAO_DESLIGADO)
@@ -330,6 +337,7 @@ def desenhar_tela_modo_multiplayer(surface, largura_tela, altura_tela):
 
 # --- INÍCIO: MODIFICAÇÃO (Remoção da função desenhar_pause) ---
 # A função 'desenhar_pause' (linhas 309-380 do arquivo original) foi removida.
+# Ela agora vive dentro do 'pause_menu.py'
 # --- FIM: MODIFICAÇÃO ---
 
 
@@ -341,15 +349,37 @@ def desenhar_loja(surface, nave, largura_tela, altura_tela, client_socket=None):
     surface.blit(texto_titulo, (largura_tela // 2 - texto_titulo.get_width() // 2, 50))
     texto_pontos = FONT_PADRAO.render(f"Pontos de Upgrade: {nave.pontos_upgrade_disponiveis}", True, BRANCO)
     surface.blit(texto_pontos, (largura_tela // 2 - texto_pontos.get_width() // 2, 100))
-    texto_limite = FONT_PADRAO.render(f"Upgrades Feitos: {nave.total_upgrades_feitos} / {MAX_TOTAL_UPGRADES}", True, CINZA_BOTAO_DESLIGADO)
+    
+    # --- INÍCIO: MODIFICAÇÃO (Não mostra limite no PVP) ---
+    # (No PVE, o limite é MAX_TOTAL_UPGRADES)
+    # (No PVP, o limite são os 10 pontos iniciais)
+    limite_texto = f"Upgrades Feitos: {nave.total_upgrades_feitos} / {MAX_TOTAL_UPGRADES}"
+    if nave.pontos > 0: # Se tem pontos, é PVE
+        pass # Usa o limite_texto padrão
+    elif nave.pontos_upgrade_disponiveis > 0 or nave.total_upgrades_feitos > 0: # Se não tem pontos, mas tem upgrades, é PVP
+        limite_texto = f"Upgrades Feitos: {nave.total_upgrades_feitos} / {pvp_s.PONTOS_ATRIBUTOS_INICIAIS}"
+    
+    texto_limite = FONT_PADRAO.render(limite_texto, True, CINZA_BOTAO_DESLIGADO)
     surface.blit(texto_limite, (largura_tela // 2 - texto_limite.get_width() // 2, 130))
+    # --- FIM: MODIFICAÇÃO ---
+
 
     def draw_text_on_button(rect, text, font, text_color):
         text_surf = font.render(text, True, text_color)
         text_rect = text_surf.get_rect(center=rect.center)
         surface.blit(text_surf, text_rect)
 
-    pode_comprar_geral = nave.pontos_upgrade_disponiveis > 0 and nave.total_upgrades_feitos < MAX_TOTAL_UPGRADES
+    # --- INÍCIO: MODIFICAÇÃO (Lógica de Custo PVP) ---
+    # Verifica se estamos em PVE (tem pontos de score) ou PVP (score 0, mas tem pontos de upgrade)
+    is_pve = nave.pontos > 0
+    
+    if is_pve:
+        pode_comprar_geral = nave.pontos_upgrade_disponiveis > 0 and nave.total_upgrades_feitos < MAX_TOTAL_UPGRADES
+    else: # É PVP
+        # No PVP, o único limite é ter pontos
+        pode_comprar_geral = nave.pontos_upgrade_disponiveis > 0
+    # --- FIM: MODIFICAÇÃO ---
+
     custo_padrao = 1
     pode_motor = pode_comprar_geral and nave.nivel_motor < MAX_NIVEL_MOTOR
     cor_motor = BRANCO if pode_motor else CINZA_BOTAO_DESLIGADO
@@ -384,8 +414,6 @@ def desenhar_loja(surface, nave, largura_tela, altura_tela, client_socket=None):
     draw_text_on_button(RECT_BOTAO_AUX, txt_aux, FONT_PADRAO, PRETO)
 
     # --- INÍCIO: MODIFICAÇÃO (Lógica Botão Vida Máx) ---
-    # Define o nível máximo de vida com base na lista de settings
-    # (VIDA_POR_NIVEL é importado via 'from settings import *')
     MAX_NIVEL_VIDA = len(VIDA_POR_NIVEL) - 1 # (Isso será 5)
     
     pode_maxhp = pode_comprar_geral and nave.nivel_max_vida < MAX_NIVEL_VIDA
@@ -419,9 +447,17 @@ def desenhar_hud(surface, nave, estado_jogo):
     pos_x_detalhes = 10
     pos_y_atual_detalhes = 10
     hud_line_height = FONT_HUD.get_height() + 5
-    texto_pontos = FONT_HUD.render(f"Pontos: {nave.pontos}", True, BRANCO)
-    surface.blit(texto_pontos, (pos_x_detalhes, pos_y_atual_detalhes))
-    pos_y_atual_detalhes += hud_line_height
+    
+    # --- INÍCIO: MODIFICAÇÃO (PVP não mostra pontos) ---
+    if estado_jogo != "JOGANDO": # Se não for PVE
+        # Em PVP_LOBBY, PVP_COUNTDOWN, etc., não mostramos pontos de score
+        pass
+    else:
+        texto_pontos = FONT_HUD.render(f"Pontos: {nave.pontos}", True, BRANCO)
+        surface.blit(texto_pontos, (pos_x_detalhes, pos_y_atual_detalhes))
+        pos_y_atual_detalhes += hud_line_height
+    # --- FIM: MODIFICAÇÃO ---
+    
     vida_display = round(max(0, nave.vida_atual), 1)
     texto_vida = FONT_HUD.render(f"Vida: {vida_display} / {nave.max_vida}", True, VERDE_VIDA)
     surface.blit(texto_vida, (pos_x_detalhes, pos_y_atual_detalhes))
@@ -435,11 +471,18 @@ def desenhar_hud(surface, nave, estado_jogo):
         surface.blit(texto_pts_up, (pos_x_detalhes, pos_y_atual_detalhes))
         pos_y_atual_detalhes += hud_line_height
         RECT_BOTAO_UPGRADE_HUD.topleft = (pos_x_detalhes, pos_y_atual_detalhes)
-        pygame.draw.rect(surface, BRANCO, RECT_BOTAO_UPGRADE_HUD, border_radius=5)
-        texto_botao_surf = FONT_RANKING.render("UPGRADE (V)", True, PRETO)
-        texto_botao_rect = texto_botao_surf.get_rect(center=RECT_BOTAO_UPGRADE_HUD.center)
-        surface.blit(texto_botao_surf, texto_botao_rect)
+        
+        # --- INÍCIO: MODIFICAÇÃO (Botão Upgrade no PVP) ---
+        # Só mostra o botão se puder usar a loja
+        if estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN"]:
+            pygame.draw.rect(surface, BRANCO, RECT_BOTAO_UPGRADE_HUD, border_radius=5)
+            texto_botao_surf = FONT_RANKING.render("UPGRADE (V)", True, PRETO)
+            texto_botao_rect = texto_botao_surf.get_rect(center=RECT_BOTAO_UPGRADE_HUD.center)
+            surface.blit(texto_botao_surf, texto_botao_rect)
+        
         pos_y_atual_detalhes = RECT_BOTAO_UPGRADE_HUD.bottom + 10
+        # --- FIM: MODIFICAÇÃO ---
+
         line_spacing_detalhes = FONT_HUD_DETALHES.get_height() + 2
         texto_motor = FONT_HUD_DETALHES.render(f"Motor: Nv {nave.nivel_motor}/{MAX_NIVEL_MOTOR}", True, BRANCO)
         surface.blit(texto_motor, (pos_x_detalhes, pos_y_atual_detalhes))
@@ -461,23 +504,26 @@ def desenhar_hud(surface, nave, estado_jogo):
         surface.blit(texto_aux, (pos_x_detalhes, pos_y_atual_detalhes))
         pos_y_atual_detalhes += line_spacing_detalhes
 
-        # Desenhar Botão Regenerar
-        is_regenerando = getattr(nave, 'esta_regenerando', False) 
-        
-        if is_regenerando:
-            cor_botao = LILAS_REGEN
-            texto_botao = "Regenerando..."
-        elif nave.vida_atual >= nave.max_vida:
-            cor_botao = CINZA_BOTAO_DESLIGADO
-            texto_botao = "Vida Cheia"
-        else:
-            cor_botao = BRANCO
-            texto_botao = "Regenerar Vida (R)"
+        # --- INÍCIO: MODIFICAÇÃO (Botão Regenerar apenas PVE) ---
+        # Desenhar Botão Regenerar (Apenas no modo PVE "JOGANDO")
+        if estado_jogo == "JOGANDO":
+            is_regenerando = getattr(nave, 'esta_regenerando', False) 
             
-        pygame.draw.rect(surface, cor_botao, RECT_BOTAO_REGEN_HUD, border_radius=5)
-        texto_surf = FONT_RANKING.render(texto_botao, True, PRETO) 
-        texto_rect = texto_surf.get_rect(center=RECT_BOTAO_REGEN_HUD.center)
-        surface.blit(texto_surf, texto_rect)
+            if is_regenerando:
+                cor_botao = LILAS_REGEN
+                texto_botao = "Regenerando..."
+            elif nave.vida_atual >= nave.max_vida:
+                cor_botao = CINZA_BOTAO_DESLIGADO
+                texto_botao = "Vida Cheia"
+            else:
+                cor_botao = BRANCO
+                texto_botao = "Regenerar Vida (R)"
+                
+            pygame.draw.rect(surface, cor_botao, RECT_BOTAO_REGEN_HUD, border_radius=5)
+            texto_surf = FONT_RANKING.render(texto_botao, True, PRETO) 
+            texto_rect = texto_surf.get_rect(center=RECT_BOTAO_REGEN_HUD.center)
+            surface.blit(texto_surf, texto_rect)
+        # --- FIM: MODIFICAÇÃO ---
 
 
 # --- MODIFICAÇÃO 1: Mudar a assinatura da função ---
@@ -488,8 +534,16 @@ def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height,
     fundo_mini.fill(MINIMAP_FUNDO)
     surface.blit(fundo_mini, (MINIMAP_POS_X, MINIMAP_POS_Y))
     pygame.draw.rect(surface, BRANCO, MINIMAP_RECT, 1)
+    
+    # --- INÍCIO: MODIFICAÇÃO (Usa map_width/height passados) ---
+    # Garante que não haja divisão por zero se o mapa for 0
+    if map_width == 0 or map_height == 0:
+        return # Não pode desenhar o minimapa
+        
     ratio_x = MINIMAP_WIDTH / map_width
     ratio_y = MINIMAP_HEIGHT / map_height
+    # --- FIM: MODIFICAÇÃO ---
+    
     def get_pos_minimapa(pos_mundo_vec):
         # Proteção contra pos_mundo_vec None
         if pos_mundo_vec is None:
@@ -544,12 +598,15 @@ def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height,
             pygame.draw.circle(surface, LARANJA_BOT, get_pos_minimapa(pos_vec), 2)
     else:
         for bot in bots:
+            # --- MODIFICAÇÃO PVP: Não desenha o player (que está no grupo 'bots' no pvp) como laranja ---
+            if bot == player:
+                continue
             pygame.draw.circle(surface, LARANJA_BOT, get_pos_minimapa(bot.posicao), 2)
             
             
     # --- INÍCIO DA MODIFICAÇÃO: Desenhar Trilha "Serrilhada" ---
     # Verifica se o jogador tem um alvo de clique (posicao_alvo_mouse) e está vivo
-    if (estado_jogo == "JOGANDO" and player.posicao_alvo_mouse and player.vida_atual > 0):
+    if (estado_jogo == "JOGANDO" or estado_jogo.startswith("PVP_")) and player.posicao_alvo_mouse and player.vida_atual > 0: # <-- MODIFICAÇÃO PVP
         
         start_mini_v = pygame.math.Vector2(get_pos_minimapa(player.posicao))
         end_mini_v = pygame.math.Vector2(get_pos_minimapa(player.posicao_alvo_mouse))
@@ -581,23 +638,19 @@ def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height,
 
     
     # --- INÍCIO DA MODIFICAÇÃO (Foco do Espectador no Minimapa) ---
-    # A lógica anterior foi removida.
     # O ponto azul (AZUL_NAVE) agora representa o 'alvo_camera_atual'.
     
-    # No modo JOGANDO, o alvo é o player. Só desenhamos se ele estiver vivo.
-    if estado_jogo == "JOGANDO":
+    if estado_jogo == "JOGANDO" or estado_jogo.startswith("PVP_"): # <-- MODIFICAÇÃO PVP
         if player.vida_atual > 0:
             # alvo_camera_atual == player, então usamos sua posição
             pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(alvo_camera_atual.posicao), 3)
             
     # No modo ESPECTADOR, sempre desenhamos o 'alvo_camera_atual'
-    # (seja o bot, player ciclado, ou a câmera livre).
     elif estado_jogo == "ESPECTADOR":
         # Verifica se o alvo_camera_atual não é None (pode acontecer brevemente)
         if alvo_camera_atual:
             pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(alvo_camera_atual.posicao), 3)
 
-    # --- FIM DA MODIFICAÇÃO ---
     # --- FIM DA MODIFICAÇÃO ---
 
 def desenhar_ranking(surface, lista_top_5, nave_player):
@@ -615,7 +668,15 @@ def desenhar_ranking(surface, lista_top_5, nave_player):
         texto_nome = f"{i + 1}. {nome_nave}"
         nome_surf = FONT_RANKING.render(texto_nome, True, cor_texto)
         surface.blit(nome_surf, (pos_x_base + 5, pos_y_linha_atual))
-        texto_pontos = f"{nave.pontos}"
+        
+        # --- INÍCIO: MODIFICAÇÃO (Ranking PVP por Vida) ---
+        # Se os pontos forem 0, assume que é PVP e mostra a vida
+        if nave.pontos == 0:
+             texto_pontos = f"{int(nave.vida_atual)} HP"
+        else:
+             texto_pontos = f"{nave.pontos}"
+        # --- FIM: MODIFICAÇÃO ---
+        
         pontos_surf = FONT_RANKING.render(texto_pontos, True, cor_texto)
         pontos_x = pos_x_base + ranking_width - pontos_surf.get_width() - 5
         surface.blit(pontos_surf, (pontos_x, pos_y_linha_atual))
