@@ -95,7 +95,7 @@ class PauseMenu:
         surface.blit(texto_voltar_menu_surf, texto_voltar_menu_rect)
         
         # Controles de Bot (Ocultos se Online)
-        if not is_online:
+        if not is_online and not estado_jogo.startswith("PVP_"):
             cor_menos = s.BRANCO if max_bots_atual > 0 else s.CINZA_BOTAO_DESLIGADO
             pygame.draw.rect(surface, cor_menos, RECT_BOTAO_BOT_MENOS, border_radius=5)
             texto_menos = s.FONT_TITULO.render("-", True, s.PRETO)

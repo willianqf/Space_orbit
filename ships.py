@@ -722,12 +722,16 @@ class NaveBot(Nave):
         morreu = super().foi_atingido(dano, estado_jogo_atual, proj_pos, atacante=atacante)
 
         if morreu:
-            # Se não for PVP, reseta o bot (lógica PVE antiga)
-            if not estado_jogo_atual.startswith("PVP_"):
+            # --- INÍCIO: CORREÇÃO (Bug 1: Respawn de Bot no PVP) ---
+            # Verifica o tamanho do mapa ATUAL. s.MAP_WIDTH é dinâmico.
+            # Se o mapa for < 5000, é PVP.
+            is_pvp_map = (s.MAP_WIDTH < 5000) 
+            
+            if not is_pvp_map: # É PVE (Mapa grande)
                 print(f"[{self.nome}] BOT MORREU! Resetando...")
                 
-                novo_x = random.randint(50, s.MAP_WIDTH - 50) # <-- CORRIGIDO para s.MAP_WIDTH
-                novo_y = random.randint(50, s.MAP_HEIGHT - 50) # <-- CORRIGIDO para s.MAP_HEIGHT
+                novo_x = random.randint(50, s.MAP_WIDTH - 50) 
+                novo_y = random.randint(50, s.MAP_HEIGHT - 50) 
                 self.posicao = pygame.math.Vector2(novo_x, novo_y); self.rect.center = self.posicao
                 
                 self.grupo_auxiliares_ativos.empty()
@@ -739,9 +743,7 @@ class NaveBot(Nave):
                 self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0; self.nivel_aux = 0
                 
                 self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
-                # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
-                self.max_vida = VIDA_POR_NIVEL[self.nivel_max_vida] # 4 + self.nivel_max_vida
-                # --- FIM: MODIFICAÇÃO ---
+                self.max_vida = VIDA_POR_NIVEL[self.nivel_max_vida] 
                 self.vida_atual = self.max_vida
                 self.alvo_selecionado = None; self.posicao_alvo_mouse = None; self.tempo_fim_lentidao = 0; self.rastro_particulas = []
                 
@@ -750,11 +752,9 @@ class NaveBot(Nave):
                 
                 self.parar_regeneracao() 
             
-            # --- INÍCIO: CORREÇÃO (Remover sprite no PVP) ---
-            # Se for PVP, o bot apenas morre e se remove dos grupos
-            else:
+            else: # É PVP (Mapa pequeno)
                 print(f"[{self.nome}] BOT MORREU no PVP! Removendo sprite.")
-                self.kill() # <-- CORREÇÃO: Remove o sprite do jogo
+                self.kill() # Apenas morre.
             # --- FIM: CORREÇÃO ---
             
         return morreu

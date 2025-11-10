@@ -366,12 +366,12 @@ class EventHandler:
                     # Verifica o estado ANTES de pausar (lendo a memória salva)
                     estado_anterior = game_state.get("estado_anterior_pause", "JOGANDO")
                     
-                    if estado_anterior.startswith("PVP_"):
-                        novos_estados["estado_jogo"] = estado_anterior # Volta para PVP_LOBBY, PVP_PLAYING, etc.
-                    elif novos_estados["jogador_esta_vivo_espectador"] or nave_player.vida_atual <= 0:
-                        novos_estados["estado_jogo"] = "ESPECTADOR"
-                    else:
-                        novos_estados["estado_jogo"] = "JOGANDO"
+                    # --- INÍCIO: CORREÇÃO (Lógica de unpause simplificada) ---
+                    # Apenas retorne ao estado em que você estava antes de pausar.
+                    # Se era "JOGANDO", volta para "JOGANDO".
+                    # Se era "ESPECTADOR", volta para "ESPECTADOR".
+                    novos_estados["estado_jogo"] = estado_anterior
+                    # --- FIM: CORREÇÃO ---
                 # --- FIM: MODIFICAÇÃO ---
                 
                 elif action == "GOTO_MENU":
@@ -415,33 +415,41 @@ class EventHandler:
                 elif action == "REQ_RESPAWN":
                     # --- INÍCIO: MODIFICAÇÃO (Respawn no PVP) ---
                     # Não permite respawn manual no PVP
-                    if game_state.get("estado_anterior_pause", "").startswith("PVP_"):
+                    # --- INÍCIO: CORREÇÃO (Bug de Respawn PVP vs PVE) ---
+                    
+                    # A única forma confiável de saber o modo de jogo é o tamanho do mapa,
+                    # pois o 'estado_anterior_pause' pode ser 'ESPECTADOR' em ambos os modos.
+                    # s.MAP_WIDTH é 1500 no PVP e 8000 no PVE.
+                    is_pvp_map = (s.MAP_WIDTH < 5000)
+
+                    if is_pvp_map:
                         print("[PVP] Respawn manual desabilitado no modo PVP.")
-                    # --- FIM: MODIFICAÇÃO ---
-                    # (Lógica da semana passada: checa se está morto OU se é vivo-espectador)
-                    elif nave_player.vida_atual <= 0 or novos_estados["jogador_esta_vivo_espectador"]:
+                    
+                    # Se NÃO for um mapa PVP (é PVE) E (o jogador está morto OU é um espectador vivo)
+                    elif (nave_player.vida_atual <= 0 or novos_estados["jogador_esta_vivo_espectador"]):
                         if is_online:
                             self.network_client.send("RESPAWN_ME")
                         else:
                             self.cb_respawn_player_offline(nave_player)
-                            # (Lógica da semana passada: sincroniza estado)
                             novos_estados["estado_jogo"] = "JOGANDO"
-                            novos_estados["jogador_esta_vivo_espectador"] = False 
-
-                elif action == "BOT_MENOS":
-                    if novos_estados["max_bots_atual"] > 0:
-                        novos_estados["max_bots_atual"] -= 1
-                        grupo_bots = novos_estados.get("grupo_bots")
-                        if grupo_bots and len(grupo_bots) > novos_estados["max_bots_atual"]:
-                             try:
-                                 bot_para_remover = random.choice(grupo_bots.sprites())
-                                 bot_para_remover.kill()
-                             except IndexError:
-                                 pass
-                                 
-                elif action == "BOT_MAIS":
-                    if novos_estados["max_bots_atual"] < s.MAX_BOTS_LIMITE_SUPERIOR:
-                        novos_estados["max_bots_atual"] += 1
+                            novos_estados["jogador_esta_vivo_espectador"] = False
+                
+                estado_antes_de_pausar = game_state.get("estado_anterior_pause", "JOGANDO")
+                if not is_online and not estado_antes_de_pausar.startswith("PVP_"):
+                    if action == "BOT_MENOS":
+                        if novos_estados["max_bots_atual"] > 0:
+                            novos_estados["max_bots_atual"] -= 1
+                            grupo_bots = novos_estados.get("grupo_bots")
+                            if grupo_bots and len(grupo_bots) > novos_estados["max_bots_atual"]:
+                                 try:
+                                     bot_para_remover = random.choice(grupo_bots.sprites())
+                                     bot_para_remover.kill()
+                                 except IndexError:
+                                     pass
+                                     
+                    elif action == "BOT_MAIS":
+                        if novos_estados["max_bots_atual"] < s.MAX_BOTS_LIMITE_SUPERIOR:
+                            novos_estados["max_bots_atual"] += 1
             
             elif estado_jogo == "LOJA":
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_v:

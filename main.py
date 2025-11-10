@@ -319,6 +319,9 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     game_globals["alvo_espectador"] = None
     game_globals["alvo_espectador_nome"] = None
     game_globals["spectator_overlay_hidden"] = False # <-- ADICIONADO (Reset)
+    game_globals["estado_anterior_pause"] = "JOGANDO"
+    game_globals["estado_anterior_loja"] = "JOGANDO"
+    game_globals["estado_anterior_terminal"] = "JOGANDO"
     camera.set_zoom(1.0) 
 
     print("Reiniciando o Jogo PVE...")
@@ -437,6 +440,9 @@ def resetar_para_menu():
     game_globals["jogador_esta_vivo_espectador"] = False
     game_globals["alvo_espectador"] = None
     game_globals["alvo_espectador_nome"] = None
+    game_globals["estado_anterior_pause"] = "JOGANDO"
+    game_globals["estado_anterior_loja"] = "JOGANDO"
+    game_globals["estado_anterior_terminal"] = "JOGANDO"
     camera.set_zoom(1.0)
     print("Voltando ao Menu Principal...")
     nave_player.parar_regeneracao() 
@@ -835,33 +841,40 @@ while game_globals["rodando"]:
 
         if not is_online:
             
-            if estado_jogo not in ["PAUSE"]:
-            
-                # --- INÍCIO: MODIFICAÇÃO (Chama a lógica PVE ou PVP) ---
-                if estado_jogo.startswith("PVP_"):
-                    # Roda a lógica de atualização PVP (que criaremos em game_logic.py)
-                    novo_estado_jogo = game_logic_handler.update_pvp_logic(game_globals, game_groups, posicao_ouvinte_som)
-                    estado_jogo = novo_estado_jogo # Atualiza o estado (ex: se o jogo acabou)
-                    game_globals["estado_jogo"] = novo_estado_jogo # Atualiza o global
-                
-                # Roda a lógica PVE (como era antes)
-                elif estado_jogo == "JOGANDO":
-                    game_state_logica = game_globals.copy()
-                    game_state_logica["estado_jogo"] = estado_jogo
-                    game_state_logica["dificuldade_jogo_atual"] = dificuldade_jogo_atual
+                    if estado_jogo not in ["PAUSE"]:
                     
-                    # --- MODIFICAÇÃO: Passa a posição do ouvinte ---
-                    novo_estado_jogo = game_logic_handler.update_offline_logic(game_state_logica, game_groups, posicao_ouvinte_som)
-                    # --- FIM DA MODIFICAÇÃO ---
-                    
-                    if novo_estado_jogo == "ESPECTADOR" and estado_jogo != "ESPECTADOR":
-                        estado_jogo = "ESPECTADOR"
-                        game_globals["jogador_esta_vivo_espectador"] = False
-                        game_globals["alvo_espectador"] = None; game_globals["alvo_espectador_nome"] = None
+                        # --- INÍCIO: CORREÇÃO (Bug 1: Jogo Pausa ao Morrer) ---
                         
-                        game_globals["spectator_overlay_hidden"] = False # (Correção anterior)
+                        # Determina qual lógica rodar (PVP ou PVE)
+                        # O mapa PVE tem 8000 (s.MAP_WIDTH), o PVP tem 1500 (pvp_s.MAP_WIDTH)
+                        # s.MAP_WIDTH é atualizado dinamicamente pelo main.py
+                        is_pvp_map = (s.MAP_WIDTH < 5000) 
                         
-                        espectador_dummy_alvo.posicao = nave_player.posicao.copy()
+                        # Se o estado for PVP_... OU (for ESPECTADOR e o mapa for PVP)
+                        if estado_jogo.startswith("PVP_") or (estado_jogo == "ESPECTADOR" and is_pvp_map):
+                            
+                            novo_estado_jogo = game_logic_handler.update_pvp_logic(game_globals, game_groups, posicao_ouvinte_som)
+                            estado_jogo = novo_estado_jogo 
+                            game_globals["estado_jogo"] = novo_estado_jogo 
+                        
+                        # Se o estado for JOGANDO OU (for ESPECTADOR e o mapa for PVE)
+                        elif estado_jogo == "JOGANDO" or (estado_jogo == "ESPECTADOR" and not is_pvp_map):
+                            
+                            game_state_logica = game_globals.copy()
+                            game_state_logica["estado_jogo"] = estado_jogo
+                            game_state_logica["dificuldade_jogo_atual"] = dificuldade_jogo_atual
+                            
+                            # Passa a posição do ouvinte
+                            novo_estado_jogo = game_logic_handler.update_offline_logic(game_state_logica, game_groups, posicao_ouvinte_som)
+                            
+                            # Se a lógica PVE nos colocou no modo espectador (porque morremos)
+                            if novo_estado_jogo == "ESPECTADOR" and estado_jogo != "ESPECTADOR":
+                                estado_jogo = "ESPECTADOR"
+                                game_globals["estado_jogo"] = "ESPECTADOR"
+                                game_globals["jogador_esta_vivo_espectador"] = False
+                                game_globals["alvo_espectador"] = None; game_globals["alvo_espectador_nome"] = None
+                                game_globals["spectator_overlay_hidden"] = False
+                                espectador_dummy_alvo.posicao = nave_player.posicao.copy()
                 # --- FIM: MODIFICAÇÃO ---
             
         # --- MODIFICAÇÃO: Passa a posição do ouvinte para os updates dos auxiliares ---

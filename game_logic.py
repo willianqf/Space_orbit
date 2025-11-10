@@ -169,6 +169,38 @@ class GameLogic:
         # Combina player e bots em um único grupo para lógica
         grupo_pvp_jogadores = pygame.sprite.Group(grupo_player, grupo_bots)
         
+        # --- INÍCIO: CORREÇÃO (Bug 3: Fim de Jogo) ---
+        # A checagem de fim de jogo deve rodar ANTES da lógica de update
+        # e deve rodar em PLAYING ou ESPECTADOR (no mapa PVP).
+        is_pvp_map_check = (s.MAP_WIDTH < 5000) 
+        
+        if estado_jogo == "PVP_PLAYING" or (estado_jogo == "ESPECTADOR" and is_pvp_map_check):
+            
+            # Checar Condições de Fim de Jogo
+            jogadores_vivos = [p for p in grupo_pvp_jogadores if p.vida_atual > 0]
+            
+            if len(jogadores_vivos) <= 1:
+                # Alguém venceu
+                estado_jogo = "PVP_GAME_OVER"
+                game_state["estado_jogo"] = "PVP_GAME_OVER" # <-- Garante a atualização
+                if len(jogadores_vivos) == 1:
+                    game_state["pvp_vencedor_nome"] = jogadores_vivos[0].nome
+                else:
+                    game_state["pvp_vencedor_nome"] = "Empate" 
+                print(f"[LOGIC] Partida PVP terminada. Vencedor: {game_state['pvp_vencedor_nome']}")
+            
+            elif agora > game_state.get("pvp_partida_timer_fim", 0):
+                # Tempo acabou
+                estado_jogo = "PVP_GAME_OVER"
+                game_state["estado_jogo"] = "PVP_GAME_OVER" # <-- Garante a atualização
+                jogadores_vivos.sort(key=lambda p: p.vida_atual, reverse=True)
+                if jogadores_vivos:
+                    game_state["pvp_vencedor_nome"] = jogadores_vivos[0].nome
+                else:
+                    game_state["pvp_vencedor_nome"] = "Empate"
+                print(f"[LOGIC] Partida PVP terminada por tempo. Vencedor: {game_state['pvp_vencedor_nome']}")
+        # --- FIM: CORREÇÃO (Bug 3) ---
+
         # --- 1. Lógica de Jogo (Lobby e Contagem) ---
         if estado_jogo == "PVP_LOBBY":
             # Verifica se atingiu o número de jogadores (para testes, começamos imediatamente)
@@ -221,35 +253,20 @@ class GameLogic:
         # --- FIM: ADICIONAR NOVO ESTADO ---
         
         elif estado_jogo == "PVP_PLAYING":
-            # --- 2. Checar Condições de Fim de Jogo ---
-            jogadores_vivos = [p for p in grupo_pvp_jogadores if p.vida_atual > 0]
-            
-            if len(jogadores_vivos) <= 1:
-                # Alguém venceu
-                estado_jogo = "PVP_GAME_OVER"
-                if len(jogadores_vivos) == 1:
-                    game_state["pvp_vencedor_nome"] = jogadores_vivos[0].nome
-                else:
-                    game_state["pvp_vencedor_nome"] = "Empate"
-                print(f"[LOGIC] Partida PVP terminada. Vencedor: {game_state['pvp_vencedor_nome']}")
-            
-            elif agora > game_state["pvp_partida_timer_fim"]:
-                # Tempo acabou
-                estado_jogo = "PVP_GAME_OVER"
-                jogadores_vivos.sort(key=lambda p: p.vida_atual, reverse=True)
-                if jogadores_vivos:
-                    game_state["pvp_vencedor_nome"] = jogadores_vivos[0].nome
-                else:
-                    game_state["pvp_vencedor_nome"] = "Empate"
-                print(f"[LOGIC] Partida PVP terminada por tempo. Vencedor: {game_state['pvp_vencedor_nome']}")
+            # (Este bloco agora está vazio, pois a lógica de Fim de Jogo foi movida para cima,
+            # e a lógica de Batalha está no `if estado_jogo != "PVP_GAME_OVER"` abaixo)
+            pass
 
         # --- 3. Atualização de Grupos (em todos os estados PVP, exceto Game Over) ---
         if estado_jogo != "PVP_GAME_OVER":
             # Cria a lista de alvos (todos os jogadores vivos)
             lista_alvos_naves_pvp = [p for p in grupo_pvp_jogadores if p.vida_atual > 0]
             
-            # Atualiza Bots (eles se veem como inimigos)
-            if estado_jogo == "PVP_PLAYING":
+            # --- INÍCIO: CORREÇÃO (Rodar bots/colisão no modo espectador) ---
+            if estado_jogo == "PVP_PLAYING" or (estado_jogo == "ESPECTADOR" and is_pvp_map_check):
+            # --- FIM: CORREÇÃO ---
+            
+                # Atualiza Bots (eles se veem como inimigos)
                 for bot in grupo_bots:
                     if bot.vida_atual > 0:
                         # --- INÍCIO: MODIFICAÇÃO (Passar map_width/height) ---

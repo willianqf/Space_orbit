@@ -463,13 +463,13 @@ class Renderer:
     def _draw_overlays(self, estado_jogo, nave_player, game_globals, is_online, num_bots_ativos,
                        LARGURA_TELA, ALTURA_TELA):
         """ Desenha os menus que ficam por cima do jogo (Pause, Loja, etc.). """
-        
+        is_pvp_map = (s.MAP_WIDTH < 5000)
         if estado_jogo == "PAUSE":
-            # --- INÍCIO: MODIFICAÇÃO (Passar estado_jogo) ---
+            estado_antes_de_pausar = game_globals.get("estado_anterior_pause", "JOGANDO")
+            
             self.pause_manager.draw(self.tela, game_globals["max_bots_atual"], s.MAX_BOTS_LIMITE_SUPERIOR, num_bots_ativos,
                                     nave_player.vida_atual <= 0, game_globals["jogador_esta_vivo_espectador"], is_online,
-                                    estado_jogo) # <-- ADICIONADO
-            # --- FIM: MODIFICAÇÃO ---
+                                    estado_antes_de_pausar) # <-- CORRIGIDO
             
         elif estado_jogo == "LOJA":
             self.ui.desenhar_loja(self.tela, nave_player, LARGURA_TELA, ALTURA_TELA, is_online)
@@ -508,7 +508,7 @@ class Renderer:
             self.tela.blit(texto_timer, (pos_x, pos_y))
         # --- FIM: ADICIONAR ESTE BLOCO ---
 
-        elif estado_jogo == "PVP_PLAYING":
+        elif estado_jogo == "PVP_PLAYING" or (estado_jogo == "ESPECTADOR" and is_pvp_map):
             tempo_restante_ms = game_globals.get("pvp_partida_timer_fim", 0) - pygame.time.get_ticks()
             if tempo_restante_ms < 0: tempo_restante_ms = 0
             minutos = int(tempo_restante_ms / 60000)
