@@ -195,13 +195,13 @@ class EventHandler:
             
             # --- INÍCIO: MODIFICAÇÃO (PERMITE LOJA/PAUSE NO PVP) ---
             # Adicione os novos estados a esta checagem
-            elif estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
+            elif estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_PRE_MATCH"]:
             # --- FIM: MODIFICAÇÃO ---
                 if event.type == pygame.KEYDOWN:
                     
                     # 'V' para Loja (Permitido no Lobby, Countdown e Jogando PVE/PVP)
                     if event.key == pygame.K_v and estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN"]: 
-                        novos_estados["estado_anterior_loja"] = estado_jogo 
+                        novos_estados["estado_anterior_loja"] = estado_jogo # <-- ADICIONE ESTA LINHA
                         novos_estados["estado_jogo"] = "LOJA"; print("Abrindo loja...")
                     
                     # 'QUOTE' para Terminal (Permitido APENAS no PVE)
@@ -250,7 +250,7 @@ class EventHandler:
                     if event.button == 1: # Esquerdo (LMB)
                         # Botão Upgrade (Permitido no Lobby e Countdown)
                         if ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela) and estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN"]:
-                             novos_estados["estado_anterior_loja"] = estado_jogo
+                             novos_estados["estado_anterior_loja"] = estado_jogo # <-- ADICIONE ESTA LINHA
                              novos_estados["estado_jogo"] = "LOJA"; print("Abrindo loja via clique no botão HUD...")
                         
                         # Botão Regenerar (Permitido APENAS no PVE)
@@ -363,8 +363,8 @@ class EventHandler:
 
                 # --- INÍCIO: MODIFICAÇÃO (Voltar do Pause no PVP) ---
                 if action == "RESUME_GAME":
-                    # Verifica o estado ANTES de pausar (que está em 'game_state')
-                    estado_anterior = game_state.get("estado_anterior_pause", "JOGANDO") # <-- CORRIGIDO
+                    # Verifica o estado ANTES de pausar (lendo a memória salva)
+                    estado_anterior = game_state.get("estado_anterior_pause", "JOGANDO")
                     
                     if estado_anterior.startswith("PVP_"):
                         novos_estados["estado_jogo"] = estado_anterior # Volta para PVP_LOBBY, PVP_PLAYING, etc.
@@ -381,7 +381,7 @@ class EventHandler:
                 elif action == "REQ_SPECTATOR":
                     # --- INÍCIO: MODIFICAÇÃO (PVP) ---
                     # (Não permite entrar em espectador se estiver no PVP)
-                    if not game_state.get("estado_jogo", "").startswith("PVP_"):
+                    if not game_state.get("estado_anterior_pause", "").startswith("PVP_"):
                     # --- FIM: MODIFICAÇÃO ---
                         if is_online:
                             novos_estados["jogador_pediu_para_espectar"] = True
@@ -415,7 +415,7 @@ class EventHandler:
                 elif action == "REQ_RESPAWN":
                     # --- INÍCIO: MODIFICAÇÃO (Respawn no PVP) ---
                     # Não permite respawn manual no PVP
-                    if game_state.get("estado_jogo", "").startswith("PVP_"):
+                    if game_state.get("estado_anterior_pause", "").startswith("PVP_"):
                         print("[PVP] Respawn manual desabilitado no modo PVP.")
                     # --- FIM: MODIFICAÇÃO ---
                     # (Lógica da semana passada: checa se está morto OU se é vivo-espectador)
@@ -451,8 +451,6 @@ class EventHandler:
                     novos_estados["estado_jogo"] = estado_para_retornar
                     print(f"Fechando loja, retornando para: {estado_para_retornar}")
                     # --- FIM: MODIFICAÇÃO ---
-                    
-                # --- FIM: MODIFICAÇÃO ---
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     mouse_pos = pygame.mouse.get_pos()
                     if ui.RECT_BOTAO_MOTOR.collidepoint(mouse_pos):
@@ -475,7 +473,7 @@ class EventHandler:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_RETURN:
                         self.cb_processar_cheat(novos_estados["variavel_texto_terminal"], nave_player)
-                        novos_estados["estado_jogo"] = game_state.get("estado_anterior_terminal", "JOGANDO")
+                        novos_estados["estado_jogo"] = game_state.get("estado_anterior_terminal", "JOGANDO") # <--- CORRIGIDO
                     elif event.key == pygame.K_BACKSPACE: novos_estados["variavel_texto_terminal"] = novos_estados["variavel_texto_terminal"][:-1]
                     elif event.key == pygame.K_QUOTE: 
                         novos_estados["estado_jogo"] = game_state.get("estado_anterior_terminal", "JOGANDO") # <--- CORRIGIDO
@@ -493,6 +491,7 @@ class EventHandler:
             elif estado_jogo == "ESPECTADOR":
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE: 
+                        novos_estados["estado_anterior_pause"] = estado_jogo # <-- SALVA MEMÓRIA
                         novos_estados["estado_jogo"] = "PAUSE"
                         self.camera.set_zoom(1.0)
                     
@@ -517,9 +516,15 @@ class EventHandler:
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     mouse_pos_tela = pygame.mouse.get_pos()
                     
-                    if (not novos_estados["jogador_esta_vivo_espectador"] and 
+                    # --- INÍCIO: CORREÇÃO (Bug 2 - Desabilitar clique Respawn no PVP) ---
+                    # Verifica se o mapa é PVE (maior que 5000)
+                    is_pve_map = s.MAP_WIDTH > 5000 
+                    
+                    if (is_pve_map and # <-- ADICIONADO
+                        not novos_estados["jogador_esta_vivo_espectador"] and 
                         nave_player.vida_atual <= 0 and 
                         ui.RECT_BOTAO_REINICIAR.collidepoint(mouse_pos_tela)):
+                    # --- FIM: CORREÇÃO ---
                         
                         if is_online:
                             self.network_client.send("RESPAWN_ME")

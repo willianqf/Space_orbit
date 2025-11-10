@@ -2,8 +2,9 @@
 import pygame
 import random
 import math
+import settings as s # <-- MODIFICAÇÃO: Importa 's' em vez de MAP_WIDTH/HEIGHT
 # Importa as constantes do mapa
-from settings import MAP_WIDTH, MAP_HEIGHT
+# from settings import MAP_WIDTH, MAP_HEIGHT # <-- MODIFICAÇÃO: Linha removida
 
 class BotAI:
     def __init__(self, bot_nave):
@@ -12,6 +13,11 @@ class BotAI:
         'bot_nave' é a referência para a instância de NaveBot que este cérebro controla.
         """
         self.bot = bot_nave 
+        
+        # --- INÍCIO: MODIFICAÇÃO (Map Size) ---
+        self.map_width = s.MAP_WIDTH # Valor padrão (PVE)
+        self.map_height = s.MAP_HEIGHT # Valor padrão (PVE)
+        # --- FIM: MODIFICAÇÃO ---
         
         # Variáveis de estado da IA
         self.estado_ia = "VAGANDO"
@@ -58,9 +64,11 @@ class BotAI:
         """
         pos = self.bot.posicao
         dist_to_top = pos.y
-        dist_to_bottom = MAP_HEIGHT - pos.y
+        # --- MODIFICAÇÃO: Usa self.map_height ---
+        dist_to_bottom = self.map_height - pos.y
         dist_to_left = pos.x
-        dist_to_right = MAP_WIDTH - pos.x
+        # --- MODIFICAÇÃO: Usa self.map_width ---
+        dist_to_right = self.map_width - pos.x
 
         min_dist = min(dist_to_top, dist_to_bottom, dist_to_left, dist_to_right)
         
@@ -70,11 +78,13 @@ class BotAI:
         if min_dist == dist_to_top:
             return pygame.math.Vector2(pos.x, margin)
         elif min_dist == dist_to_bottom:
-            return pygame.math.Vector2(pos.x, MAP_HEIGHT - margin)
+            # --- MODIFICAÇÃO: Usa self.map_height ---
+            return pygame.math.Vector2(pos.x, self.map_height - margin)
         elif min_dist == dist_to_left:
             return pygame.math.Vector2(margin, pos.y)
         else: # dist_to_right
-            return pygame.math.Vector2(MAP_WIDTH - margin, pos.y)
+            # --- MODIFICAÇÃO: Usa self.map_width ---
+            return pygame.math.Vector2(self.map_width - margin, pos.y)
     
     def _find_closest_threat(self):
         """
@@ -88,6 +98,12 @@ class BotAI:
         if self.grupo_inimigos_ref_cache:
             for inimigo in self.grupo_inimigos_ref_cache:
                 if not inimigo.groups(): continue
+                
+                # --- INÍCIO: CORREÇÃO (Bot se alvejando) ---
+                if inimigo == self.bot:
+                    continue # Não pode alvejar a si mesmo
+                # --- FIM: CORREÇÃO ---
+                
                 try:
                     dist = self.bot.posicao.distance_to(inimigo.posicao)
                     if dist < self.distancia_scan_geral and dist < dist_min:
@@ -119,12 +135,20 @@ class BotAI:
         
         return alvo_ameacador_sprite
         
-    def update_ai(self, player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_vidas_ref):
+    # --- INÍCIO: MODIFICAÇÃO (Aceitar map_width/height) ---
+    def update_ai(self, player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_vidas_ref, map_width=None, map_height=None):
         """ 
         O "tick" principal do cérebro da IA. 
         Chamado a cada frame pelo NaveBot.
         (ORDEM CORRIGIDA: A lógica de estado (Fugir) agora roda ANTES de encontrar alvo)
         """
+        
+        # Atualiza as dimensões do mapa se fornecidas
+        if map_width is not None:
+            self.map_width = map_width
+        if map_height is not None:
+            self.map_height = map_height
+        # --- FIM: MODIFICAÇÃO ---
         
         # --- INÍCIO DA CORREÇÃO DO BUG ---
         # Salva a referência ao grupo de vidas para que _processar_input_ia possa usá-lo
@@ -140,10 +164,13 @@ class BotAI:
             self.frames_sem_movimento += 1
             if self.frames_sem_movimento > 30:
                 if (self.bot.posicao.x < self.dist_borda_segura * 1.5 or 
-                    self.bot.posicao.x > MAP_WIDTH - self.dist_borda_segura * 1.5 or
+                    # --- MODIFICAÇÃO: Usa self.map_width ---
+                    self.bot.posicao.x > self.map_width - self.dist_borda_segura * 1.5 or
                     self.bot.posicao.y < self.dist_borda_segura * 1.5 or 
-                    self.bot.posicao.y > MAP_HEIGHT - self.dist_borda_segura * 1.5):
-                    centro = pygame.math.Vector2(MAP_WIDTH / 2, MAP_HEIGHT / 2)
+                    # --- MODIFICAÇÃO: Usa self.map_height ---
+                    self.bot.posicao.y > self.map_height - self.dist_borda_segura * 1.5):
+                    # --- MODIFICAÇÃO: Usa self.map_width/height ---
+                    centro = pygame.math.Vector2(self.map_width / 2, self.map_height / 2)
                     direcao_centro = centro - self.bot.posicao
                     if direcao_centro.length() > 0:
                         self.bot.angulo = pygame.math.Vector2(0, -1).angle_to(direcao_centro)
@@ -220,10 +247,16 @@ class BotAI:
                 self.estado_ia = "COLETANDO"
                 return 
 
-        # 2. Segunda Prioridade: INIMIGOS
+        # 2. Segunda Prioridade: INIMIGOS (No PVP, são os outros jogadores)
         dist_min = float('inf'); alvo_final = None       
         for inimigo in grupo_inimigos:
             if not inimigo.groups(): continue
+            
+            # --- INÍCIO: CORREÇÃO (Bot se alvejando) ---
+            if inimigo == self.bot:
+                continue # Não pode alvejar a si mesmo
+            # --- FIM: CORREÇÃO ---
+            
             try:
                 dist = self.bot.posicao.distance_to(inimigo.posicao)
                 if dist < dist_min and dist < self.distancia_scan_geral:
@@ -252,7 +285,7 @@ class BotAI:
             else: self.estado_ia = "CAÇANDO"
             return # <--- Foco no obstáculo
 
-        # 4. Última Prioridade: Outras Naves
+        # 4. Última Prioridade: Outras Naves (Redundante no PVP, mas bom para PVE)
         dist_min = float('inf'); alvo_final = None       
         for alvo in lista_alvos_naves:
             
@@ -311,9 +344,11 @@ class BotAI:
             
             zona_perigo = self.dist_borda_segura
             em_zona_perigo = (self.bot.posicao.x < zona_perigo or 
-                              self.bot.posicao.x > MAP_WIDTH - zona_perigo or
+                              # --- MODIFICAÇÃO: Usa self.map_width ---
+                              self.bot.posicao.x > self.map_width - zona_perigo or
                               self.bot.posicao.y < zona_perigo or 
-                              self.bot.posicao.y > MAP_HEIGHT - zona_perigo)
+                              # --- MODIFICAÇÃO: Usa self.map_height ---
+                              self.bot.posicao.y > self.map_height - zona_perigo)
 
             if em_zona_perigo:
                 # 2A. CHEGOU NA BORDA: PARAR E REGENERAR
@@ -343,10 +378,11 @@ class BotAI:
 
         # === 4. PRIORIDADE 2: EVITAR A BORDA (Se HP ALTO) ===
         elif self.estado_ia != "EVITANDO_BORDA": 
-            centro_mapa = pygame.math.Vector2(MAP_WIDTH / 2, MAP_HEIGHT / 2)
+            # --- MODIFICAÇÃO: Usa self.map_width/height ---
+            centro_mapa = pygame.math.Vector2(self.map_width / 2, self.map_height / 2)
             zona_perigo = self.dist_borda_segura
-            em_zona_perigo = (self.bot.posicao.x < zona_perigo or self.bot.posicao.x > MAP_WIDTH - zona_perigo or
-                              self.bot.posicao.y < zona_perigo or self.bot.posicao.y > MAP_HEIGHT - zona_perigo)
+            em_zona_perigo = (self.bot.posicao.x < zona_perigo or self.bot.posicao.x > self.map_width - zona_perigo or
+                              self.bot.posicao.y < zona_perigo or self.bot.posicao.y > self.map_height - zona_perigo)
             
             if em_zona_perigo:
                 self.estado_ia = "EVITANDO_BORDA"
@@ -354,12 +390,14 @@ class BotAI:
         
         if self.estado_ia == "EVITANDO_BORDA":
             zona_segura_minima = self.dist_borda_segura + 200
-            em_zona_segura = (self.bot.posicao.x > zona_segura_minima and self.bot.posicao.x < MAP_WIDTH - zona_segura_minima and
-                              self.bot.posicao.y > zona_segura_minima and self.bot.posicao.y < MAP_HEIGHT - zona_segura_minima)
+            # --- MODIFICAÇÃO: Usa self.map_width/height ---
+            em_zona_segura = (self.bot.posicao.x > zona_segura_minima and self.bot.posicao.x < self.map_width - zona_segura_minima and
+                              self.bot.posicao.y > zona_segura_minima and self.bot.posicao.y < self.map_height - zona_segura_minima)
             if em_zona_segura:
                 self.estado_ia = "VAGANDO"
             else:
-                centro_mapa = pygame.math.Vector2(MAP_WIDTH / 2, MAP_HEIGHT / 2)
+                # --- MODIFICAÇÃO: Usa self.map_width/height ---
+                centro_mapa = pygame.math.Vector2(self.map_width / 2, self.map_height / 2)
                 self.bot.posicao_alvo_mouse = centro_mapa
             return 
 
@@ -457,8 +495,9 @@ class BotAI:
                 
                 if self.bot_wander_target is None or chegou_perto:
                     map_margin = 100
-                    target_x = random.randint(map_margin, MAP_WIDTH - map_margin)
-                    target_y = random.randint(map_margin, MAP_HEIGHT - map_margin)
+                    # --- MODIFICAÇÃO: Usa self.map_width/height ---
+                    target_x = random.randint(map_margin, self.map_width - map_margin)
+                    target_y = random.randint(map_margin, self.map_height - map_margin)
                     self.bot_wander_target = pygame.math.Vector2(target_x, target_y)
                 
                 self.bot.posicao_alvo_mouse = self.bot_wander_target

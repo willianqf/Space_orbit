@@ -48,7 +48,8 @@ class PauseMenu:
         return None # Nenhum evento tratado
 
     def draw(self, surface, max_bots_atual, max_bots_limite, num_bots_ativos,
-             jogador_esta_morto, jogador_esta_vivo_espectador, is_online):
+             jogador_esta_morto, jogador_esta_vivo_espectador, is_online,
+             estado_jogo="JOGANDO"): # <-- MODIFICAÇÃO: Argumento adicionado
         """
         Desenha o menu de pausa completo com base no estado atual do jogo.
         Esta é a lógica de 'desenhar_pause' movida de ui.py
@@ -69,19 +70,23 @@ class PauseMenu:
 
         # Lógica dos Botões de Pausa
         
-        # Botão 1: "Respawnar" (Se morto OU vivo-espectador)
-        if jogador_esta_vivo_espectador or jogador_esta_morto:
+        # --- INÍCIO: CORREÇÃO (Ocultar Botões no PVP) ---
+        
+        # Botão 1: "Respawnar" (Se morto OU vivo-espectador E NÃO ESTIVER NO PVP)
+        if (jogador_esta_vivo_espectador or jogador_esta_morto) and not estado_jogo.startswith("PVP_"):
             pygame.draw.rect(surface, s.BRANCO, RECT_BOTAO_RESPAWN_PAUSA, border_radius=5)
             texto_surf = s.FONT_PADRAO.render("Respawnar", True, s.PRETO)
             texto_rect = texto_surf.get_rect(center=RECT_BOTAO_RESPAWN_PAUSA.center)
             surface.blit(texto_surf, texto_rect)
 
-        # Botão 2: "Modo Espectador" (Se vivo, não espectador)
-        if not jogador_esta_vivo_espectador and not jogador_esta_morto:
+        # Botão 2: "Modo Espectador" (Se vivo, não espectador E NÃO ESTIVER NO PVP)
+        if not jogador_esta_vivo_espectador and not jogador_esta_morto and not estado_jogo.startswith("PVP_"):
             pygame.draw.rect(surface, s.BRANCO, RECT_BOTAO_ESPECTADOR, border_radius=5)
             texto_surf = s.FONT_PADRAO.render("Modo Espectador", True, s.PRETO)
             texto_rect = texto_surf.get_rect(center=RECT_BOTAO_ESPECTADOR.center)
             surface.blit(texto_surf, texto_rect)
+            
+        # --- FIM: CORREÇÃO ---
 
         # Botão 3: "Voltar ao Menu" (Sempre visível)
         pygame.draw.rect(surface, s.BRANCO, RECT_BOTAO_VOLTAR_MENU, border_radius=5)

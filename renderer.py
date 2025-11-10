@@ -378,7 +378,7 @@ class Renderer:
         # --- INÍCIO: MODIFICAÇÃO (PVP) ---
         # Trata os estados PVP como "JOGANDO" para esta lógica
         if estado_jogo in ["JOGANDO", "PAUSE", "LOJA", "TERMINAL", 
-                           "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
+                           "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_PRE_MATCH"]: # <-- Adicionado PRE_MATCH
         # --- FIM: MODIFICAÇÃO ---
             if nave_player.vida_atual > 0:
                 jogador_visivel = True
@@ -404,14 +404,14 @@ class Renderer:
         # --- INÍCIO: MODIFICAÇÃO (PVP) ---
         # Mostra o HUD (vida, pontos) em todos os estados de jogo PVP
         if estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", 
-                           "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
+                           "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_PRE_MATCH"]: # <-- Adicionado PRE_MATCH
         # --- FIM: MODIFICAÇÃO ---
              self.ui.desenhar_hud(self.tela, nave_player, estado_jogo)
         
         # --- INÍCIO: MODIFICAÇÃO (PVP) ---
         # Mostra o Minimapa em todos os estados de jogo PVP
         if estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", "ESPECTADOR",
-                           "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_GAME_OVER"]:
+                           "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_GAME_OVER", "PVP_PRE_MATCH"]: # <-- Adicionado PRE_MATCH
         # --- FIM: MODIFICAÇÃO ---
             MEU_NOME_REDE = self.network_client.get_my_name()
             
@@ -451,9 +451,10 @@ class Renderer:
                 lista_ordenada = sorted(todos_os_jogadores, key=lambda n: n.pontos, reverse=True); top_5 = lista_ordenada[:5]
             
             # --- INÍCIO: MODIFICAÇÃO (PVP) ---
-            # Desenha o ranking PVE ou PVP (Ranking PVP é por vida)
+            # Desenha o ranking PVE ou a lista de vivos do PVP
             if estado_jogo.startswith("PVP_"):
-                self.ui.desenhar_ranking(self.tela, top_5, nave_player) # Reutiliza a função
+                # 'top_5' aqui na verdade contém TODOS os jogadores vivos ordenados por vida
+                self.ui.desenhar_lista_vivos_pvp(self.tela, top_5) # <-- FUNÇÃO NOVA
             elif estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", "ESPECTADOR"]:
                 self.ui.desenhar_ranking(self.tela, top_5, nave_player)
             # --- FIM: MODIFICAÇÃO ---
@@ -464,8 +465,11 @@ class Renderer:
         """ Desenha os menus que ficam por cima do jogo (Pause, Loja, etc.). """
         
         if estado_jogo == "PAUSE":
+            # --- INÍCIO: MODIFICAÇÃO (Passar estado_jogo) ---
             self.pause_manager.draw(self.tela, game_globals["max_bots_atual"], s.MAX_BOTS_LIMITE_SUPERIOR, num_bots_ativos,
-                                    nave_player.vida_atual <= 0, game_globals["jogador_esta_vivo_espectador"], is_online)
+                                    nave_player.vida_atual <= 0, game_globals["jogador_esta_vivo_espectador"], is_online,
+                                    estado_jogo) # <-- ADICIONADO
+            # --- FIM: MODIFICAÇÃO ---
             
         elif estado_jogo == "LOJA":
             self.ui.desenhar_loja(self.tela, nave_player, LARGURA_TELA, ALTURA_TELA, is_online)
@@ -491,6 +495,7 @@ class Renderer:
             pos_x = (LARGURA_TELA - texto_timer.get_width()) // 2
             self.tela.blit(texto_timer, (pos_x, 50))
 
+        # --- INÍCIO: ADICIONAR ESTE BLOCO ---
         elif estado_jogo == "PVP_PRE_MATCH":
             tempo_restante_ms = game_globals.get("pvp_pre_match_timer_fim", 0) - pygame.time.get_ticks()
             if tempo_restante_ms < 0: tempo_restante_ms = 0
@@ -535,14 +540,16 @@ class Renderer:
             
         elif estado_jogo == "ESPECTADOR":
             
-            # --- INÍCIO DA CORREÇÃO (BUG 2) ---
-            # O jogador está morto E NÃO está vivo-espectador?
+            # --- INÍCIO: CORREÇÃO (Bug 1 - Esconder Respawn no PVP) ---
+            # Verifica se o mapa é PVE (maior que 5000) para mostrar o respawn
+            is_pve_map = s.MAP_WIDTH > 5000 
+            
             is_dead_spectator = (nave_player.vida_atual <= 0 and not game_globals["jogador_esta_vivo_espectador"])
             
-            # 1. Botão de Respawn (se morto E flag NÃO está ativa)
-            if is_dead_spectator and not game_globals.get("spectator_overlay_hidden", False):
+            # 1. Botão de Respawn (só mostra se PVE e morto)
+            if is_pve_map and is_dead_spectator and not game_globals.get("spectator_overlay_hidden", False):
                  self.ui.desenhar_game_over(self.tela, LARGURA_TELA, ALTURA_TELA)
-            # --- FIM DA CORREÇÃO ---
+            # --- FIM: CORREÇÃO ---
                  
             # 2. HUD de Espectador (Sempre desenha)
             texto_titulo_spec = s.FONT_TITULO.render("MODO ESPECTADOR", True, s.BRANCO)

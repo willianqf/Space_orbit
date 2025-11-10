@@ -670,7 +670,7 @@ def desenhar_ranking(surface, lista_top_5, nave_player):
         surface.blit(nome_surf, (pos_x_base + 5, pos_y_linha_atual))
         
         # --- INÍCIO: MODIFICAÇÃO (Ranking PVP por Vida) ---
-        # Se os pontos forem 0, assume que é PVP e mostra a vida
+        # Verifica se é um objeto 'Nave' (Offline/PVP) checando se ele tem o atributo 'max_vida'
         if hasattr(nave, 'max_vida'):
             # Se for 'Nave' (Offline) E tiver 0 pontos, é PVP, mostra HP
             if nave.pontos == 0:
@@ -741,3 +741,31 @@ def desenhar_tela_conexao(surface, nome_str, ip_str, input_ativo_key):
     texto_botao = FONT_PADRAO.render("Conectar", True, PRETO)
     texto_botao_rect = texto_botao.get_rect(center=RECT_CONNECT_BOTAO.center)
     surface.blit(texto_botao, texto_botao_rect)
+
+# --- INÍCIO: NOVA FUNÇÃO (Bug 3) ---
+def desenhar_lista_vivos_pvp(surface, lista_jogadores_vivos):
+    """
+    Desenha uma lista simples de jogadores vivos para o modo PVP.
+    """
+    pos_x_base = MINIMAP_POS_X
+    pos_y_base = MINIMAP_POS_Y + MINIMAP_HEIGHT + 10
+    ranking_width = MINIMAP_WIDTH
+    
+    # Título
+    titulo_surf = FONT_HUD.render("JOGADORES VIVOS", True, BRANCO)
+    titulo_x = pos_x_base + (ranking_width - titulo_surf.get_width()) // 2
+    surface.blit(titulo_surf, (titulo_x, pos_y_base))
+    
+    pos_y_linha_atual = pos_y_base + titulo_surf.get_height() + 5
+    
+    # Lista de Nomes
+    for i, nave in enumerate(lista_jogadores_vivos):
+        cor_texto = VERDE_VIDA # Todos vivos estão em verde
+        nome_nave = nave.nome
+        if len(nome_nave) > 16: nome_nave = nome_nave[:15] + "."
+        
+        nome_surf = FONT_RANKING.render(nome_nave, True, cor_texto)
+        surface.blit(nome_surf, (pos_x_base + 5, pos_y_linha_atual))
+        
+        pos_y_linha_atual += FONT_RANKING.get_height() + 2
+# --- FIM: NOVA FUNÇÃO ---

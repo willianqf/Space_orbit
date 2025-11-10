@@ -4,7 +4,7 @@ import math
 import random
 import ui
 import settings as s 
-from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, MAP_WIDTH, MAP_HEIGHT,
+from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT, #MAP_WIDTH, MAP_HEIGHT, <-- REMOVIDO
                       MAX_TARGET_LOCK_DISTANCE, MAX_NIVEL_MOTOR, 
                       MAX_NIVEL_DANO, 
                       MAX_NIVEL_ESCUDO, 
@@ -103,11 +103,12 @@ class NaveAuxiliar(pygame.sprite.Sprite):
                         self.ultimo_tiro_tempo = agora
                         radianos = math.radians(self.angulo)
                         
-                        # (A linha 'dano_real_aux = ...' foi removida)
+                        # --- INÍCIO: CORREÇÃO (Bug Tiro Auxiliar) ---
                         proj = ProjetilTeleguiadoJogador(self.posicao.x, self.posicao.y, radianos, 
                                                        self.owner.nivel_dano, # <--- CORRIGIDO
                                                        owner_nave=self.owner, 
                                                        alvo_sprite=self.alvo_atual)
+                        # --- FIM: CORREÇÃO ---
                         
                         grupo_projeteis_destino.add(proj)
                         
@@ -324,7 +325,11 @@ class Nave(pygame.sprite.Sprite):
             else: nova_pos = self.posicao_alvo_mouse; self.posicao_alvo_mouse = None
             
         meia_largura = self.largura_base / 2; meia_altura = self.altura / 2
-        nova_pos.x = max(meia_largura, min(nova_pos.x, MAP_WIDTH - meia_largura)); nova_pos.y = max(meia_altura, min(nova_pos.y, MAP_HEIGHT - meia_altura))
+        # --- INÍCIO: CORREÇÃO (Bug Limite do Mapa) ---
+        # Lê o valor ATUAL de s.MAP_WIDTH, que é modificado pelo main.py
+        nova_pos.x = max(meia_largura, min(nova_pos.x, s.MAP_WIDTH - meia_largura)); 
+        nova_pos.y = max(meia_altura, min(nova_pos.y, s.MAP_HEIGHT - meia_altura));
+        # --- FIM: CORREÇÃO ---
         self.posicao = nova_pos; self.rect.center = self.posicao
         
         if self.nivel_motor == MAX_NIVEL_MOTOR and movendo_frente:
@@ -337,9 +342,7 @@ class Nave(pygame.sprite.Sprite):
         radianos = math.radians(self.angulo); offset_ponta = self.altura / 2 + 10
         pos_x = self.posicao.x + (-math.sin(radianos) * offset_ponta); pos_y = self.posicao.y + (-math.cos(radianos) * offset_ponta)
         
-        # --- INÍCIO: MODIFICAÇÃO (Usa DANO_POR_NIVEL) ---
-        # (A linha 'dano_real = ...' foi removida, pois o projétil calcula o dano)
-        
+        # --- INÍCIO: CORREÇÃO (Bug Tiro Principal) ---
         if self.alvo_selecionado and self.alvo_selecionado.groups():
             return ProjetilTeleguiadoJogador(pos_x, pos_y, radianos, 
                                            self.nivel_dano, # <--- CORRIGIDO
@@ -347,7 +350,7 @@ class Nave(pygame.sprite.Sprite):
                                            alvo_sprite=self.alvo_selecionado)
         else:
             return Projetil(pos_x, pos_y, radianos, self.nivel_dano, owner_nave=self) # <--- CORRIGIDO
-        # --- FIM: MODIFICAÇÃO ---
+        # --- FIM: CORREÇÃO ---
     
     def lidar_com_tiros(self, grupo_destino, pos_ouvinte=None): # <-- MODIFICADO
         agora = pygame.time.get_ticks() 
@@ -612,18 +615,23 @@ class Player(Nave):
         # --- MODIFICADO: Passa o atacante para a classe base ---
         return super().foi_atingido(dano, estado_jogo_atual, proj_pos, atacante=atacante)
 
+    # --- INÍCIO: MODIFICAÇÃO (Aceitar estado_jogo) ---
     def update(self, grupo_projeteis_jogador, camera, client_socket=None, pos_ouvinte=None, estado_jogo="JOGANDO"): # <-- MODIFICADO
+    # --- FIM: MODIFICAÇÃO ---
         if client_socket is None:
             # --- INÍCIO DA CORREÇÃO ---
             # O 'camera' DEVE ser passado para processar_input_humano
-            self.processar_input_humano(camera)
+            self.processar_input_humano(camera, estado_jogo) # <-- MODIFICADO
             # --- FIM DA CORREÇÃO ---
             self.update_regeneracao()
             self.rotacionar()
             self.mover()
-            # --- MODIFICADO: Passa pos_ouvinte ---
+            
+            # --- INÍCIO: CORREÇÃO (Trava de Fogo Amigo no Lobby) ---
+            # Só permite atirar se estiver no PVE (JOGANDO) ou na partida PVP (PVP_PLAYING)
             if estado_jogo == "JOGANDO" or estado_jogo == "PVP_PLAYING":
                 self.lidar_com_tiros(grupo_projeteis_jogador, pos_ouvinte if pos_ouvinte is not None else self.posicao)
+            # --- FIM: CORREÇÃO ---
         else:
             self.quer_virar_esquerda = False
             self.quer_virar_direita = False
@@ -636,8 +644,22 @@ class Player(Nave):
             pass
         
 
-    def processar_input_humano(self, camera):
+    # --- INÍCIO: MODIFICAÇÃO (Aceitar estado_jogo) ---
+    def processar_input_humano(self, camera, estado_jogo="JOGANDO"): # <-- MODIFICADO
+    # --- FIM: MODIFICAÇÃO ---
         agora = pygame.time.get_ticks()
+
+        # --- INÍCIO: CORREÇÃO (Travar nave no PRE_MATCH) ---
+        # Se estiver no "congelamento" de 5s, não aceita nenhum input
+        if estado_jogo == "PVP_PRE_MATCH":
+            self.quer_virar_esquerda = False
+            self.quer_virar_direita = False
+            self.quer_mover_frente = False
+            self.quer_mover_tras = False
+            self.quer_atirar = False
+            self.posicao_alvo_mouse = None
+            return # Sai da função
+        # --- FIM: CORREÇÃO ---
 
         teclas = pygame.key.get_pressed()
         self.quer_virar_esquerda = teclas[pygame.K_a] or teclas[pygame.K_LEFT]
@@ -700,40 +722,49 @@ class NaveBot(Nave):
         morreu = super().foi_atingido(dano, estado_jogo_atual, proj_pos, atacante=atacante)
 
         if morreu:
-            print(f"[{self.nome}] BOT MORREU! Resetando...")
+            # Se não for PVP, reseta o bot (lógica PVE antiga)
+            if not estado_jogo_atual.startswith("PVP_"):
+                print(f"[{self.nome}] BOT MORREU! Resetando...")
+                
+                novo_x = random.randint(50, s.MAP_WIDTH - 50) # <-- CORRIGIDO para s.MAP_WIDTH
+                novo_y = random.randint(50, s.MAP_HEIGHT - 50) # <-- CORRIGIDO para s.MAP_HEIGHT
+                self.posicao = pygame.math.Vector2(novo_x, novo_y); self.rect.center = self.posicao
+                
+                self.grupo_auxiliares_ativos.empty()
+                self.lista_todas_auxiliares = [] 
+                for pos in self.POSICOES_AUXILIARES: 
+                    nova_aux = NaveAuxiliar(self, pos)
+                    self.lista_todas_auxiliares.append(nova_aux)
+                
+                self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0; self.nivel_aux = 0
+                
+                self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
+                # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
+                self.max_vida = VIDA_POR_NIVEL[self.nivel_max_vida] # 4 + self.nivel_max_vida
+                # --- FIM: MODIFICAÇÃO ---
+                self.vida_atual = self.max_vida
+                self.alvo_selecionado = None; self.posicao_alvo_mouse = None; self.tempo_fim_lentidao = 0; self.rastro_particulas = []
+                
+                self.cerebro.resetar_ia()
+                self.comprar_auxiliar()
+                
+                self.parar_regeneracao() 
             
-            # --- INÍCIO DA MODIFICAÇÃO (Recompensa por Abate) ---
-            # (Esta lógica é movida para game_logic.py para consistência)
-            # --- FIM DA MODIFICAÇÃO ---
-
-            novo_x = random.randint(50, MAP_WIDTH - 50) 
-            novo_y = random.randint(50, MAP_HEIGHT - 50)
-            self.posicao = pygame.math.Vector2(novo_x, novo_y); self.rect.center = self.posicao
+            # --- INÍCIO: CORREÇÃO (Remover sprite no PVP) ---
+            # Se for PVP, o bot apenas morre e se remove dos grupos
+            else:
+                print(f"[{self.nome}] BOT MORREU no PVP! Removendo sprite.")
+                self.kill() # <-- CORREÇÃO: Remove o sprite do jogo
+            # --- FIM: CORREÇÃO ---
             
-            self.grupo_auxiliares_ativos.empty()
-            self.lista_todas_auxiliares = [] 
-            for pos in self.POSICOES_AUXILIARES: 
-                nova_aux = NaveAuxiliar(self, pos)
-                self.lista_todas_auxiliares.append(nova_aux)
-            
-            self.pontos = 0; self.nivel_motor = 1; self.nivel_dano = 1; self.nivel_max_vida = 1; self.nivel_escudo = 0; self.nivel_aux = 0
-            
-            self.velocidade_movimento_base = 4 + (self.nivel_motor * 0.5) 
-            # --- INÍCIO: MODIFICAÇÃO (Usa VIDA_POR_NIVEL) ---
-            self.max_vida = VIDA_POR_NIVEL[self.nivel_max_vida] # 4 + self.nivel_max_vida
-            # --- FIM: MODIFICAÇÃO ---
-            self.vida_atual = self.max_vida
-            self.alvo_selecionado = None; self.posicao_alvo_mouse = None; self.tempo_fim_lentidao = 0; self.rastro_particulas = []
-            
-            self.cerebro.resetar_ia()
-            self.comprar_auxiliar()
-            
-            self.parar_regeneracao() 
         return morreu
         
-    def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref, pos_ouvinte=None): # <-- MODIFICADO
-        # --- MUDANÇA: Passa grupo_efeitos_visuais (para NaveRegeneradora) ---
-        self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref)
+    # --- INÍCIO: MODIFICAÇÃO (Aceitar map_width/height) ---
+    def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref, pos_ouvinte=None, map_width=s.MAP_WIDTH, map_height=s.MAP_HEIGHT):
+    # --- FIM: MODIFICAÇÃO ---
+    
+        # --- MUDANÇA: Passa map_width/height para o cérebro ---
+        self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref, map_width, map_height) # <-- MODIFICADO
 
         self.update_regeneracao()
         self.rotacionar() 
