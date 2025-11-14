@@ -564,6 +564,7 @@ game_globals = {
     # --- INÍCIO: MODIFICAÇÃO (Estado PVP Online) ---
     "pvp_lobby_num_players": 0,    # LIDO da network_client
     "pvp_lobby_countdown_sec": 0,  # LIDO da network_client
+    "pvp_match_countdown_sec": 0,  # LIDO da network_client (NOVO)
     # --- FIM: MODIFICAÇÃO ---
     
     # --- INÍCIO: MODIFICAÇÃO (Renomeado para clareza) ---
@@ -705,17 +706,27 @@ while game_globals["rodando"]:
             MEU_NOME_REDE = network_client.get_my_name()
             my_state = online_players_copy.get(MEU_NOME_REDE)
             
-            # --- INÍCIO: MODIFICAÇÃO (Problema 2 e 3: Lobby/Início Online) ---
+            # --- INÍCIO: MODIFICAÇÃO (Problema 2 e 3: Sincronia de Estado PVP) ---
             if estado_jogo.startswith("PVP_"):
+                # 1. Lê os timers do network_client
                 lobby_status = network_client.get_lobby_status()
                 game_globals["pvp_lobby_num_players"] = lobby_status.get("num_players", 0)
-                game_globals["pvp_lobby_countdown_sec"] = lobby_status.get("countdown_sec", 0)
+                
+                lobby_countdown_sec = lobby_status.get("countdown_sec", 0)
+                game_globals["pvp_lobby_countdown_sec"] = lobby_countdown_sec
+                
+                match_countdown_sec = lobby_status.get("match_countdown_sec", 0)
+                game_globals["pvp_match_countdown_sec"] = match_countdown_sec # <-- Salva o timer da partida
             # --- FIM: MODIFICAÇÃO ---
 
             if my_state:
                 nova_pos = pygame.math.Vector2(my_state['x'], my_state['y'])
                 
-                if (estado_jogo == "JOGANDO" or estado_jogo == "PVP_LOBBY" or estado_jogo == "PVP_PLAYING") and nave_player.vida_atual > 0: 
+                # --- INÍCIO: CORREÇÃO (Problema 1: Naves Presas) ---
+                # Adicionado PVP_COUNTDOWN e PVP_PRE_MATCH
+                # Agora o cliente atualiza a posição (lerp) em TODOS os estados PVP
+                if (estado_jogo == "JOGANDO" or estado_jogo.startswith("PVP_")) and nave_player.vida_atual > 0:
+                # --- FIM: CORREÇÃO ---
                     nave_player.posicao = nave_player.posicao.lerp(nova_pos, 0.4)
                 
                 nave_player.angulo = my_state['angulo']
@@ -723,15 +734,12 @@ while game_globals["rodando"]:
                 
                 if (estado_jogo == "ESPECTADOR" or estado_jogo == "PAUSE") and nave_player.vida_atual <= 0 and nova_vida > 0:
                     print(f"[REDE] Detectado respawn do servidor. Voltando ao jogo (Vida: {nova_vida})")
-                    # --- INÍCIO: MODIFICAÇÃO (Problema 1: Tamanho do Mapa) ---
-                    # Se o mapa atual for PVP, volta pro LOBBY. Senão, JOGANDO.
                     if s.MAP_WIDTH < 5000: 
                          estado_jogo = "PVP_LOBBY"
                          game_globals["estado_jogo"] = "PVP_LOBBY"
                     else: 
                         estado_jogo = "JOGANDO"
                         game_globals["estado_jogo"] = "JOGANDO"
-                    # --- FIM: MODIFICAÇÃO ---
                         
                     nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
                     game_globals["jogador_esta_vivo_espectador"] = False; game_globals["jogador_pediu_para_espectar"] = False
@@ -752,17 +760,63 @@ while game_globals["rodando"]:
                 if my_state.get('is_lento', False): nave_player.tempo_fim_lentidao = agora_sync + 1000
                 if my_state.get('is_congelado', False): nave_player.tempo_fim_congelamento = agora_sync + 1000
                 
-                # --- INÍCIO: MODIFICAÇÃO (Problema 3: Início Online) ---
+                
+                # --- INÍCIO: CORREÇÃO (Problema 2: Race Condition e Sincronia de Estado) ---
+                
                 is_server_pre_match = my_state.get('is_pre_match', False)
-                if is_server_pre_match and estado_jogo != "PVP_PRE_MATCH":
-                    print("[REDE] Servidor iniciou PRE_MATCH (5s freeze).")
-                    estado_jogo = "PVP_PRE_MATCH"
-                    game_globals["estado_jogo"] = "PVP_PRE_MATCH"
-                elif not is_server_pre_match and estado_jogo == "PVP_PRE_MATCH":
-                    print("[REDE] Servidor finalizou PRE_MATCH. Iniciando partida!")
-                    estado_jogo = "PVP_PLAYING"
-                    game_globals["estado_jogo"] = "PVP_PLAYING"
-                # --- FIM: MODIFICAÇÃO ---
+                
+                # --- Lógica de Sincronia de Estado (Cliente segue o Servidor) ---
+                
+                # PRIORIDADE 1: O servidor está em PRE_MATCH (congelado)
+                if is_server_pre_match:
+                    if estado_jogo != "PVP_PRE_MATCH":
+                        print("[REDE] Servidor iniciou PRE_MATCH (5s freeze).")
+                        estado_jogo = "PVP_PRE_MATCH"
+                        game_globals["estado_jogo"] = "PVP_PRE_MATCH"
+                        # Inicia o timer local de 5s para a UI
+                        game_globals["pvp_pre_match_timer_fim_offline"] = agora + (5 * 1000) 
+                
+                # PRIORIDADE 2: O servidor está em Partida (timer de 3min rolando)
+                elif match_countdown_sec > 0:
+                     # Se o servidor está em partida, mas nós estamos em PRE_MATCH, muda para PLAYING
+                     if estado_jogo == "PVP_PRE_MATCH":
+                        print("[REDE] Servidor finalizou PRE_MATCH. Iniciando partida!")
+                        estado_jogo = "PVP_PLAYING"
+                        game_globals["estado_jogo"] = "PVP_PLAYING"
+                     # Se por algum motivo caímos e voltamos, ou estávamos no lobby, entra direto
+                     elif estado_jogo != "PVP_PLAYING":
+                        print(f"[REDE] Servidor está em partida (estado local: {estado_jogo}). Mudando para PVP_PLAYING.")
+                        estado_jogo = "PVP_PLAYING"
+                        game_globals["estado_jogo"] = "PVP_PLAYING"
+
+                # PRIORIDADE 3: O servidor está em Contagem de Lobby (30s)
+                elif lobby_countdown_sec > 0:
+                    if estado_jogo != "PVP_COUNTDOWN":
+                        print("[REDE] Servidor está em contagem de lobby. Mudando para PVP_COUNTDOWN.")
+                        estado_jogo = "PVP_COUNTDOWN"
+                        game_globals["estado_jogo"] = "PVP_COUNTDOWN"
+                
+                # PRIORIDADE 4: SERVIDOR ESTÁ EM WAITING (Lobby: 0, Match: 0)
+                else: 
+                    # Se a partida ACABOU (GAME_OVER) e o servidor resetou, VOLTA AO MENU.
+                    if estado_jogo == "PVP_GAME_OVER":
+                        print(f"[REDE] Servidor resetou o lobby (estado local: {estado_jogo}). Voltando ao Menu.")
+                        resetar_para_menu() 
+                        estado_jogo = "MENU"
+                    
+                    # Se a contagem foi cancelada (COUNTDOWN -> WAITING), volta pro LOBBY.
+                    elif estado_jogo == "PVP_COUNTDOWN":
+                        print(f"[REDE] Contagem do lobby interrompida. Voltando ao lobby.")
+                        estado_jogo = "PVP_LOBBY"
+                        game_globals["estado_jogo"] = "PVP_LOBBY"
+
+                    # Se já estamos no LOBBY, ficamos no LOBBY.
+                    elif estado_jogo != "PVP_LOBBY" and estado_jogo != "MENU":
+                        estado_jogo = "PVP_LOBBY"
+                        game_globals["estado_jogo"] = "PVP_LOBBY"
+                
+                # --- FIM DA LÓGICA DE SINCRONIA ---
+
 
                 num_aux_servidor = my_state.get('nivel_aux', 0); num_aux_local = len(nave_player.grupo_auxiliares_ativos)
                 if num_aux_servidor > num_aux_local:
@@ -865,7 +919,8 @@ while game_globals["rodando"]:
         if estado_jogo not in ["PAUSE"]:
             grupo_efeitos_visuais.update() 
 
-    if estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING"]:
+    if estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_PRE_MATCH"]:
+    # --- FIM: CORREÇÃO ---
         if not is_online:
             nave_player.update(grupo_projeteis_player, camera, None, posicao_ouvinte_som, estado_jogo)
 

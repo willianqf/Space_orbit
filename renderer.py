@@ -427,26 +427,29 @@ class Renderer:
                        LARGURA_TELA, ALTURA_TELA):
         """ Desenha os menus que ficam por cima do jogo (Pause, Loja, etc.). """
         is_pvp_map = (s.MAP_WIDTH < 5000)
-        if estado_jogo == "PAUSE":
+        
+        # --- INÍCIO: CORREÇÃO (Problema 3: UI Sobreposta) ---
+        # Não desenha a loja se não estivermos no estado de loja
+        if estado_jogo == "LOJA":
+            self.ui.desenhar_loja(self.tela, nave_player, LARGURA_TELA, ALTURA_TELA, is_online)
+        # --- FIM: CORREÇÃO ---
+            
+        elif estado_jogo == "PAUSE":
             estado_antes_de_pausar = game_globals.get("estado_anterior_pause", "JOGANDO")
             
             self.pause_manager.draw(self.tela, game_globals["max_bots_atual"], s.MAX_BOTS_LIMITE_SUPERIOR, num_bots_ativos,
                                     nave_player.vida_atual <= 0, game_globals["jogador_esta_vivo_espectador"], is_online,
                                     estado_antes_de_pausar) 
             
-        elif estado_jogo == "LOJA":
-            self.ui.desenhar_loja(self.tela, nave_player, LARGURA_TELA, ALTURA_TELA, is_online)
-            
         elif estado_jogo == "TERMINAL":
             self.ui.desenhar_terminal(self.tela, game_globals["variavel_texto_terminal"], LARGURA_TELA, ALTURA_TELA)
             
         elif estado_jogo == "PVP_LOBBY":
-            # --- INÍCIO: MODIFICAÇÃO (Problema 2: Mensagem de Lobby Online/Offline) ---
             num_players = 0
             if is_online:
                 num_players = game_globals.get("pvp_lobby_num_players", 0)
             else:
-                num_players = len(game_globals.get("grupo_bots")) + 1 # Bots + Player
+                num_players = len(game_globals.get("grupo_bots")) + 1 
             
             texto_lobby = pvp_s.FONT_TITULO_PVP.render(f"Aguardando Jogadores... ({num_players}/{pvp_s.MAX_JOGADORES_PVP})", True, pvp_s.BRANCO)
             pos_x = (LARGURA_TELA - texto_lobby.get_width()) // 2
@@ -455,20 +458,15 @@ class Renderer:
             texto_instr = pvp_s.FONT_TITULO_PVP.render("Use 'V' para distribuir seus 10 pontos!", True, pvp_s.AMARELO)
             pos_x_instr = (LARGURA_TELA - texto_instr.get_width()) // 2
             self.tela.blit(texto_instr, (pos_x_instr, 100))
-            # --- FIM: MODIFICAÇÃO ---
 
         elif estado_jogo == "PVP_COUNTDOWN":
-            # --- INÍCIO: MODIFICAÇÃO (Problema 3: Contagem Online/Offline) ---
             tempo_s = 0
             if is_online:
-                # Se online, usa o tempo vindo do servidor
                 tempo_s = game_globals.get("pvp_lobby_countdown_sec", 0)
             else:
-                # Se offline, calcula localmente
-                tempo_restante_ms = game_globals.get("pvp_lobby_timer_fim", 0) - pygame.time.get_ticks()
+                tempo_restante_ms = game_globals.get("pvp_lobby_timer_fim_offline", 0) - pygame.time.get_ticks()
                 if tempo_restante_ms < 0: tempo_restante_ms = 0
                 tempo_s = math.ceil(tempo_restante_ms / 1000)
-            # --- FIM: MODIFICAÇÃO ---
             
             texto_timer = pvp_s.FONT_TITULO_PVP.render(f"Iniciando em {tempo_s}", True, pvp_s.AMARELO)
             pos_x = (LARGURA_TELA - texto_timer.get_width()) // 2
@@ -479,17 +477,18 @@ class Renderer:
             tempo_s = 0
             texto_render = "PREPARAR!"
             
-            if is_online:
-                # O estado é controlado pelo 'my_state' no main.py.
-                # O servidor ainda não envia o *timer* de pre-match, só o estado.
-                # Então, apenas mostramos "PREPARAR!"
-                texto_render = "PREPARAR!"
-            else:
-                # Offline, calculamos o timer
-                tempo_restante_ms = game_globals.get("pvp_pre_match_timer_fim", 0) - pygame.time.get_ticks()
-                if tempo_restante_ms < 0: tempo_restante_ms = 0
-                tempo_s = math.ceil(tempo_restante_ms / 1000) 
+            # --- INÍCIO: CORREÇÃO (Problema 2: Contagem de 5s) ---
+            # Agora, tanto online quanto offline, lemos o timer que
+            # o main.py define em 'game_globals'
+            tempo_restante_ms = game_globals.get("pvp_pre_match_timer_fim_offline", 0) - pygame.time.get_ticks()
+            if tempo_restante_ms < 0: tempo_restante_ms = 0
+            tempo_s = math.ceil(tempo_restante_ms / 1000) 
+            
+            if tempo_s > 0:
                 texto_render = f"{tempo_s}"
+            else:
+                texto_render = "PREPARAR!" # Fallback se o timer for 0
+            # --- FIM: CORREÇÃO ---
             
             texto_timer = pvp_s.FONT_TITULO_PVP.render(texto_render, True, pvp_s.VERMELHO)
             pos_x = (LARGURA_TELA - texto_timer.get_width()) // 2
@@ -498,14 +497,14 @@ class Renderer:
 
         elif estado_jogo == "PVP_PLAYING" or (estado_jogo == "ESPECTADOR" and is_pvp_map):
             tempo_restante_ms = 0
-            # --- INÍCIO: MODIFICAÇÃO (Timer Partida Online/Offline) ---
+            # --- INÍCIO: CORREÇÃO (Timer Partida Online) ---
             if is_online:
-                # (O servidor ainda não envia este timer, então ficará 00:00)
-                # (Isso precisará ser adicionado ao STATE ou a uma nova msg)
+                # Usa o timer vindo do servidor
                 tempo_restante_ms = game_globals.get("pvp_match_countdown_sec", 0) * 1000 
             else:
-                tempo_restante_ms = game_globals.get("pvp_partida_timer_fim", 0) - pygame.time.get_ticks()
-            # --- FIM: MODIFICAÇÃO ---
+                # Usa o timer offline
+                tempo_restante_ms = game_globals.get("pvp_partida_timer_fim_offline", 0) - pygame.time.get_ticks()
+            # --- FIM: CORREÇÃO ---
                 
             if tempo_restante_ms < 0: tempo_restante_ms = 0
             minutos = int(tempo_restante_ms / 60000)

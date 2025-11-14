@@ -703,15 +703,29 @@ def game_loop(bot_manager):
             pvp_message = f"STATE|{payload_players_pvp}|PROJ|{payload_proj_pvp}|NPC|\n"
             pvp_message_bytes = pvp_message.encode('utf-8')
 
-            # --- Pacote de Lobby (se aplicável) ---
-            lobby_message_bytes = None
-            if pvp_lobby_state == "WAITING" or pvp_lobby_state == "COUNTDOWN":
-                contagem_segundos = 0
+
+            # --- INÍCIO: MODIFICAÇÃO (Problema 2 e 3: Enviar timers PVP) ---
+            # --- Pacote de Status PVP (Lobby E Partida) ---
+            pvp_status_message_bytes = None
+            
+            # Apenas envia status se houver jogadores PVP para receber
+            if pvp_player_states:
+                # 1. Calcular contagem do Lobby (30s)
+                contagem_segundos_lobby = 0
                 if pvp_lobby_state == "COUNTDOWN":
-                    contagem_segundos = max(0, int((pvp_lobby_countdown_end - agora_ms) / 1000))
+                    contagem_segundos_lobby = max(0, int((pvp_lobby_countdown_end - agora_ms) / 1000))
                 
-                lobby_msg = f"PVP_LOBBY_UPDATE|{len(pvp_player_states)}|{contagem_segundos}\n"
-                lobby_message_bytes = lobby_msg.encode('utf-8')
+                # 2. Calcular contagem da Partida (3min)
+                match_countdown_sec = 0
+                if pvp_lobby_state == "PLAYING" or pvp_lobby_state == "PRE_MATCH":
+                    match_countdown_sec = max(0, int((pvp_match_countdown_end - agora_ms) / 1000))
+                
+                # 3. Montar a mensagem
+                #    Formato: STATUS|Jogadores|TempoLobby|TempoPartida
+                status_msg = f"PVP_STATUS_UPDATE|{len(pvp_player_states)}|{contagem_segundos_lobby}|{match_countdown_sec}\n"
+                pvp_status_message_bytes = status_msg.encode('utf-8')
+            # --- FIM: MODIFICAÇÃO ---
+            
 
             # --- LÓGICA 4: ENVIAR PARA OS CLIENTES CORRETOS ---
             clientes_mortos = []
@@ -726,8 +740,10 @@ def game_loop(bot_manager):
             for conn_key, state in pvp_player_states.items():
                 if state.get('handshake_completo', False) and state.get('conn') is not None:
                     try:
-                        if lobby_message_bytes:
-                            state['conn'].sendall(lobby_message_bytes)
+                        # --- INÍCIO: MODIFICAÇÃO (Envia a nova mensagem de status) ---
+                        if pvp_status_message_bytes:
+                            state['conn'].sendall(pvp_status_message_bytes)
+                        # --- FIM: MODIFICAÇÃO ---
                         state['conn'].sendall(pvp_message_bytes)
                     except (socket.error, BrokenPipeError):
                         clientes_mortos.append(conn_key)
@@ -1090,6 +1106,27 @@ def _update_pve_game_state(bot_manager, agora_ms):
 
     return novos_projeteis_de_npcs, novos_npcs_spawnados
 
+def _reset_pvp_lobby():
+    """ Helper interno para resetar o estado do lobby PVP para WAITING. """
+    global pvp_lobby_state, pvp_lobby_countdown_end, pvp_pre_match_countdown_end
+    global pvp_match_countdown_end, pvp_winner_name, pvp_network_projectiles
+    
+    print("[PVP] Resetando lobby para o estado 'WAITING'.")
+    pvp_lobby_state = "WAITING"
+    pvp_lobby_countdown_end = 0
+    pvp_pre_match_countdown_end = 0
+    pvp_match_countdown_end = 0
+    pvp_winner_name = ""
+    pvp_network_projectiles.clear() # Limpa projéteis da partida anterior
+    
+    # Zera o 'is_pre_match' de todos os jogadores que ainda possam estar conectados
+    for state in pvp_player_states.values():
+        state['is_pre_match'] = False
+        # Manda os jogadores de volta para o spawn do lobby
+        state['x'] = pvp_s.SPAWN_LOBBY.x
+        state['y'] = pvp_s.SPAWN_LOBBY.y
+
+
 def _update_pvp_game_state(agora_ms):
     """ Processa toda a lógica do PVP (Lobby, Jogo, Colisões). """
     global pvp_network_projectiles, pvp_lobby_state, pvp_lobby_countdown_end
@@ -1098,6 +1135,14 @@ def _update_pvp_game_state(agora_ms):
     novos_projeteis_de_players = []
     projeteis_para_remover = [] 
     
+    # --- INÍCIO: CORREÇÃO (Requisito 1: Encerrar se todos saírem) ---
+    # Se a partida já começou (não está em WAITING) e não há mais jogadores
+    if pvp_lobby_state != "WAITING" and not pvp_player_states:
+        print("[PVP] Todos os jogadores saíram. Resetando lobby.")
+        _reset_pvp_lobby() # Chama a nova função de reset
+        return [] # Retorna cedo, sem mais lógica PVP
+    # --- FIM: CORREÇÃO ---
+
     # --- PARTE 1: Gerenciar Estado do Lobby/Partida ---
     
     if pvp_lobby_state == "WAITING":
@@ -1109,12 +1154,13 @@ def _update_pvp_game_state(agora_ms):
     elif pvp_lobby_state == "COUNTDOWN":
         if len(pvp_player_states) < MAX_JOGADORES_PVP:
             print("[PVP] Jogador saiu durante a contagem. Voltando a esperar.")
-            pvp_lobby_state = "WAITING"
-            pvp_lobby_countdown_end = 0
+            _reset_pvp_lobby() # Reseta para WAITING
         elif agora_ms > pvp_lobby_countdown_end:
             print("[PVP] Contagem do lobby terminada. Iniciando Pré-Partida (5s).")
             pvp_lobby_state = "PRE_MATCH"
             pvp_pre_match_countdown_end = agora_ms + PRE_MATCH_FREEZE_MS
+            # Define o timer final da partida AGORA
+            pvp_match_countdown_end = agora_ms + PRE_MATCH_FREEZE_MS + PARTIDA_COUNTDOWN_MS 
             
             jogadores_para_spawnar = list(pvp_player_states.values())
             for i, state in enumerate(jogadores_para_spawnar):
@@ -1132,7 +1178,7 @@ def _update_pvp_game_state(agora_ms):
         if agora_ms > pvp_pre_match_countdown_end:
             print("[PVP] Pré-partida terminada. A PARTIDA COMEÇOU!")
             pvp_lobby_state = "PLAYING"
-            pvp_match_countdown_end = agora_ms + PARTIDA_COUNTDOWN_MS
+            # O timer da partida (pvp_match_countdown_end) JÁ FOI DEFINIDO acima
             for state in pvp_player_states.values():
                 state['is_pre_match'] = False
     
@@ -1142,23 +1188,38 @@ def _update_pvp_game_state(agora_ms):
         if len(jogadores_vivos) <= 1:
             pvp_lobby_state = "GAME_OVER"
             pvp_winner_name = jogadores_vivos[0]['nome'] if jogadores_vivos else "Empate"
-            print(f"[PVP] Partida terminada (Morte Súbita). Vencedor: {pvp_winner_name}")
+            # --- INÍCIO: CORREÇÃO (Requisito 2: Timer de Reset) ---
+            # Usa 'pvp_pre_match_countdown_end' como timer de reset de 10s
+            pvp_pre_match_countdown_end = agora_ms + 10000 
+            print(f"[PVP] Partida terminada (Morte Súbita). Vencedor: {pvp_winner_name}. Resetando em 10s.")
+            # --- FIM: CORREÇÃO ---
         elif agora_ms > pvp_match_countdown_end:
             pvp_lobby_state = "GAME_OVER"
             jogadores_vivos.sort(key=lambda p: p['hp'], reverse=True)
             pvp_winner_name = jogadores_vivos[0]['nome'] if jogadores_vivos else "Empate"
-            print(f"[PVP] Partida terminada (Tempo). Vencedor: {pvp_winner_name}")
+            # --- INÍCIO: CORREÇÃO (Requisito 2: Timer de Reset) ---
+            # Usa 'pvp_pre_match_countdown_end' como timer de reset de 10s
+            pvp_pre_match_countdown_end = agora_ms + 10000 
+            print(f"[PVP] Partida terminada (Tempo). Vencedor: {pvp_winner_name}. Resetando em 10s.")
+            # --- FIM: CORREÇÃO ---
     
+    # --- INÍCIO: CORREÇÃO (Requisito 2: Lógica de Reset) ---
     elif pvp_lobby_state == "GAME_OVER":
-        pass 
+        # Checa o timer de 10s (que guardamos em 'pvp_pre_match_countdown_end')
+        if agora_ms > pvp_pre_match_countdown_end: 
+            print("[PVP] Timer de Fim de Jogo terminou. Resetando para WAITING.")
+            _reset_pvp_lobby() # Chama a nova função de reset
+    # --- FIM: CORREÇÃO ---
 
     # --- PARTE 2: Atualizar Jogadores PVP (Movimento, Tiros) ---
     all_living_pvp_players = [p for p in pvp_player_states.values() if p.get('handshake_completo', True) and p['hp'] > 0]
 
     for state in pvp_player_states.values(): 
-        novo_proj = update_player_logic(state, agora_ms, pvp_s.MAP_WIDTH, pvp_s.MAP_HEIGHT) 
-        if novo_proj:
-            novos_projeteis_de_players.append(novo_proj)
+        # Só atualiza a lógica (mover, atirar) se o jogador ESTIVER VIVO
+        if state.get('hp', 0) > 0:
+            novo_proj = update_player_logic(state, agora_ms, pvp_s.MAP_WIDTH, pvp_s.MAP_HEIGHT) 
+            if novo_proj:
+                novos_projeteis_de_players.append(novo_proj)
             
     pvp_network_projectiles.extend(novos_projeteis_de_players)
 
@@ -1206,16 +1267,13 @@ def _update_pvp_game_state(agora_ms):
         for proj in projeteis_ativos:
             if proj in projeteis_para_remover: continue
             
-            # --- INÍCIO: CORREÇÃO DO CRASH (Problema 3) ---
             owner_state = None
             owner_nome_proj = proj.get('owner_nome')
             if owner_nome_proj:
-                # Itera pelos values (os dicts de estado) para encontrar pelo nome
                 for state in pvp_player_states.values(): 
                     if state.get('nome') == owner_nome_proj:
                         owner_state = state 
                         break
-            # --- FIM: CORREÇÃO DO CRASH ---
             
             for target_state in all_living_pvp_players:
                 if target_state['nome'] == proj['owner_nome']: continue 
@@ -1235,27 +1293,34 @@ def _update_pvp_game_state(agora_ms):
                         projeteis_para_remover.append(proj) 
                         
                         if target_state['hp'] <= 0:
-                            # --- INÍCIO: CORREÇÃO DO CRASH (Problema 3) ---
-                            # Usa a variável 'owner_state' corrigida
                             owner_name = owner_state['nome'] if owner_state else "Alguém"
                             print(f"[PVP] {target_state['nome']} foi abatido por {owner_name}!")
-                            # --- FIM: CORREÇÃO DO CRASH ---
                         break 
     
     # --- PARTE 5: LIMPAR Projéteis PVP ---
     if projeteis_para_remover:
         ids_projeteis_remover = {proj['id'] for proj in projeteis_para_remover}
         pvp_network_projectiles = [p for p in pvp_network_projectiles if p['id'] not in ids_projeteis_remover]
-
-    # --- PARTE 6: LIMPAR Jogadores PVP Mortos (se o jogo acabar) ---
-    if pvp_lobby_state == "GAME_OVER":
-        # (Nesta lógica, a partida para e espera que os jogadores saiam)
-        pass 
         
     return novos_projeteis_de_players
-# --- FIM: MODIFICAÇÃO (Game Loop dividido) ---
 
 
+def handle_client(conn, addr):
+    # ... (código de handle_client, sem alterações) ...
+    # (A lógica de 'BEMVINDO_PVP' e a criação do 'player_state' PVP
+    # já estão corretas e não precisam de modificação)
+    # ...
+    # (A lógica de input do 'handle_client' também está correta)
+    # ...
+    # (A lógica de 'RESPAWN_ME' PVE está correta)
+    # ...
+    # (A lógica de remoção no 'finally'/'except' está correta)
+    pass # <-- Placeholder para indicar que o resto da função é idêntico
+
+
+# (O código idêntico de 'handle_client' é omitido por brevidade, 
+#  pois nenhuma modificação foi necessária nele)
+# (Copie e cole o 'handle_client' original daqui)
 def handle_client(conn, addr):
     print(f"[LOG] [NOVA CONEXÃO] {addr} conetado.")
     nome_jogador = ""

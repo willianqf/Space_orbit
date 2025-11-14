@@ -49,7 +49,10 @@ class EventHandler:
         is_online = novos_estados["is_online"]
         agora = novos_estados["agora"]
         
-        if estado_jogo == "JOGANDO" and is_online and agora > nave_player.tempo_spawn_protecao_input:
+        # --- INÍCIO: CORREÇÃO (Problema 1: Naves Presas no Lobby) ---
+        # Permite o CLICK_MOVE (mouse) em "JOGANDO" E em todos os estados "PVP_"
+        if (estado_jogo == "JOGANDO" or estado_jogo.startswith("PVP_")) and is_online and agora > nave_player.tempo_spawn_protecao_input:
+        # --- FIM: CORREÇÃO ---
             mouse_buttons = pygame.mouse.get_pressed()
             if mouse_buttons[0]:
                 mouse_pos_tela = pygame.mouse.get_pos()
@@ -112,7 +115,6 @@ class EventHandler:
                         elif novos_estados["input_connect_ativo"] == "ip":
                             novos_estados["input_connect_ativo"] = "none"
                             
-                            # --- INÍCIO: MODIFICAÇÃO (Lógica de Conexão PVE/PVP) ---
                             modo_de_jogo_desejado = novos_estados.get("multiplayer_mode_to_join", "PVE")
                             
                             sucesso, modo_retornado, nome_rede, pos_spawn = self.network_client.connect(
@@ -126,14 +128,11 @@ class EventHandler:
                                     self.cb_reiniciar_jogo(pos_spawn=pos_spawn)
                                     novos_estados["estado_jogo"] = "JOGANDO"
                                 elif modo_retornado == "PVP":
-                                    # Chama o setup PVP (que usa o mapa PVP)
-                                    # (Teremos que modificar cb_reiniciar_jogo_pvp no main.py)
                                     self.cb_reiniciar_jogo_pvp(is_online=True, pos_spawn=pos_spawn)
                                     novos_estados["estado_jogo"] = "PVP_LOBBY"
                             else:
                                 print(f"Falha ao conectar: {self.network_client.connection_error_message}")
                                 novos_estados["estado_jogo"] = "MENU"
-                            # --- FIM: MODIFICAÇÃO ---
 
                     elif novos_estados["input_connect_ativo"] == "nome":
                         if event.key == pygame.K_BACKSPACE:
@@ -151,7 +150,6 @@ class EventHandler:
                     if ui.RECT_CONNECT_BOTAO.collidepoint(mouse_pos):
                         novos_estados["input_connect_ativo"] = "none"
 
-                        # --- INÍCIO: MODIFICAÇÃO (Lógica de Conexão PVE/PVP) ---
                         modo_de_jogo_desejado = novos_estados.get("multiplayer_mode_to_join", "PVE")
                         sucesso, modo_retornado, nome_rede, pos_spawn = self.network_client.connect(
                             novos_estados["ip_servidor_input"], 5555, 
@@ -169,7 +167,6 @@ class EventHandler:
                         else:
                             print(f"Falha ao conectar: {self.network_client.connection_error_message}")
                             novos_estados["estado_jogo"] = "MENU"
-                        # --- FIM: MODIFICAÇÃO ---
                         
                     elif ui.RECT_CONNECT_NOME.collidepoint(mouse_pos):
                         novos_estados["input_connect_ativo"] = "nome"
@@ -204,7 +201,7 @@ class EventHandler:
                         novos_estados["multiplayer_mode_to_join"] = "PVE"
                     
                     elif ui.RECT_BOTAO_PVP_ONLINE.collidepoint(mouse_pos):
-                        pvp_disponivel = novos_estados.get("pvp_disponivel", True) # Assumindo que está disponível
+                        pvp_disponivel = novos_estados.get("pvp_disponivel", True)
                         if pvp_disponivel:
                             novos_estados["estado_jogo"] = "GET_SERVER_INFO"
                             novos_estados["input_connect_ativo"] = "nome"
@@ -313,8 +310,6 @@ class EventHandler:
                                 dist_min_sq = (s.TARGET_CLICK_SIZE / 2)**2
                                 
                                 game_state_rede = self.network_client.get_state()
-                                # --- INÍCIO: MODIFICAÇÃO (Mira Online PVP) ---
-                                # No PVP, miramos em Jogadores, não em NPCs
                                 if estado_jogo.startswith("PVP_"):
                                     online_players_copy = game_state_rede['players']
                                     meu_nome = self.network_client.get_my_name()
@@ -333,7 +328,6 @@ class EventHandler:
                                         if dist_sq < dist_min_sq:
                                             dist_min_sq = dist_sq
                                             alvo_clicado_id = npc_id 
-                                # --- FIM: MODIFICAÇÃO ---
                                 
                                 nave_player.alvo_selecionado = alvo_clicado_id 
                                 
