@@ -1,4 +1,4 @@
-# network_client.py
+# Redes/network_client.py
 import socket
 import threading
 import pygame # Usado para Vector2
@@ -22,28 +22,38 @@ class NetworkClient:
         self.connection_error_message = ""
         
         # --- (Variáveis de estado do jogador local que o servidor precisa saber) ---
-        # Estas são as flags que o 'main.py' irá definir
         self.local_player_state_to_send = {
             'w': False, 'a': False, 's': False, 'd': False, 'space': False,
             'alvo_mouse': None,
-            'alvo_lock': None, # O alvo_lock local no main.py (o sprite) é diferente do ID enviado
-            'click_target': None, # (x, y) do clique
-            'click_move': None, # (x, y) do clique
-            'buy_upgrade': None, # "motor", "dano", etc.
+            'alvo_lock': None, 
+            'click_target': None, 
+            'click_move': None, 
+            'buy_upgrade': None, 
             'toggle_regen': False,
             'respawn_me': False,
             'enter_spectator': False
         }
-        # Thread para enviar inputs em background (opcional, mas melhora)
-        # self.sender_thread = threading.Thread(target=self._sender_loop, daemon=True)
-        # self.sender_thread.start()
+        
+        # --- INÍCIO: MODIFICAÇÃO (Variável para Lobby) ---
+        # Esta variável será atualizada pela thread de escuta
+        self.pvp_lobby_status = {"num_players": 0, "countdown_sec": 0}
+        # --- FIM: MODIFICAÇÃO ---
 
 
-    def connect(self, ip, porta, nome):
-        """ Tenta conectar ao servidor, enviar o nome e iniciar a thread de escuta. """
+    # --- INÍCIO: MODIFICAÇÃO (Assinatura e Lógica de Retorno) ---
+    def connect(self, ip, porta, nome, game_mode="PVE"):
+        """ 
+        Tenta conectar ao servidor, enviar o nome E O MODO DE JOGO.
+        Retorna: (Sucesso, ModoDeJogo, NomeServidor, PosSpawn)
+        Ex: (True, "PVE", "Jogador_1", (100, 100))
+        Ex: (True, "PVP", "JogadorPVP_2", (750, 750))
+        Ex: (False, "NONE", "", None)
+        """
+    # --- FIM: MODIFICAÇÃO ---
         if self.connection_status == "CONNECTED":
             print("[Network] Já conectado.")
-            return True
+            # Retorna "PVE" como padrão, pois não sabemos o modo
+            return True, "PVE", self.my_network_name, (0, 0)
             
         self.connection_status = "CONNECTING"
         self.connection_error_message = ""
@@ -56,36 +66,48 @@ class NetworkClient:
             print(f"Tentando conectar a {ip}:{porta}...")
             self.client_socket.connect((ip, porta))
             
-            print("Conexão estabelecida. Enviando nome...")
-            self.client_socket.send(nome_final.encode('utf-8'))
+            print(f"Conexão estabelecida. Enviando nome '{nome_final}' e modo '{game_mode}'...")
+            handshake_message = f"{nome_final}|{game_mode}"
+            self.client_socket.send(handshake_message.encode('utf-8'))
             
             print("Aguardando resposta de spawn do servidor...")
             data = self.client_socket.recv(2048)
-            resposta_servidor = data.decode('utf-8')
+            resposta_servidor = data.decode('utf-8').strip() # .strip() para remover \n
+            
+            # --- INÍCIO: MODIFICAÇÃO (Lógica de Resposta Múltipla) ---
+            modo_retornado = "NONE"
+            parts = resposta_servidor.split('|') # Divide a resposta
             
             if resposta_servidor.startswith("BEMVINDO|"):
-                parts = resposta_servidor.split('|')
-                if len(parts) == 4:
-                    self.my_network_name = parts[1]
-                    spawn_x = int(parts[2])
-                    spawn_y = int(parts[3])
-                    
-                    print(f"Servidor aceitou! Nome: '{self.my_network_name}'. Spawn: ({spawn_x}, {spawn_y}).")
-                    
-                    self.client_socket.settimeout(None)
-                    
-                    self.listener_thread_running = True
-                    self.listener_thread = threading.Thread(target=self._listener_loop, daemon=True)
-                    self.listener_thread.start()
-                    
-                    self.connection_status = "CONNECTED"
-                    
-                    # Retorna os dados de spawn para o main.py
-                    return True, self.my_network_name, (spawn_x, spawn_y)
-                else:
-                    raise socket.error(f"Resposta 'BEMVINDO' mal formatada: {resposta_servidor}")
+                modo_retornado = "PVE"
+            elif resposta_servidor.startswith("BEMVINDO_PVP|"):
+                modo_retornado = "PVP"
+            elif resposta_servidor.startswith("REJEITADO|"):
+                self.connection_error_message = parts[1] if len(parts) > 1 else "Conexão rejeitada"
+                raise socket.error(self.connection_error_message)
             else:
                  raise socket.error(f"Resposta inesperada do servidor: {resposta_servidor}")
+
+            if len(parts) == 4:
+                self.my_network_name = parts[1]
+                spawn_x = int(parts[2])
+                spawn_y = int(parts[3])
+                
+                print(f"Servidor aceitou! Modo: '{modo_retornado}'. Nome: '{self.my_network_name}'. Spawn: ({spawn_x}, {spawn_y}).")
+                
+                self.client_socket.settimeout(None)
+                
+                self.listener_thread_running = True
+                self.listener_thread = threading.Thread(target=self._listener_loop, daemon=True)
+                self.listener_thread.start()
+                
+                self.connection_status = "CONNECTED"
+                
+                # Retorna os 4 valores
+                return True, modo_retornado, self.my_network_name, (spawn_x, spawn_y)
+            else:
+                raise socket.error(f"Resposta 'BEMVINDO' mal formatada: {resposta_servidor}")
+            # --- FIM: MODIFICAÇÃO ---
 
         except (socket.timeout, socket.error) as e:
             print(f"[ERRO DE REDE] Falha ao conectar: {e}")
@@ -94,7 +116,8 @@ class NetworkClient:
                 self.client_socket.close()
             self.client_socket = None
             self.connection_status = "ERROR"
-            return False, "", (0, 0)
+            # Retorna 4 valores na falha
+            return False, "NONE", "", (0, 0)
 
     def close(self):
         """ Fecha o socket e para as threads. """
@@ -110,8 +133,6 @@ class NetworkClient:
         self.client_socket = None
         
         if self.listener_thread:
-            # Não podemos dar .join() na própria thread se ela estiver se fechando
-            # Apenas definimos como None e deixamos o Python limpar
             self.listener_thread = None
             
         self.my_network_name = ""
@@ -128,7 +149,7 @@ class NetworkClient:
                 self.client_socket.sendall((message + '\n').encode('utf-8'))
             except (socket.error, BrokenPipeError) as e:
                 print(f"[ERRO DE REDE] Falha ao enviar input '{message}'. Conexão pode estar fechada. Erro: {e}")
-                self.close() # Força a desconexão
+                self.close() 
         
     def get_state(self):
         """ Retorna uma cópia segura do estado de rede atual. """
@@ -138,6 +159,13 @@ class NetworkClient:
                 "projectiles": list(self.online_projectiles),
                 "npcs": self.online_npcs.copy()
             }
+    
+    # --- INÍCIO: MODIFICAÇÃO (Função para Lobby) ---
+    def get_lobby_status(self):
+        """ Retorna uma cópia segura do estado do lobby PVP. """
+        with self.network_state_lock:
+            return self.pvp_lobby_status.copy()
+    # --- FIM: MODIFICAÇÃO ---
             
     def get_my_name(self):
         return self.my_network_name
@@ -149,7 +177,6 @@ class NetworkClient:
         """
         Corre na thread separada. Escuta por dados do servidor
         e atualiza os dicionários de estado.
-        (Função 'network_listener_thread' original, agora como método)
         """
         print("[Thread de Rede] Iniciada.")
         self.network_buffer = ""
@@ -169,7 +196,21 @@ class NetworkClient:
                     
                     if message.startswith("STATE|"):
                         self._parse_state_message(message)
-                
+                    
+                    # --- INÍCIO: MODIFICAÇÃO (Recebe mensagens do Lobby PVP) ---
+                    elif message.startswith("PVP_LOBBY_UPDATE|"):
+                        try:
+                            parts = message.split('|')
+                            num_players = int(parts[1])
+                            countdown_sec = int(parts[2])
+                            
+                            with self.network_state_lock:
+                                self.pvp_lobby_status["num_players"] = num_players
+                                self.pvp_lobby_status["countdown_sec"] = countdown_sec
+                        except (IndexError, ValueError):
+                            print(f"[REDE] Recebeu PVP_LOBBY_UPDATE mal formatado: {message}")
+                    # --- FIM: MODIFICAÇÃO ---
+
             except (socket.error, ConnectionResetError, BrokenPipeError) as e:
                 if self.listener_thread_running:
                     print(f"[Thread de Rede] Erro de socket: {e}")
@@ -181,19 +222,24 @@ class NetworkClient:
 
         print("[Thread de Rede] Encerrada.")
         self.listener_thread_running = False
-        # (Não chamamos close() aqui, pois o 'main.py' pode querer
-        #  mostrar uma tela de "desconectado" antes de fechar tudo)
 
     def _parse_state_message(self, message):
         """ Processa uma única mensagem 'STATE|...' """
         parts = message.split('|')
-        if len(parts) < 6 or parts[0] != 'STATE' or parts[2] != 'PROJ' or parts[4] != 'NPC':
-            print(f"[Thread de Rede] Recebeu mensagem 'STATE' mal formatada.")
-            return
+        
+        is_pve_state = (len(parts) >= 6 and parts[0] == 'STATE' and parts[2] == 'PROJ' and parts[4] == 'NPC')
+        is_pvp_state = (len(parts) >= 4 and parts[0] == 'STATE' and parts[2] == 'PROJ')
+
+        if not is_pve_state and not is_pvp_state:
+             print(f"[Thread de Rede] Recebeu mensagem 'STATE' mal formatada.")
+             return
         
         payload_players = parts[1]
         payload_proj = parts[3]
-        payload_npcs = parts[5]
+        
+        payload_npcs = ""
+        if is_pve_state and len(parts) >= 6:
+            payload_npcs = parts[5]
         
         # --- Processar Jogadores ---
         new_player_states = {}
@@ -203,7 +249,9 @@ class NetworkClient:
             if not player_data: continue
             
             parts_player = player_data.split(':')
-            if len(parts_player) == 17: # Checa o formato esperado
+            # --- INÍCIO: MODIFICAÇÃO (Lê 18 campos) ---
+            if len(parts_player) == 18: # Checa o novo formato
+            # --- FIM: MODIFICAÇÃO ---
                 try:
                     nome = parts_player[0]
                     new_player_states[nome] = {
@@ -223,6 +271,9 @@ class NetworkClient:
                         'nivel_aux': int(parts_player[14]),
                         'is_lento': bool(int(parts_player[15])),
                         'is_congelado': bool(int(parts_player[16])),
+                        # --- INÍCIO: MODIFICAÇÃO (Lê o 18º campo) ---
+                        'is_pre_match': bool(int(parts_player[17])),
+                        # --- FIM: MODIFICAÇÃO ---
                     }
                 except (ValueError, IndexError) as e:
                     print(f"Erro ao processar dados do jogador: {parts_player} | Erro: {e}")
@@ -250,7 +301,7 @@ class NetworkClient:
         
         # --- Processar NPCs ---
         new_npc_states = {}
-        npc_data_list = payload_npcs.split(';')
+        npc_data_list = payload_npcs.split(';') 
         
         for npc_data in npc_data_list:
             if not npc_data: continue
@@ -264,7 +315,7 @@ class NetworkClient:
                         'x': float(parts_npc[2]),
                         'y': float(parts_npc[3]),
                         'angulo': float(parts_npc[4]),
-                        'hp': float(parts_npc[5]), # Corrigido para float
+                        'hp': float(parts_npc[5]), 
                         'max_hp': int(float(parts_npc[6])),
                         'tamanho': int(parts_npc[7])
                     }
