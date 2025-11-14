@@ -36,7 +36,13 @@ class NetworkClient:
         
         # --- INÍCIO: MODIFICAÇÃO (Variável para Lobby) ---
         # Esta variável será atualizada pela thread de escuta
-        self.pvp_lobby_status = {"num_players": 0, "countdown_sec": 0}
+        self.pvp_lobby_status = {
+            "num_players": 0, 
+            "countdown_sec": 0,
+            "match_countdown_sec": 0, # <-- ADICIONADO (Bug 1 PVE Crash)
+            "lobby_state": "WAITING", # <-- ADICIONADO (Bug 2 PVP Fim)
+            "winner": ""              # <-- ADICIONADO (Bug 2 PVP Fim)
+        }
         # --- FIM: MODIFICAÇÃO ---
 
 
@@ -141,6 +147,16 @@ class NetworkClient:
             self.online_players_states.clear()
             self.online_projectiles.clear()
             self.online_npcs.clear()
+            
+            # --- INÍCIO: MODIFICAÇÃO (Reseta o lobby) ---
+            self.pvp_lobby_status = {
+                "num_players": 0, 
+                "countdown_sec": 0, 
+                "match_countdown_sec": 0,
+                "lobby_state": "WAITING",
+                "winner": ""
+            }
+            # --- FIM: MODIFICAÇÃO ---
 
     def send(self, message):
         """ Envia uma única mensagem (com \n) para o servidor. """
@@ -198,17 +214,26 @@ class NetworkClient:
                         self._parse_state_message(message)
                     
                     # --- INÍCIO: MODIFICAÇÃO (Recebe mensagens do Lobby PVP) ---
-                    elif message.startswith("PVP_LOBBY_UPDATE|"):
+                    # Escuta pela mensagem correta "PVP_STATUS_UPDATE"
+                    elif message.startswith("PVP_STATUS_UPDATE|"):
                         try:
                             parts = message.split('|')
+                            # Lê os 5 valores
                             num_players = int(parts[1])
-                            countdown_sec = int(parts[2])
+                            countdown_sec_lobby = int(parts[2])
+                            countdown_sec_match = int(parts[3]) # <-- LÊ O NOVO VALOR
+                            lobby_state_str = parts[4]          # <-- LÊ O NOVO VALOR
+                            winner_name_str = parts[5]          # <-- LÊ O NOVO VALOR
                             
                             with self.network_state_lock:
                                 self.pvp_lobby_status["num_players"] = num_players
-                                self.pvp_lobby_status["countdown_sec"] = countdown_sec
+                                self.pvp_lobby_status["countdown_sec"] = countdown_sec_lobby
+                                self.pvp_lobby_status["match_countdown_sec"] = countdown_sec_match # <-- SALVA
+                                self.pvp_lobby_status["lobby_state"] = lobby_state_str       # <-- SALVA
+                                self.pvp_lobby_status["winner"] = winner_name_str       # <-- SALVA
+                                
                         except (IndexError, ValueError):
-                            print(f"[REDE] Recebeu PVP_LOBBY_UPDATE mal formatado: {message}")
+                            print(f"[REDE] Recebeu PVP_STATUS_UPDATE mal formatado: {message}")
                     # --- FIM: MODIFICAÇÃO ---
 
             except (socket.error, ConnectionResetError, BrokenPipeError) as e:

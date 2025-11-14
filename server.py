@@ -247,6 +247,12 @@ def update_player_logic(player_state, agora_ms=0, map_width=s.MAP_WIDTH, map_hei
         for entity in lista_alvos_busca:
             entity_id = entity.get('id', entity.get('nome'))
             if entity_id == target_id:
+                # --- INÍCIO: CORREÇÃO (Bug 1: Atirar no Vazio) ---
+                # Garante que o alvo (seja player ou NPC) está vivo
+                if entity.get('hp', 0) <= 0:
+                    continue # Ignora, alvo está morto
+                # --- FIM: CORREÇÃO ---
+                
                 alvo_coords = (entity['x'], entity['y']); alvo_encontrado = True; break
         
         if not alvo_encontrado:
@@ -704,7 +710,7 @@ def game_loop(bot_manager):
             pvp_message_bytes = pvp_message.encode('utf-8')
 
 
-            # --- INÍCIO: MODIFICAÇÃO (Problema 2 e 3: Enviar timers PVP) ---
+            # --- INÍCIO: MODIFICAÇÃO (Bug 3: Enviar Estado do Jogo) ---
             # --- Pacote de Status PVP (Lobby E Partida) ---
             pvp_status_message_bytes = None
             
@@ -717,12 +723,16 @@ def game_loop(bot_manager):
                 
                 # 2. Calcular contagem da Partida (3min)
                 match_countdown_sec = 0
+                # Se estiver em PRE_MATCH ou PLAYING, o timer da partida está valendo
                 if pvp_lobby_state == "PLAYING" or pvp_lobby_state == "PRE_MATCH":
                     match_countdown_sec = max(0, int((pvp_match_countdown_end - agora_ms) / 1000))
                 
                 # 3. Montar a mensagem
-                #    Formato: STATUS|Jogadores|TempoLobby|TempoPartida
-                status_msg = f"PVP_STATUS_UPDATE|{len(pvp_player_states)}|{contagem_segundos_lobby}|{match_countdown_sec}\n"
+                # Formato: STATUS|Jogadores|TempoLobby|TempoPartida|ESTADO_ATUAL|VENCEDOR
+                status_msg = (
+                    f"PVP_STATUS_UPDATE|{len(pvp_player_states)}|{contagem_segundos_lobby}|{match_countdown_sec}"
+                    f"|{pvp_lobby_state}|{pvp_winner_name}\n"
+                )
                 pvp_status_message_bytes = status_msg.encode('utf-8')
             # --- FIM: MODIFICAÇÃO ---
             
@@ -773,7 +783,12 @@ def _build_player_state_list(player_dict, agora_ms):
     """ Helper para construir a string de estado dos jogadores. """
     lista_de_estados = []
     for state in player_dict.values():
-        if state.get('handshake_completo', True):
+        
+        # --- INÍCIO DA CORREÇÃO (Bugs 1 e 2: Ghost Players) ---
+        # Só envia o estado de jogadores que estão com handshake completo E VIVOS
+        if state.get('handshake_completo', True) and state.get('hp', 0) > 0:
+        # --- FIM DA CORREÇÃO ---
+        
             regen_status = 1 if state.get('esta_regenerando', False) else 0
             is_lento = 1 if agora_ms < state.get('tempo_fim_lentidao', 0) else 0
             is_congelado = 1 if agora_ms < state.get('tempo_fim_congelamento', 0) else 0
@@ -789,6 +804,7 @@ def _build_player_state_list(player_dict, agora_ms):
                 f":{is_lento}:{is_congelado}:{is_pre_match}" # <-- Campo 18
             )
             lista_de_estados.append(estado_str)
+            
     return lista_de_estados
 
 def _update_pve_game_state(bot_manager, agora_ms):
@@ -1524,6 +1540,13 @@ def handle_client(conn, addr):
                         for entity in lista_alvos_busca:
                             entity_id = entity.get('id', entity.get('nome'))
                             if entity_id == player_state['nome']: continue 
+                            
+                            # --- INÍCIO: CORREÇÃO (Bug 1 e 2: Ghost Players) ---
+                            # Garante que o alvo (player ou NPC) está vivo antes de clicar
+                            if entity.get('hp', 0) <= 0:
+                                continue
+                            # --- FIM: CORREÇÃO ---
+                            
                             dist_sq = (entity['x'] - click_x)**2 + (entity['y'] - click_y)**2
                             if dist_sq < TARGET_CLICK_SIZE_SQ and dist_sq < dist_min_sq:
                                 dist_min_sq = dist_sq; alvo_encontrado_id = entity_id

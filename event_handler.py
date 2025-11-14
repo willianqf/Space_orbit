@@ -310,11 +310,14 @@ class EventHandler:
                                 dist_min_sq = (s.TARGET_CLICK_SIZE / 2)**2
                                 
                                 game_state_rede = self.network_client.get_state()
+                                
+                                # --- INÍCIO DA CORREÇÃO (Bugs 1 e 2: Targeting de Mortos) ---
                                 if estado_jogo.startswith("PVP_"):
                                     online_players_copy = game_state_rede['players']
                                     meu_nome = self.network_client.get_my_name()
                                     for nome, state in online_players_copy.items():
                                         if nome == meu_nome: continue
+                                        # VERIFICA HP AQUI
                                         if state.get('hp', 0) <= 0: continue
                                         dist_sq = (state['x'] - mouse_pos_mundo.x)**2 + (state['y'] - mouse_pos_mundo.y)**2
                                         if dist_sq < dist_min_sq:
@@ -323,11 +326,13 @@ class EventHandler:
                                 else: # Lógica PVE (original)
                                     online_npcs_copy = game_state_rede['npcs']
                                     for npc_id, state in online_npcs_copy.items():
+                                        # VERIFICA HP AQUI (já estava)
                                         if state.get('hp', 0) <= 0: continue
                                         dist_sq = (state['x'] - mouse_pos_mundo.x)**2 + (state['y'] - mouse_pos_mundo.y)**2
                                         if dist_sq < dist_min_sq:
                                             dist_min_sq = dist_sq
                                             alvo_clicado_id = npc_id 
+                                # --- FIM DA CORREÇÃO ---
                                 
                                 nave_player.alvo_selecionado = alvo_clicado_id 
                                 
@@ -516,7 +521,10 @@ class EventHandler:
                             
                             dist_min_sq = (s.TARGET_CLICK_SIZE * 2)**2
                             for nome, state in online_players_copy.items():
+                                # --- INÍCIO: CORREÇÃO (Bugs 1 e 2) ---
+                                # Verifica HP aqui também
                                 if state.get('hp', 0) <= 0: continue
+                                # --- FIM: CORREÇÃO ---
                                 dist_sq = (state['x'] - mouse_pos_mundo.x)**2 + (state['y'] - mouse_pos_mundo.y)**2
                                 if dist_sq < dist_min_sq:
                                     dist_min_sq = dist_sq
