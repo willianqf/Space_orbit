@@ -94,15 +94,20 @@ class BotAI:
         alvo_ameacador_sprite = None
         dist_min = float('inf')
         
-        # 1. Procura Inimigos
+        # 1. Procura Inimigos (Em PVP, isso inclui o Player e outros Bots)
         if self.grupo_inimigos_ref_cache:
             for inimigo in self.grupo_inimigos_ref_cache:
-                if not inimigo.groups(): continue
                 
                 # --- INÍCIO: CORREÇÃO (Bot se alvejando) ---
                 if inimigo == self.bot:
                     continue # Não pode alvejar a si mesmo
                 # --- FIM: CORREÇÃO ---
+
+                # --- INÍCIO DA CORREÇÃO (BUG PVP OFFLINE) ---
+                # Verifica se o alvo (que pode ser o player) está vivo (tem vida) E se está em um grupo
+                if not hasattr(inimigo, 'vida_atual') or inimigo.vida_atual <= 0 or not inimigo.groups():
+                    continue
+                # --- FIM DA CORREÇÃO ---
                 
                 try:
                     dist = self.bot.posicao.distance_to(inimigo.posicao)
@@ -111,7 +116,7 @@ class BotAI:
                         alvo_ameacador_sprite = inimigo 
                 except (ValueError, AttributeError): continue
         
-        # 2. Procura Players/Bots (se não houver inimigos)
+        # 2. Procura Players/Bots (se não houver inimigos) - (Lógica PVE)
         if alvo_ameacador_sprite is None:
             
             # --- INÍCIO DA CORREÇÃO (BUB OFFLINE: Bots atacam jogador morto) ---
@@ -119,7 +124,9 @@ class BotAI:
             lista_alvos_naves = []
             if self.player_ref_cache and self.player_ref_cache.vida_atual > 0:
                 lista_alvos_naves.append(self.player_ref_cache)
-            lista_alvos_naves.extend(list(self.grupo_bots_ref_cache.sprites()))
+            # Adiciona os bots (esta lista é usada principalmente no PVE)
+            if self.grupo_bots_ref_cache:
+                lista_alvos_naves.extend(list(self.grupo_bots_ref_cache.sprites()))
             # --- FIM DA CORREÇÃO ---
             
             for alvo in lista_alvos_naves:
@@ -226,7 +233,7 @@ class BotAI:
         
         LIMITE_HP_BUSCAR_VIDA = self.bot.max_vida * 0.40
         
-        # 1. Prioridade Máxima: Buscar Vida
+        # 1. Prioridade Máxima: Buscar Vida (Lógica PVE, não afeta PVP)
         if self.bot.vida_atual <= LIMITE_HP_BUSCAR_VIDA:
             # --- INÍCIO DA CORREÇÃO DO BUG ---
             # Verifica se grupo_vidas não é None ANTES de iterar
@@ -247,15 +254,21 @@ class BotAI:
                 self.estado_ia = "COLETANDO"
                 return 
 
-        # 2. Segunda Prioridade: INIMIGOS (No PVP, são os outros jogadores)
+        # 2. Segunda Prioridade: INIMIGOS (No PVP, são os outros jogadores/player)
         dist_min = float('inf'); alvo_final = None       
         for inimigo in grupo_inimigos:
-            if not inimigo.groups(): continue
             
             # --- INÍCIO: CORREÇÃO (Bot se alvejando) ---
             if inimigo == self.bot:
                 continue # Não pode alvejar a si mesmo
             # --- FIM: CORREÇÃO ---
+
+            # --- INÍCIO DA CORREÇÃO (BUG PVP OFFLINE) ---
+            # Verifica se o alvo (que pode ser o player) está vivo (tem vida) E se está em um grupo
+            # Esta é a correção que faltava.
+            if not hasattr(inimigo, 'vida_atual') or inimigo.vida_atual <= 0 or not inimigo.groups():
+                continue
+            # --- FIM DA CORREÇÃO ---
             
             try:
                 dist = self.bot.posicao.distance_to(inimigo.posicao)
@@ -286,6 +299,7 @@ class BotAI:
             return # <--- Foco no obstáculo
 
         # 4. Última Prioridade: Outras Naves (Redundante no PVP, mas bom para PVE)
+        # (Esta parte já estava correta, mas é bom mantê-la)
         dist_min = float('inf'); alvo_final = None       
         for alvo in lista_alvos_naves:
             
@@ -428,8 +442,13 @@ class BotAI:
 
         if self.estado_ia == "CAÇANDO":
             alvo = self.bot.alvo_selecionado
-            if not (alvo and alvo.groups()):
+            
+            # --- INÍCIO DA CORREÇÃO (BUG PVP OFFLINE) ---
+            # Verifica se o alvo é válido (existe, está num grupo E ESTÁ VIVO)
+            if not (alvo and alvo.groups() and hasattr(alvo, 'vida_atual') and alvo.vida_atual > 0):
                 self.estado_ia = "VAGANDO"; return
+            # --- FIM DA CORREÇÃO ---
+                
             try:
                 distancia_alvo = self.bot.posicao.distance_to(alvo.posicao)
                 if distancia_alvo < self.distancia_scan_inimigo: 
@@ -442,8 +461,12 @@ class BotAI:
 
         if self.estado_ia == "ATACANDO":
             alvo = self.bot.alvo_selecionado
-            if not (alvo and alvo.groups()):
+
+            # --- INÍCIO DA CORREÇÃO (BUG PVP OFFLINE) ---
+            # Verifica se o alvo é válido (existe, está num grupo E ESTÁ VIVO)
+            if not (alvo and alvo.groups() and hasattr(alvo, 'vida_atual') and alvo.vida_atual > 0):
                 self.estado_ia = "VAGANDO"; return
+            # --- FIM DA CORREÇÃO ---
             
             try:
                 direcao_alvo_vec = (alvo.posicao - self.bot.posicao)
