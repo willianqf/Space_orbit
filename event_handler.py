@@ -12,12 +12,6 @@ class EventHandler:
     def __init__(self, network_client: NetworkClient, camera: Camera, pause_manager: PauseMenu, main_callbacks: dict):
         """
         Inicializa o gerenciador de eventos.
-        
-        Args:
-            network_client: A instância do NetworkClient.
-            camera: A instância da Câmera (para cliques do mouse).
-            pause_manager: A instância do PauseMenu.
-            main_callbacks: Um dicionário de funções do main.py (ex: "reiniciar_jogo").
         """
         self.network_client = network_client
         self.camera = camera
@@ -33,13 +27,6 @@ class EventHandler:
     def processar_eventos(self, game_state: dict):
         """
         Processa todos os eventos pendentes do Pygame e atualiza o game_state.
-        Este método SUBSTITUI o loop 'for event...' do main.py.
-        
-        Args:
-            game_state: Um dicionário contendo o estado atual do jogo.
-        
-        Returns:
-            Um dicionário com o estado do jogo atualizado.
         """
         
         novos_estados = game_state.copy()
@@ -49,10 +36,8 @@ class EventHandler:
         is_online = novos_estados["is_online"]
         agora = novos_estados["agora"]
         
-        # --- INÍCIO: CORREÇÃO (Problema 1: Naves Presas no Lobby) ---
         # Permite o CLICK_MOVE (mouse) em "JOGANDO" E em todos os estados "PVP_"
         if (estado_jogo == "JOGANDO" or estado_jogo.startswith("PVP_")) and is_online and agora > nave_player.tempo_spawn_protecao_input:
-        # --- FIM: CORREÇÃO ---
             mouse_buttons = pygame.mouse.get_pressed()
             if mouse_buttons[0]:
                 mouse_pos_tela = pygame.mouse.get_pos()
@@ -90,6 +75,9 @@ class EventHandler:
                         else:
                             if len(novos_estados["nome_jogador_input"]) < s.LIMITE_MAX_NOME and event.unicode.isprintable():
                                 novos_estados["nome_jogador_input"] += event.unicode
+                    # Adicionado ESC para voltar ao menu principal
+                    if event.key == pygame.K_ESCAPE:
+                        novos_estados["estado_jogo"] = "MENU"
                 
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     mouse_pos = pygame.mouse.get_pos()
@@ -107,32 +95,23 @@ class EventHandler:
             
             elif estado_jogo == "GET_SERVER_INFO":
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_TAB:
+                    # --- CORREÇÃO: Botão ESC para voltar ---
+                    if event.key == pygame.K_ESCAPE:
+                        novos_estados["estado_jogo"] = "MULTIPLAYER_MODE_SELECT"
+                        novos_estados["mensagem_status_conexao"] = "" # Limpa mensagens de erro antigas
+                        novos_estados["input_connect_ativo"] = "none"
+
+                    elif event.key == pygame.K_TAB:
                         novos_estados["input_connect_ativo"] = "ip" if novos_estados["input_connect_ativo"] == "nome" else "nome"
+                    
                     elif event.key == pygame.K_RETURN:
                         if novos_estados["input_connect_ativo"] == "nome":
                             novos_estados["input_connect_ativo"] = "ip"
-                        elif novos_estados["input_connect_ativo"] == "ip":
+                        elif novos_estados["input_connect_ativo"] == "ip" or novos_estados["input_connect_ativo"] == "none":
                             novos_estados["input_connect_ativo"] = "none"
-                            
-                            modo_de_jogo_desejado = novos_estados.get("multiplayer_mode_to_join", "PVE")
-                            
-                            sucesso, modo_retornado, nome_rede, pos_spawn = self.network_client.connect(
-                                novos_estados["ip_servidor_input"], 5555, 
-                                novos_estados["nome_jogador_input"], 
-                                modo_de_jogo_desejado 
-                            )
-                            
-                            if sucesso:
-                                if modo_retornado == "PVE":
-                                    self.cb_reiniciar_jogo(pos_spawn=pos_spawn)
-                                    novos_estados["estado_jogo"] = "JOGANDO"
-                                elif modo_retornado == "PVP":
-                                    self.cb_reiniciar_jogo_pvp(is_online=True, pos_spawn=pos_spawn)
-                                    novos_estados["estado_jogo"] = "PVP_LOBBY"
-                            else:
-                                print(f"Falha ao conectar: {self.network_client.connection_error_message}")
-                                novos_estados["estado_jogo"] = "MENU"
+                            novos_estados["estado_jogo"] = "TENTANDO_CONECTAR"
+                            novos_estados["mensagem_status_conexao"] = "Iniciando conexão..."
+                            novos_estados["cor_status_conexao"] = s.AMARELO_BOMBA
 
                     elif novos_estados["input_connect_ativo"] == "nome":
                         if event.key == pygame.K_BACKSPACE:
@@ -149,24 +128,9 @@ class EventHandler:
                     mouse_pos = pygame.mouse.get_pos()
                     if ui.RECT_CONNECT_BOTAO.collidepoint(mouse_pos):
                         novos_estados["input_connect_ativo"] = "none"
-
-                        modo_de_jogo_desejado = novos_estados.get("multiplayer_mode_to_join", "PVE")
-                        sucesso, modo_retornado, nome_rede, pos_spawn = self.network_client.connect(
-                            novos_estados["ip_servidor_input"], 5555, 
-                            novos_estados["nome_jogador_input"],
-                            modo_de_jogo_desejado
-                        )
-                        
-                        if sucesso:
-                            if modo_retornado == "PVE":
-                                self.cb_reiniciar_jogo(pos_spawn=pos_spawn)
-                                novos_estados["estado_jogo"] = "JOGANDO"
-                            elif modo_retornado == "PVP":
-                                self.cb_reiniciar_jogo_pvp(is_online=True, pos_spawn=pos_spawn)
-                                novos_estados["estado_jogo"] = "PVP_LOBBY"
-                        else:
-                            print(f"Falha ao conectar: {self.network_client.connection_error_message}")
-                            novos_estados["estado_jogo"] = "MENU"
+                        novos_estados["estado_jogo"] = "TENTANDO_CONECTAR"
+                        novos_estados["mensagem_status_conexao"] = "Iniciando conexão..."
+                        novos_estados["cor_status_conexao"] = s.AMARELO_BOMBA
                         
                     elif ui.RECT_CONNECT_NOME.collidepoint(mouse_pos):
                         novos_estados["input_connect_ativo"] = "nome"
@@ -209,6 +173,14 @@ class EventHandler:
                         else:
                             print("[AVISO] Modo PVP clicado, mas não está disponível.")
             
+            # Handler para a tela de erro
+            elif estado_jogo == "ERRO_CONEXAO":
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_RETURN or event.key == pygame.K_ESCAPE:
+                        self.cb_resetar_para_menu()
+                        novos_estados["estado_jogo"] = "MENU"
+                        novos_estados["mensagem_status_conexao"] = "" # Limpa erro anterior
+
             elif estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_PRE_MATCH"]:
                 if event.type == pygame.KEYDOWN:
                     
@@ -225,7 +197,9 @@ class EventHandler:
                     
                     elif event.key == pygame.K_ESCAPE: 
                         novos_estados["estado_anterior_pause"] = estado_jogo 
-                        novos_estados["estado_jogo"] = "PAUSE"; print("Jogo Pausado.")
+                        novos_estados["estado_jogo"] = "PAUSE"
+                        novos_estados["tempo_pausa_inicio"] = pygame.time.get_ticks()
+                        print("Jogo Pausado.")
                     
                     elif event.key == pygame.K_r and estado_jogo == "JOGANDO":
                         if is_online:
@@ -369,6 +343,30 @@ class EventHandler:
                 if action == "RESUME_GAME":
                     estado_anterior = game_state.get("estado_anterior_pause", "JOGANDO")
                     novos_estados["estado_jogo"] = estado_anterior
+                    
+                    # Aplica o tempo pausado
+                    if not is_online:
+                        inicio_pausa = novos_estados.get("tempo_pausa_inicio", pygame.time.get_ticks())
+                        duracao_pausa = pygame.time.get_ticks() - inicio_pausa
+                        
+                        if duracao_pausa > 0:
+                            # Ajusta os timers de fim de jogo/lobby para o futuro
+                            if "pvp_lobby_timer_fim_offline" in novos_estados:
+                                novos_estados["pvp_lobby_timer_fim_offline"] += duracao_pausa
+                            if "pvp_partida_timer_fim_offline" in novos_estados:
+                                novos_estados["pvp_partida_timer_fim_offline"] += duracao_pausa
+                            if "pvp_pre_match_timer_fim_offline" in novos_estados:
+                                novos_estados["pvp_pre_match_timer_fim_offline"] += duracao_pausa
+                            
+                            # Ajusta timers do jogador para evitar "saltos"
+                            nave = novos_estados.get("nave_player")
+                            if nave:
+                                nave.ultimo_tiro_tempo += duracao_pausa
+                                nave.ultimo_hit_tempo += duracao_pausa
+                                nave.tempo_spawn_protecao_input += duracao_pausa
+                                nave.ultimo_tick_regeneracao += duracao_pausa
+                                if hasattr(nave, 'tempo_fim_lentidao'): nave.tempo_fim_lentidao += duracao_pausa
+                                if hasattr(nave, 'tempo_fim_congelamento'): nave.tempo_fim_congelamento += duracao_pausa
                 
                 elif action == "GOTO_MENU":
                     self.cb_resetar_para_menu() 

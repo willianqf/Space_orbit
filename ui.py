@@ -2,17 +2,22 @@
 import pygame
 # Importa todas as constantes e fontes de settings
 from settings import *
-import multi.pvp_settings as pvp_s # <-- MODIFICAÇÃO: CORREÇÃO DO BUG (importação)
+import multi.pvp_settings as pvp_s 
 
 # --- Variáveis Globais de UI (Tamanho e Posição) ---
 # Tamanhos Fixos
 BTN_LOJA_W, BTN_LOJA_H = 300, 50
 BTN_MENU_W, BTN_MENU_H = 250, 50
 BTN_REINICIAR_W, BTN_REINICIAR_H = 200, 50
-BTN_HUD_UPGRADE_W, BTN_HUD_UPGRADE_H = 100, 30
+
+# Tamanhos para os banners do HUD
+BTN_HUD_UPGRADE_W, BTN_HUD_UPGRADE_H = 140, 45 
+BTN_HUD_REGEN_W, BTN_HUD_REGEN_H = 140, 45
+
 TERMINAL_H = 35
 PAUSE_PANEL_W, PAUSE_PANEL_H = 350, 400 
 BTN_PAUSE_CTRL_W, BTN_PAUSE_CTRL_H = 40, 40
+BTN_PAUSA_MENU_W, BTN_PAUSA_MENU_H = 250, 40
 
 # --- Bloco da Tela de Nome (Login) ---
 LOGIN_PANEL_W, LOGIN_PANEL_H = 350, 250
@@ -29,10 +34,6 @@ CONNECT_BTN_W, CONNECT_BTN_H = 200, 50
 MINIMAP_WIDTH = 150 
 MINIMAP_HEIGHT = 150 
 
-BTN_HUD_REGEN_W, BTN_HUD_REGEN_H = 160, 30
-BTN_PAUSA_MENU_W, BTN_PAUSA_MENU_H = 250, 40
-
-
 # Rects (inicializados com tamanho, posição será definida depois)
 RECT_TERMINAL_INPUT = pygame.Rect(0, 0, 0, TERMINAL_H)
 RECT_BOTAO_MOTOR = pygame.Rect(0, 0, BTN_LOJA_W, BTN_LOJA_H)
@@ -48,17 +49,11 @@ RECT_BOTAO_SAIR = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
 MINIMAP_RECT = pygame.Rect(0, 0, MINIMAP_WIDTH, MINIMAP_HEIGHT)
 RECT_LOGO_MENU = pygame.Rect(0, 0, 0, 0)
 
-# --- INÍCIO: MODIFICAÇÃO (Novos Rects Seleção Multiplayer) ---
 RECT_BOTAO_PVE_ONLINE = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
 RECT_BOTAO_PVP_ONLINE = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
-# --- FIM: MODIFICAÇÃO ---
-
-# --- INÍCIO: MODIFICAÇÃO (Novos Rects Seleção Offline) ---
 RECT_BOTAO_PVE_OFFLINE = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
 RECT_BOTAO_PVP_OFFLINE = pygame.Rect(0, 0, BTN_MENU_W, BTN_MENU_H)
-# --- FIM: MODIFICAÇÃO ---
 
-# --- INÍCIO: MODIFICAÇÃO (Novos Rects Pausa) ---
 RECT_PAUSE_FUNDO = pygame.Rect(0, 0, PAUSE_PANEL_W, PAUSE_PANEL_H)
 RECT_TEXTO_BOTS = pygame.Rect(0, 0, 200, 40)
 RECT_BOTAO_BOT_MENOS = pygame.Rect(0, 0, BTN_PAUSE_CTRL_W, BTN_PAUSE_CTRL_H)
@@ -68,16 +63,14 @@ RECT_BOTAO_ESPECTADOR = pygame.Rect(0, 0, BTN_PAUSA_MENU_W, BTN_PAUSA_MENU_H)
 RECT_BOTAO_VOLTAR_NAVE = pygame.Rect(0, 0, BTN_PAUSA_MENU_W, BTN_PAUSA_MENU_H)
 RECT_BOTAO_RESPAWN_PAUSA = pygame.Rect(0, 0, BTN_PAUSA_MENU_W, BTN_PAUSA_MENU_H)
 RECT_TEXTO_VOLTAR = pygame.Rect(0, 0, 200, 30)
-# --- FIM: MODIFICAÇÃO ---
 
-# Rects Login
 RECT_LOGIN_PAINEL = pygame.Rect(0, 0, LOGIN_PANEL_W, LOGIN_PANEL_H)
 RECT_LOGIN_INPUT = pygame.Rect(0, 0, LOGIN_INPUT_W, LOGIN_INPUT_H)
 RECT_LOGIN_BOTAO = pygame.Rect(0, 0, LOGIN_BTN_W, LOGIN_BTN_H)
 RECT_LOGIN_DIFICULDADE_TEXT = pygame.Rect(0, 0, LOGIN_DIFICULDADE_W, LOGIN_DIFICULDADE_H)
 RECT_LOGIN_DIFICULDADE_LEFT = pygame.Rect(0, 0, LOGIN_ARROW_W, LOGIN_ARROW_H)
 RECT_LOGIN_DIFICULDADE_RIGHT = pygame.Rect(0, 0, LOGIN_ARROW_W, LOGIN_ARROW_H)
-# Rects Conexão
+
 RECT_CONNECT_PAINEL = pygame.Rect(0, 0, CONNECT_PANEL_W, CONNECT_PANEL_H)
 RECT_CONNECT_NOME = pygame.Rect(0, 0, CONNECT_INPUT_W, CONNECT_INPUT_H)
 RECT_CONNECT_IP = pygame.Rect(0, 0, CONNECT_INPUT_W, CONNECT_INPUT_H)
@@ -85,8 +78,123 @@ RECT_CONNECT_BOTAO = pygame.Rect(0, 0, CONNECT_BTN_W, CONNECT_BTN_H)
 
 RECT_BOTAO_REGEN_HUD = pygame.Rect(0, 0, BTN_HUD_REGEN_W, BTN_HUD_REGEN_H)
 
+# --- Cache de Imagens Unificado ---
+IMAGENS_LOJA = {
+    "motor": None,
+    "dano": None,
+    "auxiliar": None,
+    "max_health": None,
+    "escudo": None,
+    "btn_loja": None,      # Novo
+    "btn_regenerar": None  # Novo
+}
 
-# Variáveis para guardar posições calculadas
+def _garantir_imagens_loja_carregadas():
+    """Carrega as imagens da loja e do HUD se ainda não estiverem na memória."""
+    if IMAGENS_LOJA["motor"] is None:
+        try:
+            # Carrega e converte para alpha para melhor performance e transparência
+            IMAGENS_LOJA["motor"] = pygame.image.load("images/motor_btn.png").convert_alpha()
+            IMAGENS_LOJA["dano"] = pygame.image.load("images/dano_btn.png").convert_alpha()
+            IMAGENS_LOJA["auxiliar"] = pygame.image.load("images/aux_btn.png").convert_alpha()
+            IMAGENS_LOJA["max_health"] = pygame.image.load("images/maxhp_btn.png").convert_alpha()
+            IMAGENS_LOJA["escudo"] = pygame.image.load("images/escudo_btn.png").convert_alpha()
+            
+            # Novos botões do HUD
+            IMAGENS_LOJA["btn_loja"] = pygame.image.load("images/loja.png").convert_alpha()
+            IMAGENS_LOJA["btn_regenerar"] = pygame.image.load("images/regenerar.png").convert_alpha()
+            
+            print("[UI] Imagens da UI carregadas com sucesso.")
+        except Exception as e:
+            print(f"[UI] Erro ao carregar imagens da UI: {e}")
+            # Define como False para evitar tentar carregar novamente em loop se falhar
+            for k in IMAGENS_LOJA:
+                if IMAGENS_LOJA[k] is None: IMAGENS_LOJA[k] = False
+
+def desenhar_botao_customizado(surface, rect, imagem, nivel_atual, nivel_max, custo, pontos_jogador, ativo):
+    """
+    Desenha um botão da loja.
+    """
+    # 1. Fundo do Slot
+    pygame.draw.rect(surface, (10, 10, 10), rect, border_radius=8)
+    
+    # Borda de destaque
+    mouse_pos = pygame.mouse.get_pos()
+    if rect.collidepoint(mouse_pos) and ativo:
+         pygame.draw.rect(surface, AZUL_NAVE, rect, 2, border_radius=8)
+    else:
+         pygame.draw.rect(surface, (50, 50, 50), rect, 2, border_radius=8)
+
+    # 2. Desenha a Imagem (Proporcional)
+    if imagem:
+        img_w = imagem.get_width()
+        img_h = imagem.get_height()
+        fator_escala_h = (rect.height - 8) / img_h
+        fator_escala_w = (rect.width - 8) / img_w
+        fator_final = min(fator_escala_h, fator_escala_w)
+        novas_dims = (int(img_w * fator_final), int(img_h * fator_final))
+        img_scaled = pygame.transform.smoothscale(imagem, novas_dims)
+        img_rect = img_scaled.get_rect(center=rect.center)
+        surface.blit(img_scaled, img_rect)
+    else:
+        cor = BRANCO if ativo else CINZA_BOTAO_DESLIGADO
+        pygame.draw.rect(surface, cor, rect.inflate(-10, -10), border_radius=4)
+
+    # 3. Efeito de Desabilitado
+    if not ativo:
+        s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        s.fill((0, 0, 0, 150))
+        surface.blit(s, rect)
+
+    # 4. Informações Laterais
+    texto_x = rect.right + 15
+    centro_y = rect.centery
+    
+    if nivel_atual < nivel_max:
+        txt_nivel = f"Nível: {nivel_atual + 1} / {nivel_max}"
+        cor_nivel = BRANCO
+    else:
+        txt_nivel = "NÍVEL MÁXIMO"
+        cor_nivel = AZUL_NAVE 
+
+    surf_nivel = FONT_HUD_DETALHES.render(txt_nivel, True, cor_nivel)
+    rect_nivel = surf_nivel.get_rect(topleft=(texto_x, centro_y - 15))
+    surface.blit(surf_nivel, rect_nivel)
+    
+    if nivel_atual < nivel_max:
+        txt_custo = f"Custo: {custo} Pts"
+        cor_custo = VERDE_VIDA if pontos_jogador >= custo else VERMELHO_VIDA_FUNDO
+        surf_custo = FONT_RANKING.render(txt_custo, True, cor_custo)
+        rect_custo = surf_custo.get_rect(topleft=(texto_x, centro_y + 5))
+        surface.blit(surf_custo, rect_custo)
+
+def desenhar_botao_hud(surface, rect, imagem, texto_alternativo, ativo, cor_texto=PRETO):
+    """Desenha um botão simples no HUD preenchendo TODO o espaço."""
+    
+    # 1. Desenha Imagem
+    if imagem:
+        # Escala para preencher EXATAMENTE o retângulo (Pode esticar se a proporção for diferente)
+        img_scaled = pygame.transform.smoothscale(imagem, (rect.width, rect.height))
+        surface.blit(img_scaled, rect)
+    else:
+        # Fallback: Retângulo
+        cor = BRANCO if ativo else CINZA_BOTAO_DESLIGADO
+        pygame.draw.rect(surface, cor, rect, border_radius=5)
+        texto_surf = FONT_RANKING.render(texto_alternativo, True, cor_texto)
+        texto_rect = texto_surf.get_rect(center=rect.center)
+        surface.blit(texto_surf, texto_rect)
+
+    # 2. Efeito de Mouse Hover (Brilho na borda)
+    if ativo and rect.collidepoint(pygame.mouse.get_pos()):
+        pygame.draw.rect(surface, BRANCO, rect, 1, border_radius=5)
+
+    # 3. Efeito de Desabilitado (Escurecer)
+    if not ativo:
+        s = pygame.Surface((rect.width, rect.height), pygame.SRCALPHA)
+        s.fill((0, 0, 0, 150))
+        surface.blit(s, rect)
+
+# Variáveis de Posição
 MINIMAP_POS_X = 0
 MINIMAP_POS_Y = 0
 
@@ -95,23 +203,16 @@ def recalculate_ui_positions(w, h):
     global RECT_BOTAO_MOTOR, RECT_BOTAO_DANO, RECT_BOTAO_AUX, RECT_BOTAO_MAX_HP, RECT_BOTAO_ESCUDO
     global RECT_BOTAO_REINICIAR, RECT_BOTAO_UPGRADE_HUD
     global RECT_BOTAO_JOGAR_OFF, RECT_BOTAO_MULTIPLAYER, RECT_BOTAO_SAIR
-    # --- INÍCIO: MODIFICAÇÃO (Globais Seleção Multiplayer) ---
     global RECT_BOTAO_PVE_ONLINE, RECT_BOTAO_PVP_ONLINE
-    # --- FIM: MODIFICAÇÃO ---
-    
-    # --- INÍCIO: MODIFICAÇÃO (Globais Seleção Offline) ---
     global RECT_BOTAO_PVE_OFFLINE, RECT_BOTAO_PVP_OFFLINE
-    # --- FIM: MODIFICAÇÃO ---
-
-    # --- INÍCIO: MODIFICAÇÃO (Globais Pausa) ---
     global RECT_PAUSE_FUNDO, RECT_TEXTO_BOTS, RECT_BOTAO_BOT_MENOS, RECT_BOTAO_BOT_MAIS
     global RECT_BOTAO_VOLTAR_MENU, RECT_BOTAO_ESPECTADOR, RECT_BOTAO_VOLTAR_NAVE
     global RECT_BOTAO_RESPAWN_PAUSA, RECT_TEXTO_VOLTAR
-    # --- FIM: MODIFICAÇÃO ---
     global RECT_LOGIN_PAINEL, RECT_LOGIN_INPUT, RECT_LOGIN_BOTAO
     global RECT_LOGIN_DIFICULDADE_TEXT, RECT_LOGIN_DIFICULDADE_LEFT, RECT_LOGIN_DIFICULDADE_RIGHT
     global RECT_CONNECT_PAINEL, RECT_CONNECT_NOME, RECT_CONNECT_IP, RECT_CONNECT_BOTAO
     global RECT_BOTAO_REGEN_HUD
+    global RECT_LOGO_MENU
 
     # Minimapa
     MINIMAP_POS_X = w - MINIMAP_WIDTH - 10
@@ -122,10 +223,11 @@ def recalculate_ui_positions(w, h):
     RECT_TERMINAL_INPUT.width = w - 20
     RECT_TERMINAL_INPUT.bottomleft = (10, h - 10)
     
-    # Posição Botão Regenerar
+    # Posição Botão Regenerar (Agora usa o novo tamanho W/H)
+    RECT_BOTAO_REGEN_HUD.size = (BTN_HUD_REGEN_W, BTN_HUD_REGEN_H)
     RECT_BOTAO_REGEN_HUD.bottomleft = (10, RECT_TERMINAL_INPUT.top - 10)
 
-    # Botões da Loja (Centralizados)
+    # Botões da Loja
     btn_y_start_loja = 180
     btn_y_spacing_loja = 70
     btn_x_loja = w // 2 - BTN_LOJA_W // 2
@@ -135,15 +237,15 @@ def recalculate_ui_positions(w, h):
     RECT_BOTAO_MAX_HP.topleft = (btn_x_loja, btn_y_start_loja + btn_y_spacing_loja * 3)
     RECT_BOTAO_ESCUDO.topleft = (btn_x_loja, btn_y_start_loja + btn_y_spacing_loja * 4)
    
-    # Botão Reiniciar (Game Over - Centralizado)
+    # Botão Reiniciar
     RECT_BOTAO_REINICIAR.center = (w // 2, h // 2 + 50)
 
-    # Botão Upgrade no HUD (Canto superior esquerdo)
+    # Botão Upgrade no HUD (Agora usa o novo tamanho W/H)
     hud_y_spacing = FONT_HUD.get_height() + 10
+    RECT_BOTAO_UPGRADE_HUD.size = (BTN_HUD_UPGRADE_W, BTN_HUD_UPGRADE_H)
     RECT_BOTAO_UPGRADE_HUD.topleft = (10, 35 + hud_y_spacing)
     
-    # Botões do Menu Principal (Centralizados)
-    global RECT_LOGO_MENU 
+    # Menu Principal
     logo_y_pos = h // 3
     logo_height = 0
     if LOGO_JOGO:
@@ -161,19 +263,13 @@ def recalculate_ui_positions(w, h):
     RECT_BOTAO_MULTIPLAYER.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing)
     RECT_BOTAO_SAIR.topleft = (menu_btn_x, menu_btn_y_start + menu_btn_spacing * 2)
 
-    # Posições Tela Seleção Multiplayer (Online)
     multiplayer_btn_y_start = h // 2 - BTN_MENU_H - menu_btn_spacing // 2
     RECT_BOTAO_PVE_ONLINE.topleft = (menu_btn_x, multiplayer_btn_y_start)
     RECT_BOTAO_PVP_ONLINE.topleft = (menu_btn_x, multiplayer_btn_y_start + menu_btn_spacing)
+    RECT_BOTAO_PVE_OFFLINE.topleft = (menu_btn_x, multiplayer_btn_y_start)
+    RECT_BOTAO_PVP_OFFLINE.topleft = (menu_btn_x, multiplayer_btn_y_start + menu_btn_spacing)
 
-    # --- INÍCIO: MODIFICAÇÃO (Adiciona posições para tela Offline) ---
-    # Reutiliza as mesmas coordenadas da tela online
-    offline_btn_y_start = h // 2 - BTN_MENU_H - menu_btn_spacing // 2
-    RECT_BOTAO_PVE_OFFLINE.topleft = (menu_btn_x, offline_btn_y_start)
-    RECT_BOTAO_PVP_OFFLINE.topleft = (menu_btn_x, offline_btn_y_start + menu_btn_spacing)
-    # --- FIM: MODIFICAÇÃO ---
-
-    # Posições do Menu de Pausa
+    # Pausa
     RECT_PAUSE_FUNDO.center = (w // 2, h // 2)
     base_y_pause = RECT_PAUSE_FUNDO.top + 60
     spacing_pause_items = 15
@@ -193,7 +289,7 @@ def recalculate_ui_positions(w, h):
     RECT_BOTAO_BOT_MAIS.midleft = (RECT_TEXTO_BOTS.right + spacing_pause_buttons_ctrl, RECT_TEXTO_BOTS.centery)
     RECT_TEXTO_VOLTAR.midbottom = (RECT_PAUSE_FUNDO.centerx, RECT_PAUSE_FUNDO.bottom - 20)
 
-    # Posições da Tela de Nome (Login)
+    # Login
     RECT_LOGIN_PAINEL.center = (w // 2, h // 2)
     input_y_pos = RECT_LOGIN_PAINEL.top + 100
     RECT_LOGIN_INPUT.center = (RECT_LOGIN_PAINEL.centerx, input_y_pos)
@@ -205,7 +301,7 @@ def recalculate_ui_positions(w, h):
     btn_y_pos = RECT_LOGIN_DIFICULDADE_TEXT.bottom + 30
     RECT_LOGIN_BOTAO.center = (RECT_LOGIN_PAINEL.centerx, btn_y_pos)
 
-    # Posições da Tela de Conexão
+    # Conexão
     RECT_CONNECT_PAINEL.center = (w // 2, h // 2)
     nome_y_pos = RECT_CONNECT_PAINEL.top + 100
     RECT_CONNECT_NOME.center = (RECT_CONNECT_PAINEL.centerx, nome_y_pos)
@@ -215,19 +311,15 @@ def recalculate_ui_positions(w, h):
     RECT_CONNECT_BOTAO.center = (RECT_CONNECT_PAINEL.centerx, btn_connect_y_pos)
 
 
-# --- Funções de Desenho ---
-
+# --- Funções de Desenho (Menu, Login, etc) - Mantidas iguais ---
 def desenhar_menu(surface, largura_tela, altura_tela):
     surface.fill(PRETO) 
-
     if LOGO_JOGO:
-        logo_rect = LOGO_JOGO.get_rect(center=(largura_tela // 2, altura_tela // 3))
-        surface.blit(LOGO_JOGO, logo_rect)
+        surface.blit(LOGO_JOGO, RECT_LOGO_MENU)
     else:
         texto_titulo = FONT_TITULO.render("Nosso Jogo de Nave", True, BRANCO)
-        titulo_rect = texto_titulo.get_rect(center=(largura_tela // 2, altura_tela // 3))
-        surface.blit(texto_titulo, titulo_rect)
-
+        surface.blit(texto_titulo, RECT_LOGO_MENU)
+    
     def draw_menu_button(rect, text, text_color=PRETO, button_color=BRANCO):
         pygame.draw.rect(surface, button_color, rect, border_radius=5)
         text_surf = FONT_PADRAO.render(text, True, text_color)
@@ -239,13 +331,9 @@ def desenhar_menu(surface, largura_tela, altura_tela):
     draw_menu_button(RECT_BOTAO_SAIR, "Sair")
 
 def desenhar_tela_nome(surface, nome_jogador_atual, input_nome_ativo, dificuldade_atual):
-    """ Desenha a tela de entrada de nome. """
-    
     surface.fill(PRETO)
     if LOGO_JOGO:
-        logo_rect = LOGO_JOGO.get_rect(center=(surface.get_width() // 2, surface.get_height() // 3))
-        surface.blit(LOGO_JOGO, logo_rect)
-        
+        surface.blit(LOGO_JOGO, RECT_LOGO_MENU)
     texto_titulo = FONT_TITULO.render("Digite seu nome", True, BRANCO)
     titulo_rect = texto_titulo.get_rect(center=(RECT_LOGIN_PAINEL.centerx, RECT_LOGIN_PAINEL.top + 40))
     surface.blit(texto_titulo, titulo_rect)
@@ -253,211 +341,139 @@ def desenhar_tela_nome(surface, nome_jogador_atual, input_nome_ativo, dificuldad
     cor_borda_input = BRANCO if input_nome_ativo else CINZA_BOTAO_DESLIGADO
     pygame.draw.rect(surface, PRETO, RECT_LOGIN_INPUT, border_radius=5)
     pygame.draw.rect(surface, cor_borda_input, RECT_LOGIN_INPUT, 2, border_radius=5)
-
     cursor = "_" if input_nome_ativo and pygame.time.get_ticks() % 1000 < 500 else ""
     texto_renderizado = FONT_PADRAO.render(f"{nome_jogador_atual}{cursor}", True, BRANCO)
     texto_rect = texto_renderizado.get_rect(midleft=(RECT_LOGIN_INPUT.x + 15, RECT_LOGIN_INPUT.centery))
     surface.blit(texto_renderizado, texto_rect)
-
     if not input_nome_ativo and not nome_jogador_atual:
         placeholder_surf = FONT_PADRAO.render("Nome...", True, CINZA_BOTAO_DESLIGADO)
         placeholder_rect = placeholder_surf.get_rect(midleft=(RECT_LOGIN_INPUT.x + 15, RECT_LOGIN_INPUT.centery))
         surface.blit(placeholder_surf, placeholder_rect)
         
-    # Desenho da Dificuldade
     pygame.draw.rect(surface, BRANCO, RECT_LOGIN_DIFICULDADE_LEFT, border_radius=5)
     texto_left = FONT_TITULO.render("<", True, PRETO)
     texto_left_rect = texto_left.get_rect(center=RECT_LOGIN_DIFICULDADE_LEFT.center)
     surface.blit(texto_left, texto_left_rect)
-    
     texto_dificuldade = FONT_PADRAO.render(f"Dificuldade: {dificuldade_atual}", True, BRANCO)
     texto_dificuldade_rect = texto_dificuldade.get_rect(center=RECT_LOGIN_DIFICULDADE_TEXT.center)
     surface.blit(texto_dificuldade, texto_dificuldade_rect)
-    
     pygame.draw.rect(surface, BRANCO, RECT_LOGIN_DIFICULDADE_RIGHT, border_radius=5)
     texto_right = FONT_TITULO.render(">", True, PRETO)
     texto_right_rect = texto_right.get_rect(center=RECT_LOGIN_DIFICULDADE_RIGHT.center)
     surface.blit(texto_right, texto_right_rect)
-        
     pygame.draw.rect(surface, BRANCO, RECT_LOGIN_BOTAO, border_radius=5)
-    
-    # --- INÍCIO: MODIFICAÇÃO (Texto do Botão) ---
-    texto_botao = FONT_PADRAO.render("Continuar", True, PRETO) # <-- MUDADO DE "Respawn"
-    # --- FIM: MODIFICAÇÃO ---
-
+    texto_botao = FONT_PADRAO.render("Continuar", True, PRETO)
     texto_botao_rect = texto_botao.get_rect(center=RECT_LOGIN_BOTAO.center)
     surface.blit(texto_botao, texto_botao_rect)
 
-# --- INÍCIO: MODIFICAÇÃO (Assinatura da Função) ---
 def desenhar_tela_modo_multiplayer(surface, largura_tela, altura_tela, pvp_disponivel=False):
-# --- FIM: MODIFICAÇÃO ---
-    """ Desenha a tela de seleção de modo multiplayer (PVE vs PVP). """
     surface.fill(PRETO) 
-
-    # Desenha o logo ou título
-    if LOGO_JOGO:
-        logo_rect = LOGO_JOGO.get_rect(center=(largura_tela // 2, altura_tela // 3))
-        surface.blit(LOGO_JOGO, logo_rect)
-    
+    if LOGO_JOGO: surface.blit(LOGO_JOGO, RECT_LOGO_MENU)
     texto_titulo = FONT_TITULO.render("Modo Multijogador", True, BRANCO)
-    # Posiciona o título acima dos botões
     titulo_rect = texto_titulo.get_rect(midbottom=(largura_tela // 2, RECT_BOTAO_PVE_ONLINE.top - 50))
     surface.blit(texto_titulo, titulo_rect)
 
-    # Função helper para desenhar botões (copiada de desenhar_menu)
     def draw_menu_button(rect, text, text_color=PRETO, button_color=BRANCO):
         pygame.draw.rect(surface, button_color, rect, border_radius=5)
         text_surf = FONT_PADRAO.render(text, True, text_color)
         text_rect = text_surf.get_rect(center=rect.center)
         surface.blit(text_surf, text_rect)
 
-    # Botão 1: Jogador VS Todos (Modo PVE Online)
     draw_menu_button(RECT_BOTAO_PVE_ONLINE, "Jogador VS Todos")
-    
-    # --- INÍCIO: MODIFICAÇÃO (Cor do Botão PVP) ---
-    # Botão 2: Jogador VS Jogador (Modo PVP Online) - Agora dinâmico
     if pvp_disponivel:
         draw_menu_button(RECT_BOTAO_PVP_ONLINE, "Jogador VS Jogador", text_color=PRETO, button_color=BRANCO)
     else:
         draw_menu_button(RECT_BOTAO_PVP_ONLINE, "Jogador VS Jogador", text_color=PRETO, button_color=CINZA_BOTAO_DESLIGADO)
-    # --- FIM: MODIFICAÇÃO ---
-    
-    # Instrução para voltar
     texto_voltar = FONT_PADRAO.render("ESC para Voltar", True, CINZA_BOTAO_DESLIGADO)
     voltar_rect = texto_voltar.get_rect(midbottom=(largura_tela // 2, altura_tela - 50))
     surface.blit(texto_voltar, voltar_rect)
 
-
-# --- INÍCIO: MODIFICAÇÃO (Nova Função) ---
 def desenhar_tela_modo_offline(surface, largura_tela, altura_tela):
-    """ Desenha a tela de seleção de modo offline (PVE vs PVP). """
     surface.fill(PRETO) 
-
-    if LOGO_JOGO:
-        logo_rect = LOGO_JOGO.get_rect(center=(largura_tela // 2, altura_tela // 3))
-        surface.blit(LOGO_JOGO, logo_rect)
-    
+    if LOGO_JOGO: surface.blit(LOGO_JOGO, RECT_LOGO_MENU)
     texto_titulo = FONT_TITULO.render("Modo de Jogo Offline", True, BRANCO)
-    # Posiciona o título acima dos botões (usa PVE_OFFLINE como referência)
     titulo_rect = texto_titulo.get_rect(midbottom=(largura_tela // 2, RECT_BOTAO_PVE_OFFLINE.top - 50))
     surface.blit(texto_titulo, titulo_rect)
-
     def draw_menu_button(rect, text, text_color=PRETO, button_color=BRANCO):
         pygame.draw.rect(surface, button_color, rect, border_radius=5)
         text_surf = FONT_PADRAO.render(text, True, text_color)
         text_rect = text_surf.get_rect(center=rect.center)
         surface.blit(text_surf, text_rect)
-
-    # Botão 1: Jogador VS Todos (Modo PVE Offline)
     draw_menu_button(RECT_BOTAO_PVE_OFFLINE, "Jogador VS Todos")
-    
-    # Botão 2: Jogador VS Jogador (Modo PVP Offline)
     draw_menu_button(RECT_BOTAO_PVP_OFFLINE, "Jogador VS Jogador")
-    
-    # Instrução para voltar
     texto_voltar = FONT_PADRAO.render("ESC para Voltar", True, CINZA_BOTAO_DESLIGADO)
     voltar_rect = texto_voltar.get_rect(midbottom=(largura_tela // 2, altura_tela - 50))
     surface.blit(texto_voltar, voltar_rect)
-# --- FIM: MODIFICAÇÃO ---
-
 
 def desenhar_loja(surface, nave, largura_tela, altura_tela, client_socket=None):
+    _garantir_imagens_loja_carregadas()
     fundo_loja = pygame.Surface((largura_tela, altura_tela), pygame.SRCALPHA)
     fundo_loja.fill(CINZA_LOJA_FUNDO)
     surface.blit(fundo_loja, (0, 0))
-    texto_titulo = FONT_TITULO.render("LOJA DE UPGRADES", True, BRANCO)
-    surface.blit(texto_titulo, (largura_tela // 2 - texto_titulo.get_width() // 2, 50))
-    texto_pontos = FONT_PADRAO.render(f"Pontos de Upgrade: {nave.pontos_upgrade_disponiveis}", True, BRANCO)
-    surface.blit(texto_pontos, (largura_tela // 2 - texto_pontos.get_width() // 2, 100))
-    
-    limite_texto = f"Upgrades Feitos: {nave.total_upgrades_feitos} / {MAX_TOTAL_UPGRADES}"
-    if nave.pontos > 0: 
-        pass 
+    texto_titulo = FONT_TITULO.render("ESTAÇÃO DE UPGRADES", True, BRANCO)
+    surface.blit(texto_titulo, (largura_tela // 2 - texto_titulo.get_width() // 2, 40))
+    cor_pontos = AMARELO_BOMBA if nave.pontos_upgrade_disponiveis > 0 else BRANCO
+    texto_pontos = FONT_TITULO.render(f"Pontos: {nave.pontos_upgrade_disponiveis}", True, cor_pontos)
+    surface.blit(texto_pontos, (largura_tela // 2 - texto_pontos.get_width() // 2, 90))
+    limite_texto = f"Slots Usados: {nave.total_upgrades_feitos} / {MAX_TOTAL_UPGRADES}"
+    if nave.pontos > 0: pass 
     elif nave.pontos_upgrade_disponiveis > 0 or nave.total_upgrades_feitos > 0: 
-        limite_texto = f"Upgrades Feitos: {nave.total_upgrades_feitos} / {pvp_s.PONTOS_ATRIBUTOS_INICIAIS}"
-    
-    texto_limite = FONT_PADRAO.render(limite_texto, True, CINZA_BOTAO_DESLIGADO)
+        limite_texto = f"Slots Usados: {nave.total_upgrades_feitos} / {pvp_s.PONTOS_ATRIBUTOS_INICIAIS}"
+    texto_limite = FONT_HUD_DETALHES.render(limite_texto, True, CINZA_BOTAO_DESLIGADO)
     surface.blit(texto_limite, (largura_tela // 2 - texto_limite.get_width() // 2, 130))
 
-    def draw_text_on_button(rect, text, font, text_color):
-        text_surf = font.render(text, True, text_color)
-        text_rect = text_surf.get_rect(center=rect.center)
-        surface.blit(text_surf, text_rect)
-
     is_pve = nave.pontos > 0
-    
+    pode_comprar_geral = False
     if is_pve:
         pode_comprar_geral = nave.pontos_upgrade_disponiveis > 0 and nave.total_upgrades_feitos < MAX_TOTAL_UPGRADES
     else: 
         pode_comprar_geral = nave.pontos_upgrade_disponiveis > 0
-
     custo_padrao = 1
-    pode_motor = pode_comprar_geral and nave.nivel_motor < MAX_NIVEL_MOTOR
-    cor_motor = BRANCO if pode_motor else CINZA_BOTAO_DESLIGADO
-    pygame.draw.rect(surface, cor_motor, RECT_BOTAO_MOTOR, border_radius=5)
-    if nave.nivel_motor < MAX_NIVEL_MOTOR:
-        txt_motor = f"Motor Nv. {nave.nivel_motor + 1}/{MAX_NIVEL_MOTOR} (Custo: {custo_padrao} Pt)"
-    else: txt_motor = f"Motor Nv. {nave.nivel_motor} (MAX)"
-    draw_text_on_button(RECT_BOTAO_MOTOR, txt_motor, FONT_PADRAO, PRETO)
-    pode_dano = pode_comprar_geral and nave.nivel_dano < MAX_NIVEL_DANO
-    cor_dano = BRANCO if pode_dano else CINZA_BOTAO_DESLIGADO
-    pygame.draw.rect(surface, cor_dano, RECT_BOTAO_DANO, border_radius=5)
-    if nave.nivel_dano < MAX_NIVEL_DANO:
-        txt_dano = f"Dano Nv. {nave.nivel_dano + 1}/{MAX_NIVEL_DANO} (Custo: {custo_padrao} Pt)"
-    else: txt_dano = f"Dano Nv. {nave.nivel_dano} (MAX)"
-    draw_text_on_button(RECT_BOTAO_DANO, txt_dano, FONT_PADRAO, PRETO)
-    
-    if client_socket:
-        num_ativos = nave.nivel_aux 
-    else:
-        num_ativos = len(nave.grupo_auxiliares_ativos) 
 
+    ativo_motor = pode_comprar_geral and nave.nivel_motor < MAX_NIVEL_MOTOR
+    desenhar_botao_customizado(
+        surface, RECT_BOTAO_MOTOR, IMAGENS_LOJA["motor"], 
+        nave.nivel_motor, MAX_NIVEL_MOTOR, custo_padrao, nave.pontos_upgrade_disponiveis, ativo_motor
+    )
+    ativo_dano = pode_comprar_geral and nave.nivel_dano < MAX_NIVEL_DANO
+    desenhar_botao_customizado(
+        surface, RECT_BOTAO_DANO, IMAGENS_LOJA["dano"], 
+        nave.nivel_dano, MAX_NIVEL_DANO, custo_padrao, nave.pontos_upgrade_disponiveis, ativo_dano
+    )
+    if client_socket: num_ativos = nave.nivel_aux 
+    else: num_ativos = len(nave.grupo_auxiliares_ativos) 
     max_aux = len(nave.lista_todas_auxiliares) 
-    if num_ativos < max_aux:
-        custo_atual_aux = CUSTOS_AUXILIARES[num_ativos]
-        txt_aux = f"Comprar Auxiliar {num_ativos + 1}/{max_aux} (Custo: {custo_atual_aux} Pts)"
-        pode_aux = pode_comprar_geral and nave.pontos_upgrade_disponiveis >= custo_atual_aux
-    else:
-        txt_aux = "Máx. Auxiliares"
-        pode_aux = False
-    cor_aux = BRANCO if pode_aux else CINZA_BOTAO_DESLIGADO
-    pygame.draw.rect(surface, cor_aux, RECT_BOTAO_AUX, border_radius=5)
-    draw_text_on_button(RECT_BOTAO_AUX, txt_aux, FONT_PADRAO, PRETO)
-
+    custo_aux = CUSTOS_AUXILIARES[num_ativos] if num_ativos < max_aux else 0
+    ativo_aux = pode_comprar_geral and num_ativos < max_aux and nave.pontos_upgrade_disponiveis >= custo_aux
+    desenhar_botao_customizado(
+        surface, RECT_BOTAO_AUX, IMAGENS_LOJA["auxiliar"], 
+        num_ativos, max_aux, custo_aux, nave.pontos_upgrade_disponiveis, ativo_aux
+    )
     MAX_NIVEL_VIDA = len(VIDA_POR_NIVEL) - 1 
-    
-    pode_maxhp = pode_comprar_geral and nave.nivel_max_vida < MAX_NIVEL_VIDA
-    cor_maxhp = BRANCO if pode_maxhp else CINZA_BOTAO_DESLIGADO
-    pygame.draw.rect(surface, cor_maxhp, RECT_BOTAO_MAX_HP, border_radius=5)
-    
-    if nave.nivel_max_vida < MAX_NIVEL_VIDA:
-        txt_maxhp = f"Vida Max Nv. {nave.nivel_max_vida + 1} (Custo: {custo_padrao} Pt)"
-    else:
-        txt_maxhp = f"Vida Max Nv. {nave.nivel_max_vida} (MAX)"
-        
-    draw_text_on_button(RECT_BOTAO_MAX_HP, txt_maxhp, FONT_PADRAO, PRETO)
-    
-    pode_escudo = pode_comprar_geral and nave.nivel_escudo < MAX_NIVEL_ESCUDO
-    cor_escudo = BRANCO if pode_escudo else CINZA_BOTAO_DESLIGADO
-    pygame.draw.rect(surface, cor_escudo, RECT_BOTAO_ESCUDO, border_radius=5)
-    if nave.nivel_escudo < MAX_NIVEL_ESCUDO:
-        txt_escudo = f"Escudo Nv. {nave.nivel_escudo + 1}/{MAX_NIVEL_ESCUDO} (Custo: {custo_padrao} Pt)"
-    else: txt_escudo = f"Escudo Nv. {nave.nivel_escudo} (MAX)"
-    draw_text_on_button(RECT_BOTAO_ESCUDO, txt_escudo, FONT_PADRAO, PRETO)
-    texto_fechar = FONT_PADRAO.render("Aperte 'V' para fechar a loja", True, BRANCO)
-    surface.blit(texto_fechar, (largura_tela // 2 - texto_fechar.get_width() // 2, altura_tela - 60))
+    ativo_hp = pode_comprar_geral and nave.nivel_max_vida < MAX_NIVEL_VIDA
+    desenhar_botao_customizado(
+        surface, RECT_BOTAO_MAX_HP, IMAGENS_LOJA["max_health"], 
+        nave.nivel_max_vida, MAX_NIVEL_VIDA, custo_padrao, nave.pontos_upgrade_disponiveis, ativo_hp
+    )
+    ativo_escudo = pode_comprar_geral and nave.nivel_escudo < MAX_NIVEL_ESCUDO
+    desenhar_botao_customizado(
+        surface, RECT_BOTAO_ESCUDO, IMAGENS_LOJA["escudo"], 
+        nave.nivel_escudo, MAX_NIVEL_ESCUDO, custo_padrao, nave.pontos_upgrade_disponiveis, ativo_escudo
+    )
+    texto_fechar = FONT_HUD_DETALHES.render("[V] Voltar ao Jogo", True, BRANCO)
+    surface.blit(texto_fechar, (largura_tela // 2 - texto_fechar.get_width() // 2, altura_tela - 40))
 
 def desenhar_hud(surface, nave, estado_jogo):
     if estado_jogo == "ESPECTADOR":
         return
 
+    _garantir_imagens_loja_carregadas()
+
     pos_x_detalhes = 10
     pos_y_atual_detalhes = 10
     hud_line_height = FONT_HUD.get_height() + 5
     
-    if estado_jogo != "JOGANDO": 
-        pass
-    else:
+    if estado_jogo == "JOGANDO":
         texto_pontos = FONT_HUD.render(f"Pontos: {nave.pontos}", True, BRANCO)
         surface.blit(texto_pontos, (pos_x_detalhes, pos_y_atual_detalhes))
         pos_y_atual_detalhes += hud_line_height
@@ -471,16 +487,20 @@ def desenhar_hud(surface, nave, estado_jogo):
         cor_pts_upgrade = AMARELO_BOMBA if nave.pontos_upgrade_disponiveis > 0 else BRANCO
         texto_pts_up = FONT_HUD.render(f"Pts Upgrade: {nave.pontos_upgrade_disponiveis}", True, cor_pts_upgrade)
         surface.blit(texto_pts_up, (pos_x_detalhes, pos_y_atual_detalhes))
-        pos_y_atual_detalhes += hud_line_height
+        pos_y_atual_detalhes += hud_line_height + 5 
+        
         RECT_BOTAO_UPGRADE_HUD.topleft = (pos_x_detalhes, pos_y_atual_detalhes)
-        
         if estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN"]:
-            pygame.draw.rect(surface, BRANCO, RECT_BOTAO_UPGRADE_HUD, border_radius=5)
-            texto_botao_surf = FONT_RANKING.render("UPGRADE (V)", True, PRETO)
-            texto_botao_rect = texto_botao_surf.get_rect(center=RECT_BOTAO_UPGRADE_HUD.center)
-            surface.blit(texto_botao_surf, texto_botao_rect)
+            desenhar_botao_hud(
+                surface, RECT_BOTAO_UPGRADE_HUD, 
+                IMAGENS_LOJA["btn_loja"], "LOJA (V)", True
+            )
+            
+            txt_atalho = FONT_RANKING.render("[ V ]", True, AMARELO_BOMBA)
+            rect_atalho = txt_atalho.get_rect(midleft=(RECT_BOTAO_UPGRADE_HUD.right + 8, RECT_BOTAO_UPGRADE_HUD.centery))
+            surface.blit(txt_atalho, rect_atalho)
         
-        pos_y_atual_detalhes = RECT_BOTAO_UPGRADE_HUD.bottom + 10
+        pos_y_atual_detalhes = RECT_BOTAO_UPGRADE_HUD.bottom + 15
 
         line_spacing_detalhes = FONT_HUD_DETALHES.get_height() + 2
         texto_motor = FONT_HUD_DETALHES.render(f"Motor: Nv {nave.nivel_motor}/{MAX_NIVEL_MOTOR}", True, BRANCO)
@@ -492,34 +512,30 @@ def desenhar_hud(surface, nave, estado_jogo):
         texto_escudo = FONT_HUD_DETALHES.render(f"Escudo: Nv {nave.nivel_escudo}/{MAX_NIVEL_ESCUDO}", True, BRANCO)
         surface.blit(texto_escudo, (pos_x_detalhes, pos_y_atual_detalhes))
         pos_y_atual_detalhes += line_spacing_detalhes
-        
-        if hasattr(nave, 'nivel_aux'): 
-            num_aux = nave.nivel_aux
-        else: 
-            num_aux = len(nave.grupo_auxiliares_ativos)
-            
+        if hasattr(nave, 'nivel_aux'): num_aux = nave.nivel_aux
+        else: num_aux = len(nave.grupo_auxiliares_ativos)
         max_aux = len(nave.lista_todas_auxiliares)
         texto_aux = FONT_HUD_DETALHES.render(f"Auxiliares: {num_aux}/{max_aux}", True, BRANCO)
         surface.blit(texto_aux, (pos_x_detalhes, pos_y_atual_detalhes))
-        pos_y_atual_detalhes += line_spacing_detalhes
+        pos_y_atual_detalhes += line_spacing_detalhes + 10 
 
         if estado_jogo == "JOGANDO":
-            is_regenerando = getattr(nave, 'esta_regenerando', False) 
+            is_regenerando = getattr(nave, 'esta_regenerando', False)
+            vida_cheia = nave.vida_atual >= nave.max_vida
+            ativo = not is_regenerando and not vida_cheia
+            txt_alt = "REGENERAR (R)"
+            if is_regenerando: txt_alt = "Regenerando..."
+            elif vida_cheia: txt_alt = "Vida Cheia"
             
-            if is_regenerando:
-                cor_botao = LILAS_REGEN
-                texto_botao = "Regenerando..."
-            elif nave.vida_atual >= nave.max_vida:
-                cor_botao = CINZA_BOTAO_DESLIGADO
-                texto_botao = "Vida Cheia"
-            else:
-                cor_botao = BRANCO
-                texto_botao = "Regenerar Vida (R)"
-                
-            pygame.draw.rect(surface, cor_botao, RECT_BOTAO_REGEN_HUD, border_radius=5)
-            texto_surf = FONT_RANKING.render(texto_botao, True, PRETO) 
-            texto_rect = texto_surf.get_rect(center=RECT_BOTAO_REGEN_HUD.center)
-            surface.blit(texto_surf, texto_rect)
+            desenhar_botao_hud(
+                surface, RECT_BOTAO_REGEN_HUD,
+                IMAGENS_LOJA["btn_regenerar"], txt_alt, ativo
+            )
+            
+            if not vida_cheia: 
+                txt_atalho_r = FONT_RANKING.render("[ R ]", True, AMARELO_BOMBA)
+                rect_atalho_r = txt_atalho_r.get_rect(midleft=(RECT_BOTAO_REGEN_HUD.right + 8, RECT_BOTAO_REGEN_HUD.centery))
+                surface.blit(txt_atalho_r, rect_atalho_r)
 
 def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height, online_players, meu_nome_rede, 
                          alvo_camera_atual, camera_zoom, jogador_esta_vivo_espectador=False):
@@ -527,87 +543,60 @@ def desenhar_minimapa(surface, player, bots, estado_jogo, map_width, map_height,
     fundo_mini.fill(MINIMAP_FUNDO)
     surface.blit(fundo_mini, (MINIMAP_POS_X, MINIMAP_POS_Y))
     pygame.draw.rect(surface, BRANCO, MINIMAP_RECT, 1)
-    
-    if map_width == 0 or map_height == 0:
-        return 
-        
+    if map_width == 0 or map_height == 0: return 
     ratio_x = MINIMAP_WIDTH / map_width
     ratio_y = MINIMAP_HEIGHT / map_height
-    
     def get_pos_minimapa(pos_mundo_vec):
-        if pos_mundo_vec is None:
-            return (0, 0) 
+        if pos_mundo_vec is None: return (0, 0) 
         try:
             map_x = int((pos_mundo_vec.x * ratio_x) + MINIMAP_POS_X)
             map_y = int((pos_mundo_vec.y * ratio_y) + MINIMAP_POS_Y)
             map_x = max(MINIMAP_POS_X + 1, min(map_x, MINIMAP_POS_X + MINIMAP_WIDTH - 2))
             map_y = max(MINIMAP_POS_Y + 1, min(map_y, MINIMAP_POS_Y + MINIMAP_HEIGHT - 2))
             return (map_x, map_y)
-        except (AttributeError, TypeError):
-             return (0, 0) 
-
+        except (AttributeError, TypeError): return (0, 0) 
     if camera_zoom < 1.0 and alvo_camera_atual: 
         largura_tela, altura_tela = surface.get_size()
         view_width_mundo = largura_tela / camera_zoom
         view_height_mundo = altura_tela / camera_zoom
         cam_center_pos = alvo_camera_atual.posicao
-        
-        view_top_left_mundo = pygame.math.Vector2(
-            cam_center_pos.x - (view_width_mundo / 2),
-            cam_center_pos.y - (view_height_mundo / 2)
-        )
+        view_top_left_mundo = pygame.math.Vector2(cam_center_pos.x - (view_width_mundo / 2), cam_center_pos.y - (view_height_mundo / 2))
         view_top_left_mini = get_pos_minimapa(view_top_left_mundo)
         view_width_mini = int(view_width_mundo * ratio_x)
         view_height_mini = int(view_height_mundo * ratio_y)
         rect_visao = pygame.Rect(view_top_left_mini[0], view_top_left_mini[1], view_width_mini, view_height_mini)
         pygame.draw.rect(surface, BRANCO, rect_visao, 1) 
-
     if online_players:
         for nome, state in online_players.items():
-            if nome == meu_nome_rede:
-                continue
-            if state.get('hp', 0) <= 0:
-                continue
+            if nome == meu_nome_rede: continue
+            if state.get('hp', 0) <= 0: continue
             pos_vec = pygame.math.Vector2(state['x'], state['y'])
             pygame.draw.circle(surface, LARANJA_BOT, get_pos_minimapa(pos_vec), 2)
     else:
         for bot in bots:
-            if bot == player:
-                continue
+            if bot == player: continue
             pygame.draw.circle(surface, LARANJA_BOT, get_pos_minimapa(bot.posicao), 2)
-            
     if (estado_jogo == "JOGANDO" or estado_jogo.startswith("PVP_")) and player.posicao_alvo_mouse and player.vida_atual > 0: 
-        
         start_mini_v = pygame.math.Vector2(get_pos_minimapa(player.posicao))
         end_mini_v = pygame.math.Vector2(get_pos_minimapa(player.posicao_alvo_mouse))
-        
         vec = end_mini_v - start_mini_v
         length = vec.length()
-        
         if length > 0:
             try:
                 direction = vec.normalize()
-                dash_len = 4  
-                gap_len = 3   
-                total_step = dash_len + gap_len
+                dash_len = 4; gap_len = 3; total_step = dash_len + gap_len
                 current_dist = 0
-                
                 while current_dist < length:
                     start_dash = start_mini_v + direction * current_dist
                     end_dist = min(current_dist + dash_len, length)
                     end_dash = start_mini_v + direction * end_dist
                     pygame.draw.line(surface, BRANCO, (start_dash.x, start_dash.y), (end_dash.x, end_dash.y), 1)
                     current_dist += total_step
-            except ValueError:
-                pass 
-    
+            except ValueError: pass 
     if estado_jogo == "JOGANDO" or estado_jogo.startswith("PVP_"): 
-        if player.vida_atual > 0:
-            pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(alvo_camera_atual.posicao), 3)
-            
+        if player.vida_atual > 0: pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(alvo_camera_atual.posicao), 3)
     elif estado_jogo == "ESPECTADOR":
-        if alvo_camera_atual:
-            pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(alvo_camera_atual.posicao), 3)
+        if alvo_camera_atual: pygame.draw.circle(surface, AZUL_NAVE, get_pos_minimapa(alvo_camera_atual.posicao), 3)
 
 def desenhar_ranking(surface, lista_top_5, nave_player):
     pos_x_base = MINIMAP_POS_X
@@ -624,15 +613,10 @@ def desenhar_ranking(surface, lista_top_5, nave_player):
         texto_nome = f"{i + 1}. {nome_nave}"
         nome_surf = FONT_RANKING.render(texto_nome, True, cor_texto)
         surface.blit(nome_surf, (pos_x_base + 5, pos_y_linha_atual))
-        
         if hasattr(nave, 'max_vida'):
-            if nave.pontos == 0:
-                 texto_pontos = f"{int(nave.vida_atual)} HP"
-            else:
-                 texto_pontos = f"{nave.pontos}"
-        else:
-            texto_pontos = f"{nave.pontos}"
-        
+            if nave.pontos == 0: texto_pontos = f"{int(nave.vida_atual)} HP"
+            else: texto_pontos = f"{nave.pontos}"
+        else: texto_pontos = f"{nave.pontos}"
         pontos_surf = FONT_RANKING.render(texto_pontos, True, cor_texto)
         pontos_x = pos_x_base + ranking_width - pontos_surf.get_width() - 5
         surface.blit(pontos_surf, (pontos_x, pos_y_linha_atual))
@@ -658,7 +642,7 @@ def desenhar_game_over(surface, largura_tela, altura_tela):
     texto_botao = FONT_PADRAO.render("Respawnar", True, PRETO) 
     surface.blit(texto_botao, (RECT_BOTAO_REINICIAR.centerx - texto_botao.get_width() // 2, RECT_BOTAO_REINICIAR.centery - texto_botao.get_height() // 2))
 
-def desenhar_tela_conexao(surface, nome_str, ip_str, input_ativo_key):
+def desenhar_tela_conexao(surface, nome_str, ip_str, input_ativo_key, mensagem_status="", cor_status=BRANCO):
     surface.fill(PRETO)
     if LOGO_JOGO:
         logo_rect = LOGO_JOGO.get_rect(center=(surface.get_width() // 2, surface.get_height() // 3))
@@ -666,6 +650,7 @@ def desenhar_tela_conexao(surface, nome_str, ip_str, input_ativo_key):
     texto_titulo = FONT_TITULO.render("Conectar ao Servidor", True, BRANCO)
     titulo_rect = texto_titulo.get_rect(center=(RECT_CONNECT_PAINEL.centerx, RECT_CONNECT_PAINEL.top + 40))
     surface.blit(texto_titulo, titulo_rect)
+    
     def draw_input_box(rect, label_text, text_str, is_active):
         label_surf = FONT_PADRAO.render(label_text, True, BRANCO)
         label_rect = label_surf.get_rect(midbottom=(rect.centerx, rect.top - 5))
@@ -677,13 +662,41 @@ def desenhar_tela_conexao(surface, nome_str, ip_str, input_ativo_key):
         texto_renderizado = FONT_PADRAO.render(f"{text_str}{cursor}", True, BRANCO)
         texto_rect = texto_renderizado.get_rect(midleft=(rect.x + 15, rect.centery))
         surface.blit(texto_renderizado, texto_rect)
+        
     draw_input_box(RECT_CONNECT_NOME, "Seu Nome:", nome_str, input_ativo_key == "nome")
     draw_input_box(RECT_CONNECT_IP, "IP do Servidor:", ip_str, input_ativo_key == "ip")
+    
+    # Desenha o botão
     pygame.draw.rect(surface, BRANCO, RECT_CONNECT_BOTAO, border_radius=5)
     texto_botao = FONT_PADRAO.render("Conectar", True, PRETO)
     texto_botao_rect = texto_botao.get_rect(center=RECT_CONNECT_BOTAO.center)
     surface.blit(texto_botao, texto_botao_rect)
 
+    # --- NOVO: Desenha mensagem de status/erro abaixo do botão ---
+    if mensagem_status:
+        texto_status = FONT_RANKING.render(mensagem_status, True, cor_status)
+        rect_status = texto_status.get_rect(midtop=(RECT_CONNECT_PAINEL.centerx, RECT_CONNECT_BOTAO.bottom + 15))
+        surface.blit(texto_status, rect_status)
+        
+def desenhar_tela_erro(surface, mensagem_erro):
+    surface.fill(PRETO)
+    
+    # Título de Erro
+    texto_titulo = FONT_TITULO.render("ERRO DE CONEXÃO", True, VERMELHO_VIDA_FUNDO)
+    rect_titulo = texto_titulo.get_rect(center=(surface.get_width() // 2, surface.get_height() // 3))
+    surface.blit(texto_titulo, rect_titulo)
+    
+    # Mensagem do Erro
+    texto_msg = FONT_PADRAO.render(f"{mensagem_erro}", True, BRANCO)
+    rect_msg = texto_msg.get_rect(center=(surface.get_width() // 2, surface.get_height() // 2))
+    surface.blit(texto_msg, rect_msg)
+    
+    # Instrução
+    texto_voltar = FONT_PADRAO.render("Pressione ENTER para voltar ao Menu", True, CINZA_BOTAO_DESLIGADO)
+    rect_voltar = texto_voltar.get_rect(center=(surface.get_width() // 2, surface.get_height() * 0.7))
+    surface.blit(texto_voltar, rect_voltar)
+    
+    
 def desenhar_lista_vivos_pvp(surface, lista_jogadores_vivos):
     """
     Desenha uma lista simples de jogadores vivos para o modo PVP.

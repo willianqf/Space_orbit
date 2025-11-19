@@ -645,21 +645,25 @@ class Player(Nave):
         
 
     # --- INÍCIO: MODIFICAÇÃO (Aceitar estado_jogo) ---
-    def processar_input_humano(self, camera, estado_jogo="JOGANDO"): # <-- MODIFICADO
-    # --- FIM: MODIFICAÇÃO ---
+    def processar_input_humano(self, camera, estado_jogo="JOGANDO"):
+        """
+        Lê teclado e mouse para controlar a nave.
+        Bloqueia controles se estiver na Loja, Terminal ou Pré-Partida.
+        """
         agora = pygame.time.get_ticks()
 
-        # --- INÍCIO: CORREÇÃO (Travar nave no PRE_MATCH) ---
-        # Se estiver no "congelamento" de 5s, não aceita nenhum input
-        if estado_jogo == "PVP_PRE_MATCH":
+        # --- TRAVA DE SEGURANÇA (LOJA/TERMINAL/PRE_MATCH) ---
+        # Se o jogador estiver nestes estados, ele não pode mover a nave nem atirar.
+        # Isso permite que o jogo continue rodando ao fundo sem acidentes.
+        if estado_jogo in ["PVP_PRE_MATCH", "LOJA", "TERMINAL"]:
             self.quer_virar_esquerda = False
             self.quer_virar_direita = False
             self.quer_mover_frente = False
             self.quer_mover_tras = False
             self.quer_atirar = False
             self.posicao_alvo_mouse = None
-            return # Sai da função
-        # --- FIM: CORREÇÃO ---
+            return # Sai da função aqui, ignorando o resto dos inputs
+        # -----------------------------------------------------
 
         teclas = pygame.key.get_pressed()
         self.quer_virar_esquerda = teclas[pygame.K_a] or teclas[pygame.K_LEFT]
@@ -673,24 +677,21 @@ class Player(Nave):
             
             if mouse_buttons[0]:
                 mouse_pos_tela = pygame.mouse.get_pos()
+                # Evita mover se clicar nos botões do HUD
                 if not ui.RECT_BOTAO_UPGRADE_HUD.collidepoint(mouse_pos_tela) and not ui.RECT_BOTAO_REGEN_HUD.collidepoint(mouse_pos_tela):
-                    
-                    # --- INÍCIO DA CORREÇÃO ---
-                    # Esta é a nova lógica correta (que já existe na câmera)
                     mouse_pos_mundo = camera.get_mouse_world_pos(mouse_pos_tela)
-                    # --- FIM DA CORREÇÃO ---
-
                     self.posicao_alvo_mouse = mouse_pos_mundo
                     self.quer_mover_frente = False 
                     self.quer_mover_tras = False
             
+            # Se usar teclado, cancela o alvo do mouse
             if self.quer_mover_frente or self.quer_mover_tras:
                 self.posicao_alvo_mouse = None
         
         else:
+            # Proteção de spawn
             self.posicao_alvo_mouse = None
-            pygame.mouse.get_pressed()
-
+            pygame.mouse.get_pressed() # Limpa buffer
 
 # --- Classe do Bot Aliado ---
 class NaveBot(Nave):

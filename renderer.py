@@ -82,9 +82,21 @@ class Renderer:
         elif estado_jogo == "GET_NAME":
             self.ui.desenhar_tela_nome(self.tela, game_globals["nome_jogador_input"], game_globals["input_nome_ativo"], game_globals["dificuldade_selecionada"])
             
-        elif estado_jogo == "GET_SERVER_INFO":
-            self.ui.desenhar_tela_conexao(self.tela, game_globals["nome_jogador_input"], game_globals["ip_servidor_input"], game_globals["input_connect_ativo"])
+        elif estado_jogo == "GET_SERVER_INFO" or estado_jogo == "TENTANDO_CONECTAR": # <-- Modificado
+            # Pega mensagem e cor do global, ou usa padrão
+            msg = game_globals.get("mensagem_status_conexao", "")
+            cor = game_globals.get("cor_status_conexao", s.BRANCO)
+            
+            # Se estiver tentando conectar, força a mensagem
+            if estado_jogo == "TENTANDO_CONECTAR":
+                msg = "Conectando ao servidor..."
+                cor = s.AMARELO_BOMBA
+                
+            self.ui.desenhar_tela_conexao(self.tela, game_globals["nome_jogador_input"], game_globals["ip_servidor_input"], game_globals["input_connect_ativo"], msg, cor)
         
+        elif estado_jogo == "ERRO_CONEXAO": # <-- NOVO ESTADO
+            msg_erro = game_globals.get("mensagem_erro_conexao", "Conexão perdida.")
+            self.ui.desenhar_tela_erro(self.tela, msg_erro)
         elif estado_jogo == "MULTIPLAYER_MODE_SELECT":
             pvp_disponivel = game_globals.get("pvp_disponivel", False) 
             self.ui.desenhar_tela_modo_multiplayer(self.tela, LARGURA_TELA, ALTURA_TELA, pvp_disponivel) 

@@ -569,6 +569,11 @@ game_globals = {
     "grupo_bots": grupo_bots, "grupo_obstaculos": grupo_obstaculos,
     
     "lista_alvos_naves": [], 
+
+    # --- NOVAS CHAVES PARA STATUS DE CONEXÃO ---
+    "mensagem_status_conexao": "",
+    "cor_status_conexao": s.BRANCO,
+    "mensagem_erro_conexao": "",
 }
 
 # --- Dicionário de Grupos de Sprites ---
@@ -601,8 +606,12 @@ while game_globals["rodando"]:
             network_client.close() 
             game_globals["jogador_pediu_para_espectar"] = False 
         else:
-            print("[AVISO] Thread de rede morreu! Voltando ao Menu.")
-            resetar_para_menu(); estado_jogo = "MENU"
+            print("[AVISO] Thread de rede morreu! Exibindo erro.")
+            # --- ALTERAÇÃO: Vai para tela de erro em vez de Menu direto ---
+            network_client.close() # Garante limpeza
+            estado_jogo = "ERRO_CONEXAO"
+            game_globals["estado_jogo"] = "ERRO_CONEXAO"
+            game_globals["mensagem_erro_conexao"] = "Conexão perdida com o servidor."
     
     # 3. Processar Eventos 
     game_state_eventos = game_globals.copy()
@@ -615,6 +624,40 @@ while game_globals["rodando"]:
     game_globals.update(novos_estados)
     estado_jogo = game_globals["estado_jogo"]
     LARGURA_TELA = game_globals["LARGURA_TELA"]; ALTURA_TELA = game_globals["ALTURA_TELA"]
+
+    # --- NOVO: Lógica de Conexão (Executa APÓS desenhar o frame "Conectando...") ---
+    if estado_jogo == "TENTANDO_CONECTAR":
+        # Força um desenho extra para aparecer o texto "Conectando..." antes de travar
+        # (Isso é um pequeno hack para evitar threads complexas na UI)
+        renderer.draw(estado_jogo, game_globals, game_groups, {"players":{},"npcs":{},"projectiles":[]}, 
+                    {"proj_last_frame":set(),"npcs_last_frame":{},"players_last_frame":{}}, 
+                    nave_player, nave_player.posicao)
+        pygame.display.flip()
+        
+        print("Tentando conectar (Main Loop)...")
+        modo_desejado = game_globals.get("multiplayer_mode_to_join", "PVE")
+        
+        sucesso, modo_retornado, nome_rede, pos_spawn = network_client.connect(
+            game_globals["ip_servidor_input"], 5555, 
+            game_globals["nome_jogador_input"], 
+            modo_desejado 
+        )
+        
+        if sucesso:
+            if modo_retornado == "PVE":
+                reiniciar_jogo(pos_spawn=pos_spawn)
+                estado_jogo = "JOGANDO"
+            elif modo_retornado == "PVP":
+                reiniciar_jogo_pvp(is_online=True, pos_spawn=pos_spawn)
+                estado_jogo = "PVP_LOBBY"
+            game_globals["estado_jogo"] = estado_jogo
+        else:
+            # Falha: Volta para tela de IP com mensagem de erro
+            print(f"Falha: {network_client.connection_error_message}")
+            estado_jogo = "GET_SERVER_INFO"
+            game_globals["estado_jogo"] = "GET_SERVER_INFO"
+            game_globals["mensagem_status_conexao"] = f"Erro: {network_client.connection_error_message}"
+            game_globals["cor_status_conexao"] = s.VERMELHO_VIDA_FUNDO
 
     if not game_globals["rodando"]: break
 
@@ -685,7 +728,7 @@ while game_globals["rodando"]:
     # 4b. Lógica de Jogo (Online/Offline)
     online_players_copy = {}; online_npcs_copy = {}; online_projectiles_copy = []
     
-    if estado_jogo not in ["MENU", "GET_NAME", "GET_SERVER_INFO", "MULTIPLAYER_MODE_SELECT", "OFFLINE_MODE_SELECT", "PVE_OFFLINE_START", "PVP_OFFLINE_START"]:
+    if estado_jogo not in ["MENU", "GET_NAME", "GET_SERVER_INFO", "MULTIPLAYER_MODE_SELECT", "OFFLINE_MODE_SELECT", "PVE_OFFLINE_START", "PVP_OFFLINE_START", "TENTANDO_CONECTAR", "ERRO_CONEXAO"]:
         if is_online:
             game_state_rede = network_client.get_state()
             # AGORA (com a correção do Bug 1), online_players_copy SÓ TEM JOGADORES VIVOS
@@ -869,6 +912,7 @@ while game_globals["rodando"]:
                     
                         is_pvp_map_offline = (s.MAP_WIDTH < 5000) 
                         
+                        # --- Lógica PVP Offline ---
                         if estado_jogo.startswith("PVP_") or (estado_jogo == "ESPECTADOR" and is_pvp_map_offline):
                             
                             game_globals["pvp_lobby_timer_fim"] = game_globals.get("pvp_lobby_timer_fim_offline", 0)
@@ -883,14 +927,17 @@ while game_globals["rodando"]:
                             game_globals["pvp_partida_timer_fim_offline"] = game_globals.get("pvp_partida_timer_fim", 0)
                             game_globals["pvp_pre_match_timer_fim_offline"] = game_globals.get("pvp_pre_match_timer_fim", 0)
                         
-                        elif estado_jogo == "JOGANDO" or (estado_jogo == "ESPECTADOR" and not is_pvp_map_offline):
+                        # --- Lógica PVE Offline (Agora inclui LOJA e TERMINAL) ---
+                        elif estado_jogo in ["JOGANDO", "LOJA", "TERMINAL"] or (estado_jogo == "ESPECTADOR" and not is_pvp_map_offline):
                             
                             game_state_logica = game_globals.copy()
                             game_state_logica["estado_jogo"] = estado_jogo
                             game_state_logica["dificuldade_jogo_atual"] = dificuldade_jogo_atual
                             
+                            # A mágica acontece aqui: a lógica roda mesmo na loja!
                             novo_estado_jogo = game_logic_handler.update_offline_logic(game_state_logica, game_groups, posicao_ouvinte_som)
                             
+                            # Transição automática para espectador se morrer com a loja aberta
                             if novo_estado_jogo == "ESPECTADOR" and estado_jogo != "ESPECTADOR":
                                 estado_jogo = "ESPECTADOR"
                                 game_globals["estado_jogo"] = "ESPECTADOR"
@@ -910,8 +957,11 @@ while game_globals["rodando"]:
         if estado_jogo not in ["PAUSE"]:
             grupo_efeitos_visuais.update() 
 
-    if estado_jogo in ["JOGANDO", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_PRE_MATCH"]:
+    # --- Atualização do Jogador (Agora inclui LOJA e TERMINAL) ---
+    # Isso permite que a nave processe física/regeneração mesmo parada
+    if estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_PRE_MATCH"]:
         if not is_online:
+            # O 'processar_input_humano' vai travar o movimento, mas o resto do update roda
             nave_player.update(grupo_projeteis_player, camera, None, posicao_ouvinte_som, estado_jogo)
 
     # 5. Desenho (Etapa 4)
@@ -934,7 +984,6 @@ while game_globals["rodando"]:
     if is_online:
         online_projectile_ids_last_frame = {p['id'] for p in online_projectiles_copy}
         online_npcs_last_frame = online_npcs_copy
-        # (Bug 1: Ghost Players) O "last_frame" também deve ser apenas dos jogadores vivos
         online_players_last_frame = online_players_copy
     else:
         online_projectile_ids_last_frame.clear()
