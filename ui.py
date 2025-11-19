@@ -634,14 +634,38 @@ def desenhar_terminal(surface, texto_atual, largura_tela, altura_tela):
     texto_renderizado = FONT_TERMINAL.render(f"> {texto_atual}{cursor}", True, BRANCO)
     surface.blit(texto_renderizado, (RECT_TERMINAL_INPUT.x + 10, RECT_TERMINAL_INPUT.y + (RECT_TERMINAL_INPUT.height - texto_renderizado.get_height()) // 2))
 
-def desenhar_game_over(surface, largura_tela, altura_tela):
-    texto_game_over = FONT_TITULO.render("Você Morreu!", True, VERMELHO_VIDA_FUNDO)
-    surface.blit(texto_game_over, (largura_tela // 2 - texto_game_over.get_width() // 2, altura_tela // 2 - 50))
+def desenhar_game_over(surface, largura_tela, altura_tela, 
+                       winner_name=None, restart_timer=0): # Novos argumentos
     
-    pygame.draw.rect(surface, BRANCO, RECT_BOTAO_REINICIAR, border_radius=5)
-    texto_botao = FONT_PADRAO.render("Respawnar", True, PRETO) 
-    surface.blit(texto_botao, (RECT_BOTAO_REINICIAR.centerx - texto_botao.get_width() // 2, RECT_BOTAO_REINICIAR.centery - texto_botao.get_height() // 2))
+    # Fundo escuro
+    s = pygame.Surface((largura_tela, altura_tela), pygame.SRCALPHA)
+    s.fill((0,0,0, 200))
+    surface.blit(s, (0,0))
 
+    if winner_name:
+        # Tela de Vitória PVP
+        texto_fim = FONT_TITULO.render("FIM DE JOGO", True, VERMELHO_VIDA_FUNDO)
+        texto_venc = FONT_TITULO.render(f"Vencedor: {winner_name}", True, VERDE_VIDA)
+        
+        surface.blit(texto_fim, (largura_tela//2 - texto_fim.get_width()//2, altura_tela//3))
+        surface.blit(texto_venc, (largura_tela//2 - texto_venc.get_width()//2, altura_tela//2))
+        
+        if restart_timer > 0:
+            texto_reinicio = FONT_PADRAO.render(f"Nova partida em {restart_timer}s...", True, BRANCO)
+            surface.blit(texto_reinicio, (largura_tela//2 - texto_reinicio.get_width()//2, altura_tela * 0.7))
+            
+        texto_sair = FONT_HUD_DETALHES.render("[ESC] Sair para o Menu", True, CINZA_BOTAO_DESLIGADO)
+        surface.blit(texto_sair, (largura_tela//2 - texto_sair.get_width()//2, altura_tela * 0.8))
+
+    else:
+        # Game Over PVE Padrão
+        texto_game_over = FONT_TITULO.render("Você Morreu!", True, VERMELHO_VIDA_FUNDO)
+        surface.blit(texto_game_over, (largura_tela // 2 - texto_game_over.get_width() // 2, altura_tela // 2 - 50))
+        
+        pygame.draw.rect(surface, BRANCO, RECT_BOTAO_REINICIAR, border_radius=5)
+        texto_botao = FONT_PADRAO.render("Respawnar", True, PRETO) 
+        surface.blit(texto_botao, (RECT_BOTAO_REINICIAR.centerx - texto_botao.get_width() // 2, RECT_BOTAO_REINICIAR.centery - texto_botao.get_height() // 2))
+        
 def desenhar_tela_conexao(surface, nome_str, ip_str, input_ativo_key, mensagem_status="", cor_status=BRANCO):
     surface.fill(PRETO)
     if LOGO_JOGO:

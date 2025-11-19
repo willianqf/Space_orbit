@@ -229,7 +229,8 @@ def reiniciar_jogo_pvp(is_online=False, pos_spawn=None):
     nave_player.ultimo_hit_tempo = 0; nave_player.tempo_fim_lentidao = 0
     nave_player.tempo_fim_congelamento = 0; nave_player.rastro_particulas = []
     nave_player.parar_regeneracao() 
-    nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
+    # --- CORREÇÃO: Tempo de proteção REDUZIDO para 500ms ---
+    nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 500
     
     grupo_player.add(nave_player) 
     
@@ -328,7 +329,8 @@ def reiniciar_jogo(pos_spawn=None, dificuldade="Normal"):
     nave_player.ultimo_hit_tempo = 0; nave_player.tempo_fim_lentidao = 0
     nave_player.tempo_fim_congelamento = 0; nave_player.rastro_particulas = []
     nave_player.parar_regeneracao() 
-    nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
+    # --- CORREÇÃO: Tempo de proteção REDUZIDO para 500ms ---
+    nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 500
     
     grupo_player.add(nave_player)
 
@@ -378,7 +380,8 @@ def respawn_player_offline(nave):
     nave.ultimo_hit_tempo = 0; nave.tempo_fim_lentidao = 0
     nave.tempo_fim_congelamento = 0; nave.rastro_particulas = []
     nave.parar_regeneracao() 
-    nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
+    # --- CORREÇÃO: Tempo de proteção REDUZIDO para 500ms ---
+    nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 500
     estado_jogo = "JOGANDO"
 
 def resetar_para_menu():
@@ -469,9 +472,10 @@ def ciclar_alvo_espectador(game_globals_dict, avancar=True):
         nomes_ordenados = sorted(online_players.keys())
         for nome in nomes_ordenados:
             state = online_players[nome]
-            # (A lista 'online_players' já vem filtrada só com players vivos)
-            lista_alvos_vivos.append({'nome': nome, 'state': state})
-            lista_nomes_alvos_vivos.append(nome)
+            # Filtrar apenas alvos VIVOS
+            if state['hp'] > 0:
+                lista_alvos_vivos.append({'nome': nome, 'state': state})
+                lista_nomes_alvos_vivos.append(nome)
     else: 
         if game_globals_dict["estado_jogo"].startswith("PVP_"):
             if nave_player.vida_atual > 0:
@@ -695,16 +699,31 @@ while game_globals["rodando"]:
         elif is_online and game_globals["alvo_espectador_nome"]:
             game_state_rede = network_client.get_state()
             state = game_state_rede['players'].get(game_globals["alvo_espectador_nome"])
-            # (Já filtrado para apenas vivos pelo Bug 1)
-            if state: 
+            
+            # [CORREÇÃO] Verifica se o alvo está vivo antes de seguir
+            if state and state['hp'] > 0: 
                 espectador_dummy_alvo.posicao = espectador_dummy_alvo.posicao.lerp(pygame.math.Vector2(state['x'], state['y']), 0.5)
                 alvo_camera_final = espectador_dummy_alvo; target_found = True
             else: 
-                game_globals["alvo_espectador_nome"] = None 
+                # Alvo morreu/sumiu -> Busca o próximo
+                print("[Espectador] Alvo morreu. Buscando proximo...")
+                ciclar_alvo_espectador(game_globals, avancar=True)
+                # Tenta pegar o novo alvo imediatamente para evitar flicker
+                if game_globals["alvo_espectador_nome"]:
+                     new_state = game_state_rede['players'].get(game_globals["alvo_espectador_nome"])
+                     if new_state and new_state['hp'] > 0:
+                         espectador_dummy_alvo.posicao = espectador_dummy_alvo.posicao.lerp(pygame.math.Vector2(new_state['x'], new_state['y']), 0.5)
+                         alvo_camera_final = espectador_dummy_alvo; target_found = True
+
         elif not is_online and game_globals["alvo_espectador"]:
             if game_globals["alvo_espectador"].groups() and game_globals["alvo_espectador"].vida_atual > 0:
                 alvo_camera_final = game_globals["alvo_espectador"]; target_found = True
-            else: game_globals["alvo_espectador"] = None 
+            else: 
+                # Alvo Offline morreu -> Busca próximo
+                ciclar_alvo_espectador(game_globals, avancar=True)
+                if game_globals["alvo_espectador"] and game_globals["alvo_espectador"].vida_atual > 0:
+                    alvo_camera_final = game_globals["alvo_espectador"]; target_found = True
+
         if not target_found:
             game_globals["alvo_espectador"] = None; game_globals["alvo_espectador_nome"] = None
             teclas = pygame.key.get_pressed()
@@ -827,7 +846,8 @@ while game_globals["rodando"]:
                         estado_jogo = "JOGANDO"
                         game_globals["estado_jogo"] = "JOGANDO"
                         
-                    nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 200
+                    # --- CORREÇÃO: Tempo de proteção aumentado ---
+                    nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 500
                     game_globals["jogador_esta_vivo_espectador"] = False; game_globals["jogador_pediu_para_espectar"] = False
                     game_globals["alvo_espectador_nome"] = None; camera.set_zoom(1.0)
                     game_globals["spectator_overlay_hidden"] = False
