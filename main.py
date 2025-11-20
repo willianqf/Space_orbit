@@ -837,6 +837,7 @@ while game_globals["rodando"]:
                 nave_player.angulo = my_state['angulo']
                 nova_vida = my_state.get('hp', nave_player.vida_atual)
                 
+                # ... (respawn logic mantido) ...
                 if (estado_jogo == "ESPECTADOR" or estado_jogo == "PAUSE") and nave_player.vida_atual <= 0 and nova_vida > 0:
                     print(f"[REDE] Detectado respawn do servidor. Voltando ao jogo (Vida: {nova_vida})")
                     if s.MAP_WIDTH < 5000: 
@@ -845,14 +846,21 @@ while game_globals["rodando"]:
                     else: 
                         estado_jogo = "JOGANDO"
                         game_globals["estado_jogo"] = "JOGANDO"
-                        
-                    # --- CORREÇÃO: Tempo de proteção aumentado ---
                     nave_player.tempo_spawn_protecao_input = pygame.time.get_ticks() + 500
                     game_globals["jogador_esta_vivo_espectador"] = False; game_globals["jogador_pediu_para_espectar"] = False
                     game_globals["alvo_espectador_nome"] = None; camera.set_zoom(1.0)
                     game_globals["spectator_overlay_hidden"] = False
                 
-                if nova_vida < nave_player.vida_atual: nave_player.ultimo_hit_tempo = pygame.time.get_ticks()
+                if nova_vida < nave_player.vida_atual: 
+                    nave_player.ultimo_hit_tempo = pygame.time.get_ticks()
+                    # --- CORREÇÃO: Ativar efeito de escudo com ângulo correto ---
+                    if nave_player.nivel_escudo >= s.MAX_NIVEL_ESCUDO:
+                         nave_player.mostrar_escudo_fx = True
+                         nave_player.tempo_escudo_fx = pygame.time.get_ticks()
+                         # Pega o ângulo que o servidor calculou
+                         nave_player.angulo_impacto_rad_pygame = my_state.get('last_hit_angle', 0)
+                    # ------------------------------------------------------------
+
                 is_server_regenerando = my_state.get('esta_regenerando', False)
                 if is_server_regenerando and not nave_player.esta_regenerando: nave_player.iniciar_regeneracao(grupo_efeitos_visuais)
                 elif not is_server_regenerando and nave_player.esta_regenerando: nave_player.parar_regeneracao()
@@ -980,10 +988,19 @@ while game_globals["rodando"]:
     # --- Atualização do Jogador (Agora inclui LOJA e TERMINAL) ---
     # Isso permite que a nave processe física/regeneração mesmo parada
     if estado_jogo in ["JOGANDO", "LOJA", "TERMINAL", "PVP_LOBBY", "PVP_COUNTDOWN", "PVP_PLAYING", "PVP_PRE_MATCH"]:
-        if not is_online:
-            # O 'processar_input_humano' vai travar o movimento, mas o resto do update roda
-            nave_player.update(grupo_projeteis_player, camera, None, posicao_ouvinte_som, estado_jogo)
-
+        # Define o socket apenas se estiver online
+        socket_para_update = network_client.client_socket if is_online else None
+        
+        # Chama o update.
+        # Se socket_para_update for None (Offline), ele calcula física e tiro.
+        # Se for um socket (Online), ele só lê inputs visuais (como o rastro do motor).
+        nave_player.update(
+            grupo_projeteis_player, 
+            camera, 
+            socket_para_update, 
+            posicao_ouvinte_som, 
+            estado_jogo
+        )
     # 5. Desenho (Etapa 4)
     online_data = {
         "players": online_players_copy,

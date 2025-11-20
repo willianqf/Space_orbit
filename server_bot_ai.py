@@ -37,33 +37,49 @@ class ServerBotManager:
         self.upgrade_purchaser = logic_callbacks['upgrade_purchaser']
 
     
-    def manage_bot_population(self, max_bots):
+    def manage_bot_population(self, max_bots_desejados):
         """
-        Verifica bots mortos e spawna novos se necessário.
-        Chamado a cada tick do game_loop.
+        Verifica bots mortos para remover e ajusta a população (spawna ou remove)
+        para atingir max_bots_desejados.
         """
-        bots_atuais = []
+        bots_atuais_keys = []
         bots_para_remover = []
 
+        # 1. Identifica bots existentes e mortos
         for player_key, p_state in list(self.player_states.items()):
             if p_state.get('is_bot', False):
                 if p_state.get('hp', 0) <= 0: 
                     bots_para_remover.append(player_key)
                 else:
-                    bots_atuais.append(p_state)
+                    bots_atuais_keys.append(player_key)
         
-        if bots_para_remover:
-            print(f"[LOG] Bots mortos para remover: {bots_para_remover}")
+        # 2. Remove bots mortos da lista de contagem
+        for k in bots_para_remover:
+            if k in bots_atuais_keys: bots_atuais_keys.remove(k)
+
+        # 3. Lógica de Balanceamento (Novo)
+        qtd_atual = len(bots_atuais_keys)
         
+        # Se tiver MENOS bots do que o desejado -> Spawna
+        if qtd_atual < max_bots_desejados:
+            diff = max_bots_desejados - qtd_atual
+            for _ in range(diff):
+                self.spawn_bot()
+        
+        # Se tiver MAIS bots do que o desejado -> Remove os excedentes
+        elif qtd_atual > max_bots_desejados:
+            diff = qtd_atual - max_bots_desejados
+            # Remove os últimos da lista (FIFO ou LIFO tanto faz aqui)
+            for i in range(diff):
+                key_to_remove = bots_atuais_keys[i]
+                bots_para_remover.append(key_to_remove)
+                print(f"[IA] Removendo bot excedente: {key_to_remove} (Sala cheia)")
+        
+        # Limpeza de NPCs mortos (já existente)
         npcs_antes = len(self.network_npcs)
         self.network_npcs[:] = [n for n in self.network_npcs if n.get('hp', 0) > 0]
-        if len(self.network_npcs) != npcs_antes:
-            print(f"[IA] NPCs removidos (mortos): {npcs_antes - len(self.network_npcs)}")
-            
-        if len(bots_atuais) < max_bots:
-            self.spawn_bot() 
-            
-        return bots_para_remover 
+        
+        return bots_para_remover
 
     def spawn_bot(self):
         """ Cria um novo bot e o adiciona ao player_states. """
