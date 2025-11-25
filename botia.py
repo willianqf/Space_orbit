@@ -24,7 +24,7 @@ class BotAI:
     # ========================================================================
     ESTADOS_VALIDOS = [
         "VAGANDO",              # Sem alvo, explorando o mapa
-        "CACANDO",              # Indo em direção a um alvo distante
+        "CAÇANDO",              # Indo em direção a um alvo distante
         "ATACANDO",             # Em combate próximo, orbitando o alvo
         "FUGINDO",              # HP baixo, fugindo para área segura
         "REGENERANDO_NA_BORDA", # Parado na borda regenerando HP
@@ -904,7 +904,7 @@ class BotAI:
                 if dist < self.distancia_scan_inimigo:
                     self._mudar_estado("ATACANDO")
                 else:
-                    self._mudar_estado("CACANDO")
+                    self._mudar_estado("CAÇANDO")
             except (ValueError, AttributeError):
                 self._mudar_estado("VAGANDO")
         else:
@@ -1052,7 +1052,7 @@ class BotAI:
         # ====================================================================
         # ESTADO: CAÇANDO (indo atrás de alvo distante)
         # ====================================================================
-        if self.estado_ia == "CACANDO":
+        if self.estado_ia == "CAÇANDO":
             alvo = self.bot.alvo_selecionado
 
             if not (alvo and alvo.groups() and hasattr(alvo, 'vida_atual') and alvo.vida_atual > 0):
@@ -1086,7 +1086,7 @@ class BotAI:
 
                 # Se ficou muito longe, volta a caçar
                 if distancia_alvo > self.distancia_scan_inimigo:
-                    self._mudar_estado("CACANDO")
+                    self._mudar_estado("CAÇANDO")
                     return
 
                 ponto_movimento = self.bot.posicao
