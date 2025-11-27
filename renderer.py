@@ -198,8 +198,17 @@ class Renderer:
     def _draw_offline_entities(self, grupo_inimigos, grupo_bots, grupo_projeteis_player,
                                grupo_projeteis_bots, grupo_projeteis_inimigos):
         for inimigo in grupo_inimigos: inimigo.desenhar_vida(self.tela, self.camera); self.tela.blit(inimigo.image, self.camera.apply(inimigo.rect))
-        for bot in grupo_bots: bot.desenhar(self.tela, self.camera); bot.desenhar_vida(self.tela, self.camera); bot.desenhar_nome(self.tela, self.camera); 
-        for aux in bot.grupo_auxiliares_ativos: aux.desenhar(self.tela, self.camera)
+        
+        # --- CORREÇÃO: Indentação do loop de auxiliares ---
+        for bot in grupo_bots: 
+            bot.desenhar(self.tela, self.camera)
+            bot.desenhar_vida(self.tela, self.camera)
+            bot.desenhar_nome(self.tela, self.camera)
+            # Agora o loop roda para CADA bot, não apenas para o último
+            for aux in bot.grupo_auxiliares_ativos: 
+                aux.desenhar(self.tela, self.camera)
+        # --------------------------------------------------
+
         for proj in grupo_projeteis_player: self.tela.blit(proj.image, self.camera.apply(proj.rect))
         for proj in grupo_projeteis_bots: self.tela.blit(proj.image, self.camera.apply(proj.rect))
         for proj in grupo_projeteis_inimigos: self.tela.blit(proj.image, self.camera.apply(proj.rect))

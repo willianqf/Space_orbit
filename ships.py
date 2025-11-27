@@ -386,8 +386,8 @@ class NaveBot(Nave):
                 self.alvo_selecionado = None; self.posicao_alvo_mouse = None; self.tempo_fim_lentidao = 0; self.rastro_particulas = []; self.cerebro.resetar_ia(); self.comprar_auxiliar(); self.parar_regeneracao() 
             else: print(f"[{self.nome}] BOT MORREU no PVP! Removendo sprite."); self.kill()
         return morreu
-    def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref, pos_ouvinte=None, map_width=s.MAP_WIDTH, map_height=s.MAP_HEIGHT):
-        self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref, map_width, map_height)
+    def update(self, player_ref, grupo_projeteis_bots, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref, pos_ouvinte=None, map_width=s.MAP_WIDTH, map_height=s.MAP_HEIGHT, lista_projeteis_hostis=None):
+        self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref, map_width, map_height, lista_projeteis_hostis)
         self.update_regeneracao(); self.rotacionar(); self.mover()      
         self.lidar_com_tiros(grupo_projeteis_bots, pos_ouvinte if pos_ouvinte is not None else player_ref.posicao); self.processar_upgrades_ia()
         estado_cerebro = self.cerebro.estado_ia
@@ -396,6 +396,7 @@ class NaveBot(Nave):
         if (esta_tentando_parar_para_regen or esta_parado_na_borda) and self.alvo_selecionado is None and not self.esta_regenerando:
             self.quer_mover_frente = False; self.posicao_alvo_mouse = None; self.iniciar_regeneracao(grupo_efeitos_visuais_ref)
         elif (not esta_tentando_parar_para_regen and not esta_parado_na_borda) or (self.alvo_selecionado is not None): self.parar_regeneracao()
+    # --- FIM DA ALTERAÇÃO ---
     def processar_upgrades_ia(self):
         if self.pontos_upgrade_disponiveis > 0 and self.total_upgrades_feitos < MAX_TOTAL_UPGRADES:
             if self.nivel_motor < MAX_NIVEL_MOTOR: self.comprar_upgrade("motor")
