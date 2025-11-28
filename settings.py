@@ -1,26 +1,21 @@
 # settings.py
 import pygame
-pygame.font.init() # Inicializa as fontes aqui
+pygame.font.init() 
 
-# --- ADICIONE ESTE BLOCO PARA CARREGAR A LOGO ---
 LOGO_JOGO = None
 try:
     LOGO_JOGO = pygame.image.load("Space_Orbit.png")
-    print("Logo carregada com sucesso!") # Mensagem de confirmação
+    print("Logo carregada com sucesso!") 
 except pygame.error as e:
     print(f"Erro ao carregar a imagem 'Space_Orbit.png': {e}")
-    LOGO_JOGO = None # Garante que é None se falhar
-# --- FIM DO BLOCO DA LOGO ---
+    LOGO_JOGO = None 
 
-
-# 1. Configurações da Tela e Mapa
 LARGURA_TELA_INICIAL = 800
 ALTURA_TELA_INICIAL = 600
-MAP_WIDTH = 8000 # <-- MODIFICAÇÃO: Garantido que é 8000
-MAP_HEIGHT = 8000 # <-- MODIFICAÇÃO: Garantido que é 8000
+MAP_WIDTH = 8000 
+MAP_HEIGHT = 8000 
 MAP_RECT = pygame.Rect(0, 0, MAP_WIDTH, MAP_HEIGHT)
 
-# 2. Constantes do Jogo
 MAX_OBSTACULOS = 50
 OBSTACULO_RAIO_MIN = 20
 OBSTACULO_RAIO_MAX = 40
@@ -30,11 +25,9 @@ MAX_INIMIGOS = 25
 MAX_BOTS = 6
 MAX_BOTS_LIMITE_SUPERIOR = 10
 MAX_MOTHERSHIPS = 2
-# 2.5. Limites de Input (NOVA SEÇÃO)
 LIMITE_MAX_NOME = 16
-LIMITE_MAX_IP = 20 # (Suficiente para IPv4: "255.255.255.255")
+LIMITE_MAX_IP = 20 
 
-# MAX_VIDAS_COLETAVEIS = 12 # <-- REMOVIDO
 SPAWN_DIST_MIN = LARGURA_TELA_INICIAL * 0.8
 NPC_AGGRO_RANGE = 3000
 SPAWN_DIST_MAX = LARGURA_TELA_INICIAL * 1.5
@@ -56,7 +49,6 @@ COOLDOWN_TIRO_MINION_CONGELANTE = 600
 MINION_CONGELANTE_LEASH_RANGE = 1500
 MIN_SPAWN_DIST_ENTRE_NAVES_MAE = 800
 
-# 3. Constantes da Nave e Upgrades
 VELOCIDADE_ROTACAO_NAVE = 5
 MAX_NIVEL_ESCUDO = 5
 DURACAO_FX_ESCUDO = 150
@@ -66,30 +58,18 @@ MAX_NIVEL_MOTOR = 5
 RASTRO_MAX_PARTICULAS = 20
 RASTRO_DURACAO = 200
 RASTRO_TAMANHO_INICIAL = 4
-# VIDA_COLETADA_CURA = 1 # <-- REMOVIDO
 
-# --- INÍCIO DA ADIÇÃO (Regeneração) ---
 REGEN_POR_TICK = 0.35
-REGEN_TICK_RATE = 1500 # 2000ms = 1.5 segundos
-# --- FIM DA ADIÇÃO ---
+REGEN_TICK_RATE = 1500 
 
-# 4. Constantes da Loja
-# --- INÍCIO: MODIFICAÇÃO (Limite de Upgrades) ---
 MAX_TOTAL_UPGRADES = 10 
-# --- FIM: MODIFICAÇÃO ---
 PONTOS_LIMIARES_PARA_UPGRADE = [100, 250, 500]
 PONTOS_SCORE_PARA_MUDAR_LIMIAR = [500, 2000]
 CUSTOS_AUXILIARES = [1, 2, 3, 4]
 
-# --- INÍCIO: MODIFICAÇÃO (Novas Progressões) ---
-# Define o dano real para cada nível (Nível 0 é dummy)
 DANO_POR_NIVEL = [0, 0.7, 0.9, 1.2, 1.4, 1.6] 
-# Define a vida máxima real para cada nível (Nível 0 é dummy)
 VIDA_POR_NIVEL = [0, 5, 6, 8, 9, 10] 
-# --- FIM: MODIFICAÇÃO ---
 
-
-# 5. Cores
 PRETO = (0, 0, 0)
 BRANCO = (255, 255, 255)
 AZUL_NAVE = (0, 150, 255)
@@ -112,19 +92,24 @@ CIANO_MOTHERSHIP = (0, 200, 200)
 CIANO_MINION = (0, 130, 130)
 COR_ESCUDO_FX = (150, 200, 255, 200)
 VERDE_TIRO_MAX = (0, 255, 100)
-COR_RASTRO_MOTOR = (255, 150, 0) # Laranja
+COR_RASTRO_MOTOR = (255, 150, 0) 
 LARANJA_RAPIDO = (255, 100, 0)
 AZUL_TIRO_RAPIDO = (0, 100, 200)
 ROXO_ATORDOADOR = (100, 0, 100)
 ROXO_TIRO_LENTO = (200, 0, 255)
-# VERMELHO_VIDA_COLETAVEL = (255, 20, 20) # <-- REMOVIDO
 AZUL_CONGELANTE = (0, 100, 255)
 AZUL_MINION_CONGELANTE = (100, 150, 255)
 AZUL_TIRO_CONGELANTE = (150, 200, 255)
 PRETO_TRANSPARENTE_PAUSA = (0, 0, 0, 180)
-LILAS_REGEN = (180, 100, 255) # <-- ADICIONADO
+LILAS_REGEN = (180, 100, 255) # <--- ADICIONADO PARA CORRIGIR A NAVE DE REGEN
 
-# 6. Fontes
+# Cores da Etapa 3 (Visual)
+COR_ESCUDO = (100, 100, 255, 100)
+COR_LENTIDAO = (0, 0, 150, 180)
+COR_CONGELAMENTO = (100, 200, 255, 200) 
+DURACAO_FLASH_DANO_MS = 150
+DURACAO_IMPACTO_VISUAL_MS = 500
+
 FONT_PADRAO = pygame.font.SysFont('Arial', 24)
 FONT_TITULO = pygame.font.SysFont('Arial', 32, bold=True)
 FONT_HUD = pygame.font.SysFont('Arial', 20)
@@ -133,10 +118,9 @@ FONT_BOTAO_LOJA = pygame.font.SysFont('Arial', 18, bold=True)
 FONT_RANKING = pygame.font.SysFont('Arial', 16)
 FONT_HUD_DETALHES = pygame.font.SysFont('Arial', 16)
 FONT_NOME_JOGADOR = pygame.font.SysFont('Arial', 16, bold=True) 
-COR_OVERLAY_LENTO = (150, 0, 150, 100) # Roxo transparente
-COR_OVERLAY_CONGELADO = (0, 150, 255, 100) # Azul transparente
+COR_OVERLAY_LENTO = (150, 0, 150, 100) 
+COR_OVERLAY_CONGELADO = (0, 150, 255, 100)
 
-# 6.5. Constantes de Áudio 
 MAX_DISTANCIA_SOM_AUDIVEL = 1200
 PANNING_RANGE_SOM = 800
 VOLUME_BASE_TIRO_PLAYER = 0.4
@@ -146,7 +130,6 @@ VOLUME_BASE_EXPLOSAO_NPC = 0.5
 VOLUME_BASE_TIRO_LASER_LONGO = 0.5
 VOLUME_BASE_TIRO_CONGELANTE = 0.6 
 
-# --- GERAÇÃO DE SONS ---
 SOM_TIRO_PLAYER = None
 SOM_TIRO_INIMIGO_SIMPLES = None
 SOM_EXPLOSAO_BOSS = None 
@@ -154,9 +137,6 @@ SOM_EXPLOSAO_NPC = None
 SOM_TIRO_LASER_LONGO = None
 SOM_TIRO_CONGELANTE = None
 
-# 7. Outros
 NUM_ESTRELAS = 10000
-
-# 8. Velocidade de tiro
 VELOCIDADE_TIRO = 35
 FOCO_TIRO = 0.055

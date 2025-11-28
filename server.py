@@ -1,7 +1,9 @@
 # server.py
+
 import socket
 import threading
 import random
+import pygame # Importante para Vector2
 import settings as s 
 import multi.pvp_settings as pvp_s
 import math 
@@ -19,19 +21,22 @@ TICK_RATE = 60
 QTD_SALAS_PVE = 2
 MAX_PLAYERS_PVE = 16
 QTD_SALAS_PVP = 4
-MAX_PLAYERS_PVP = pvp_s.MAX_JOGADORES_PVP # 4
+MAX_PLAYERS_PVP = pvp_s.MAX_JOGADORES_PVP
 
-# Constantes de Distância
+AOI_RADIUS_SQ = 3500**2 
+
+# Constantes de Distância e Física
 COLISAO_JOGADOR_PROJ_DIST_SQ = (15 + 5)**2
 COLISAO_JOGADOR_NPC_DIST_SQ = (15 + 15)**2 
 NPC_DETECTION_RANGE_SQ = (3000 ** 2)
 MAX_DISTANCIA_TIRO_SQ = s.MAX_DISTANCIA_TIRO**2
 
-# Timers PVP
+# Timers
 LOBBY_COUNTDOWN_MS = pvp_s.PVP_LOBBY_COUNTDOWN_SEGUNDOS * 1000
 PARTIDA_COUNTDOWN_MS = pvp_s.PVP_PARTIDA_DURACAO_SEGUNDOS * 1000
 PRE_MATCH_FREEZE_MS = 5000
 RESTART_DELAY_MS = 10000 
+SPAWN_PROTECTION_MS = 3000 
 
 # Constantes Gerais
 COOLDOWN_TIRO = 250 
@@ -50,8 +55,8 @@ REDUCAO_DANO_POR_NIVEL = s.REDUCAO_DANO_POR_NIVEL
 
 # Projéteis Especiais
 VELOCIDADE_PROJETIL_TELE = 14    
-DURACAO_PROJETIL_TELE_MS = 700   
-TURN_SPEED_TELE = 0.055
+DURACAO_PROJETIL_TELE_MS = 2000 
+TURN_SPEED_TELE = 0.15          
 VELOCIDADE_PROJ_LENTO = 9.0
 DURACAO_PROJ_LENTO_MS = 5000
 VELOCIDADE_PROJ_CONGELANTE = 8.0
@@ -59,7 +64,7 @@ DURACAO_PROJ_CONGELANTE_MS = 700
 DURACAO_LENTIDAO_MS = 6000
 DURACAO_CONGELAMENTO_MS = 2000
 
-# Bosses e Minions
+# Bosses, Minions e Auxiliares
 COOLDOWN_SPAWN_MINION_CONGELANTE = 10000
 MAX_MINIONS_CONGELANTE = 6
 MAX_MINIONS_MOTHERSHIP = 8
@@ -68,8 +73,6 @@ HP_MINION_CONGELANTE = 10
 PONTOS_MINION_CONGELANTE = 5
 VELOCIDADE_MINION_CONGELANTE = 2.5 
 MINION_CONGELANTE_LEASH_RANGE = 1500
-
-# Auxiliares
 MAX_AUXILIARES = 4 
 CUSTOS_AUXILIARES = s.CUSTOS_AUXILIARES
 AUX_POSICOES = [(-40, 20), (40, 20), (-50, -10), (50, -10)]
@@ -105,57 +108,46 @@ def server_ganhar_pontos(player_state, quantidade):
 def server_comprar_upgrade(player_state, tipo_upgrade):
     is_pvp = player_state.get('is_pvp', False)
     limite_total = pvp_s.PONTOS_ATRIBUTOS_INICIAIS if is_pvp else MAX_TOTAL_UPGRADES
-
     if player_state['pontos_upgrade_disponiveis'] <= 0: return
     if player_state['total_upgrades_feitos'] >= limite_total: return
-        
-    custo = 1
-    comprou = False
-    if tipo_upgrade == "motor":
-        if player_state['nivel_motor'] < MAX_NIVEL_MOTOR and player_state['pontos_upgrade_disponiveis'] >= custo:
-            player_state['pontos_upgrade_disponiveis'] -= custo; player_state['total_upgrades_feitos'] += 1; player_state['nivel_motor'] += 1; comprou = True
-    elif tipo_upgrade == "dano":
-        if player_state['nivel_dano'] < MAX_NIVEL_DANO and player_state['pontos_upgrade_disponiveis'] >= custo:
-            player_state['pontos_upgrade_disponiveis'] -= custo; player_state['total_upgrades_feitos'] += 1; player_state['nivel_dano'] += 1; comprou = True
+    custo = 1; comprou = False
+    if tipo_upgrade == "motor" and player_state['nivel_motor'] < MAX_NIVEL_MOTOR:
+        player_state['pontos_upgrade_disponiveis'] -= custo; player_state['total_upgrades_feitos'] += 1; player_state['nivel_motor'] += 1; comprou = True
+    elif tipo_upgrade == "dano" and player_state['nivel_dano'] < MAX_NIVEL_DANO:
+        player_state['pontos_upgrade_disponiveis'] -= custo; player_state['total_upgrades_feitos'] += 1; player_state['nivel_dano'] += 1; comprou = True
     elif tipo_upgrade == "auxiliar":
         num = player_state['nivel_aux']
         if num < MAX_AUXILIARES:
             c_aux = CUSTOS_AUXILIARES[num] 
             if player_state['pontos_upgrade_disponiveis'] >= c_aux:
                 player_state['pontos_upgrade_disponiveis'] -= c_aux; player_state['total_upgrades_feitos'] += 1; player_state['nivel_aux'] += 1; comprou = True
-    elif tipo_upgrade == "max_health":
-        if player_state['nivel_max_vida'] < len(s.VIDA_POR_NIVEL) - 1 and player_state['pontos_upgrade_disponiveis'] >= custo:
-            player_state['pontos_upgrade_disponiveis'] -= custo; player_state['total_upgrades_feitos'] += 1; player_state['nivel_max_vida'] += 1; player_state['max_hp'] = s.VIDA_POR_NIVEL[player_state['nivel_max_vida']]; player_state['hp'] += 1; comprou = True
-    elif tipo_upgrade == "escudo":
-        if player_state['nivel_escudo'] < MAX_NIVEL_ESCUDO and player_state['pontos_upgrade_disponiveis'] >= custo:
-            player_state['pontos_upgrade_disponiveis'] -= custo; player_state['total_upgrades_feitos'] += 1; player_state['nivel_escudo'] += 1; comprou = True
+    elif tipo_upgrade == "max_health" and player_state['nivel_max_vida'] < len(s.VIDA_POR_NIVEL) - 1:
+        player_state['pontos_upgrade_disponiveis'] -= custo; player_state['total_upgrades_feitos'] += 1; player_state['nivel_max_vida'] += 1; player_state['max_hp'] = s.VIDA_POR_NIVEL[player_state['nivel_max_vida']]; player_state['hp'] += 1; comprou = True
+    elif tipo_upgrade == "escudo" and player_state['nivel_escudo'] < MAX_NIVEL_ESCUDO:
+        player_state['pontos_upgrade_disponiveis'] -= custo; player_state['total_upgrades_feitos'] += 1; player_state['nivel_escudo'] += 1; comprou = True
 
 def server_calcular_posicao_spawn(pos_referencia_lista, map_width, map_height):
-    for _ in range(10):
-        x = random.uniform(0, map_width); y = random.uniform(0, map_height); longe = True
+    for _ in range(20):
+        x = random.uniform(100, map_width - 100); y = random.uniform(100, map_height - 100); longe = True
         if pos_referencia_lista: 
             for px, py in pos_referencia_lista:
-                if (x - px)**2 + (y - py)**2 < SPAWN_DIST_MIN**2: longe = False; break
+                if (x - px)**2 + (y - py)**2 < 600**2: # Margem maior
+                    longe = False; break
         if longe: return (float(x), float(y))
-    return (float(random.uniform(0, map_width)), float(random.uniform(0, map_height)))
+    return (float(random.uniform(100, map_width - 100)), float(random.uniform(100, map_height - 100)))
 
 def _rotate_vector(x, y, angle_degrees):
     rad = math.radians(angle_degrees); cosa = math.cos(rad); sina = math.sin(rad)
     return x * cosa - y * sina, x * sina + y * cosa
 
 def calc_hit_angle_rad(target_x, target_y, attacker_x, attacker_y):
-    """ Calcula o ângulo de impacto (radianos) do atacante para o alvo. """
-    dx = attacker_x - target_x
-    dy = attacker_y - target_y
+    dx = attacker_x - target_x; dy = attacker_y - target_y
     if dx == 0 and dy == 0: return 0
     return math.atan2(dy, dx)
 
 def update_player_logic(player_state, lista_alvos_busca, agora_ms, map_width, map_height): 
     if agora_ms < player_state.get('tempo_fim_congelamento', 0): player_state['alvo_mouse'] = None; return None
-    if player_state.get('is_pre_match', False): 
-        player_state['alvo_mouse'] = None
-        return None
-    
+    if player_state.get('is_pre_match', False): player_state['alvo_mouse'] = None; return None
     is_lento = agora_ms < player_state.get('tempo_fim_lentidao', 0)
 
     if player_state['alvo_lock']:
@@ -198,8 +190,7 @@ def update_player_logic(player_state, lista_alvos_busca, agora_ms, map_width, ma
         sy = player_state['y'] + (-math.cos(rad) * OFFSET_PONTA_TIRO)
         
         tipo_base = 'player_pvp' if player_state.get('is_pvp') else 'player_pve'
-        if player_state['nivel_dano'] >= s.MAX_NIVEL_DANO:
-            tipo_base += '_max' 
+        if player_state['nivel_dano'] >= s.MAX_NIVEL_DANO: tipo_base += '_max' 
 
         proj = {
             'id': f"{player_state['nome']}_{agora_ms}", 'owner_nome': player_state['nome'],
@@ -219,9 +210,60 @@ def update_player_logic(player_state, lista_alvos_busca, agora_ms, map_width, ma
     return None
 
 # ==================================================================================
-# LÓGICA DE IA DOS INIMIGOS (BOSSES E MINIONS)
+# LÓGICA DE PROJÉTEIS (HOMING SERVER-SIDE CORRIGIDO)
 # ==================================================================================
-# Re-implementando as funções de IA diretamente aqui para evitar dependência circular ou falta de código
+def update_projectile_physics(proj, all_targets, agora_ms):
+    # Move linearmente primeiro
+    proj['x'] += proj.get('vel_x', 0)
+    proj['y'] += proj.get('vel_y', 0)
+
+    # Lógica de Homing
+    if proj.get('tipo_proj') == 'teleguiado' and proj.get('alvo_id'):
+        target = next((t for t in all_targets if t.get('id', t.get('nome')) == proj['alvo_id']), None)
+        
+        if target and target.get('hp', 0) > 0:
+            curr_pos = pygame.math.Vector2(proj['x'], proj['y'])
+            target_pos = pygame.math.Vector2(target['x'], target['y'])
+            
+            desired_vec = target_pos - curr_pos
+            dist = desired_vec.length()
+            
+            # Correção do "Passou do alvo": usa Dot Product com tolerância maior (-0.5)
+            # Se estiver muito perto (< 50), vira normal para evitar "mosquito"
+            if dist < 50:
+                 proj['tipo_proj'] = 'normal'
+                 return
+
+            curr_vel = pygame.math.Vector2(proj['vel_x'], proj['vel_y'])
+            
+            if curr_vel.length() > 0 and dist > 0:
+                 # Se o produto escalar for negativo, significa que o alvo está "atrás" do movimento
+                 # Paramos de perseguir para não ficar orbitando
+                 if curr_vel.normalize().dot(desired_vec.normalize()) < -0.2: 
+                     proj['tipo_proj'] = 'normal'
+                     return
+
+            if dist > 0:
+                desired_dir = desired_vec.normalize()
+                
+                if curr_vel.length() == 0: curr_vel = desired_dir * proj['velocidade']
+                
+                # Fator de curva mais agressivo para acertar
+                STEER_FACTOR = 0.20 
+                
+                new_dir = curr_vel.normalize().lerp(desired_dir, STEER_FACTOR)
+                if new_dir.length() > 0: new_dir = new_dir.normalize()
+                
+                new_vel = new_dir * proj['velocidade']
+                
+                proj['vel_x'] = new_vel.x
+                proj['vel_y'] = new_vel.y
+        else:
+            proj['tipo_proj'] = 'normal'
+
+# ==================================================================================
+# LÓGICA DE IA DOS INIMIGOS (MANTIDA)
+# ==================================================================================
 def update_npc_generic_logic(npc, players_dict, agora_ms):
     if npc.get('hp', 0) <= 0: return None
     players_pos_lista = [(p['x'], p['y']) for p in players_dict.values() if p['hp'] > 0]
@@ -370,7 +412,6 @@ def update_minion_logic(npc, players_dict, agora_ms, room_ref):
              return {'id': f"{npc['id']}_{agora_ms}", 'owner_nome': npc['id'], 'x': npc['x'], 'y': npc['y'], 'pos_inicial_x': npc['x'], 'pos_inicial_y': npc['y'], 'dano': 1, 'tipo': 'npc', 'tipo_proj': 'normal', 'velocidade': VELOCIDADE_PROJETIL_NPC, 'vel_x': vel_x, 'vel_y': vel_y, 'angulo_rad': rad_tiro}
     return None
 
-# Spawners
 def server_spawnar_inimigo_aleatorio(x, y, npc_id):
     chance = random.random(); tipo = "perseguidor"; hp = 3; max_hp = 3; tamanho = 30; cooldown_tiro = COOLDOWN_TIRO_PERSEGUIDOR; pontos = 5
     if chance < 0.05: tipo = "bomba"; hp, max_hp = 1, 1; tamanho = 25; cooldown_tiro = 999999; pontos = 3
@@ -439,7 +480,11 @@ class PveRoom(GameRoom):
         self.agora_ms = int(time.time() * 1000)
         with self.lock:
             humanos_count = sum(1 for p in self.players.values() if not p.get('is_bot'))
-            MAX_BOTS_SALA = 4; target_bots = max(0, MAX_BOTS_SALA - humanos_count)
+            MAX_ENTIDADES_SALA = 10
+            MAX_BOTS_DESEJADOS = 4
+            slots_livres = max(0, MAX_ENTIDADES_SALA - humanos_count)
+            target_bots = min(MAX_BOTS_DESEJADOS, slots_livres)
+
             bots_remover = self.bot_manager.manage_bot_population(target_bots)
             for nome in bots_remover:
                 key_to_remove = None
@@ -488,10 +533,11 @@ class PveRoom(GameRoom):
             if new_proj: novos_projeteis.append(new_proj)
         self.projectiles.extend(novos_projeteis)
         
-        # C. Projéteis e Colisões
         toremove_proj = []; toremove_npc = []
         for proj in self.projectiles:
-            proj['x'] += proj.get('vel_x', 0); proj['y'] += proj.get('vel_y', 0)
+            # --- ATUALIZAÇÃO FÍSICA PROJÉTEIS (Incluindo Homing) ---
+            update_projectile_physics(proj, living_targets, self.agora_ms)
+
             if (proj['x']-proj['pos_inicial_x'])**2 + (proj['y']-proj['pos_inicial_y'])**2 > MAX_DISTANCIA_TIRO_SQ: toremove_proj.append(proj); continue
             if proj['tipo'] == 'player_pve' or proj['tipo'] == 'player_pve_max':
                 hit = False
@@ -507,6 +553,8 @@ class PveRoom(GameRoom):
                 if not hit:
                     for target in living_players:
                         if target['nome'] == proj['owner_nome']: continue
+                        if self.agora_ms - target.get('spawn_time', 0) < SPAWN_PROTECTION_MS: continue # Proteção de Spawn
+                        
                         if (target['x']-proj['x'])**2 + (target['y']-proj['y'])**2 < COLISAO_JOGADOR_PROJ_DIST_SQ:
                             dano_base = proj['dano']; fator_escudo = min(target['nivel_escudo'] * REDUCAO_DANO_POR_NIVEL, 75) / 100.0
                             target['hp'] -= dano_base * (1.0 - fator_escudo); target['ultimo_hit_tempo'] = self.agora_ms; target['esta_regenerando'] = False
@@ -517,6 +565,8 @@ class PveRoom(GameRoom):
             elif proj['tipo'] == 'npc':
                 hit = False
                 for p in living_players:
+                    if self.agora_ms - p.get('spawn_time', 0) < SPAWN_PROTECTION_MS: continue # Proteção de Spawn
+                    
                     if (p['x']-proj['x'])**2 + (p['y']-proj['y'])**2 < COLISAO_JOGADOR_PROJ_DIST_SQ:
                         dano = 1 * (1 - min(p['nivel_escudo'] * REDUCAO_DANO_POR_NIVEL / 100.0, 0.75)); p['hp'] -= dano
                         p['ultimo_hit_tempo'] = self.agora_ms; p['esta_regenerando'] = False
@@ -526,19 +576,17 @@ class PveRoom(GameRoom):
                         hit = True; break
                 if hit: toremove_proj.append(proj); continue
         
-        # --- D. CORREÇÃO: COLISÃO FÍSICA NPC vs PLAYER (RAMMING) ---
         for p in living_players:
             for npc in self.npcs:
                 if npc.get('hp') <= 0: continue
-                # Distância simples: soma dos raios (Player ~15, NPC ~15-50)
-                # Usamos uma distancia media para simplificar ou calculamos baseada no tamanho
                 raio_npc = npc.get('tamanho', 30) / 2
                 raio_player = 15
                 dist_colisao_sq = (raio_npc + raio_player) ** 2
                 
                 dist_sq = (p['x'] - npc['x'])**2 + (p['y'] - npc['y'])**2
                 if dist_sq < dist_colisao_sq:
-                    # Dano no Player
+                    if self.agora_ms - p.get('spawn_time', 0) < SPAWN_PROTECTION_MS: continue # Proteção
+                    
                     dano_npc = 1
                     if npc['tipo'] == 'bomba': dano_npc = 3
                     
@@ -548,16 +596,13 @@ class PveRoom(GameRoom):
                     p['esta_regenerando'] = False
                     p['last_hit_angle'] = calc_hit_angle_rad(p['x'], p['y'], npc['x'], npc['y'])
                     
-                    # Dano no NPC (Choque)
                     npc['hp'] -= 1 
                     npc['ia_ultimo_hit_tempo'] = self.agora_ms
-                    
-                    if npc['tipo'] == 'bomba': npc['hp'] = 0 # Kamikaze morre
+                    if npc['tipo'] == 'bomba': npc['hp'] = 0 
                     
                     if npc['hp'] <= 0:
                         toremove_npc.append(npc)
                         server_ganhar_pontos(p, npc.get('pontos_por_morte', 5))
-        # -----------------------------------------------------------
         
         for p in toremove_proj: 
             if p in self.projectiles: self.projectiles.remove(p)
@@ -641,7 +686,9 @@ class PvpRoom(GameRoom):
                                 self.projectiles.append({'id': f"{p['nome']}_aux{i}_{self.agora_ms}", 'owner_nome': p['nome'], 'x': ax, 'y': ay, 'pos_inicial_x': ax, 'pos_inicial_y': ay, 'dano': s.DANO_POR_NIVEL[p['nivel_dano']], 'tipo': tipo_aux, 'tipo_proj': 'teleguiado', 'velocidade': 14, 'alvo_id': t_id, 'timestamp_criacao': self.agora_ms, 'vel_x': dir_x * 14, 'vel_y': dir_y * 14})
         toremove = []
         for proj in self.projectiles:
-            proj['x'] += proj.get('vel_x', 0); proj['y'] += proj.get('vel_y', 0)
+            # --- ATUALIZAÇÃO FÍSICA PVP ---
+            update_projectile_physics(proj, living, self.agora_ms)
+
             if not (0 <= proj['x'] <= pvp_s.MAP_WIDTH and 0 <= proj['y'] <= pvp_s.MAP_HEIGHT): toremove.append(proj); continue
             for target in living:
                 if target['nome'] != proj['owner_nome']:
@@ -689,7 +736,7 @@ def handle_client(conn, addr):
             with room.lock: refs = [(p['x'], p['y']) for p in room.players.values()]
             sx, sy = server_calcular_posicao_spawn(refs, s.MAP_WIDTH, s.MAP_HEIGHT)
         else: sx, sy = pvp_s.SPAWN_LOBBY.x, pvp_s.SPAWN_LOBBY.y
-        p_state = {'conn': conn, 'nome': name, 'is_bot': False, 'is_pvp': (mode=="PVP"), 'handshake_completo': True, 'x': sx, 'y': sy, 'angulo': 0, 'hp': float(s.VIDA_POR_NIVEL[1]), 'max_hp': float(s.VIDA_POR_NIVEL[1]), 'teclas': {'w':False, 'a':False, 's':False, 'd':False, 'space':False}, 'alvo_mouse': None, 'alvo_lock': None, 'ultimo_tiro_tempo': 0, 'cooldown_tiro': COOLDOWN_TIRO, 'pontos': 0, 'pontos_upgrade_disponiveis': (10 if mode == "PVP" else 0), 'total_upgrades_feitos': 0, '_pontos_acumulados_para_upgrade': 0, '_limiar_pontos_atual': PONTOS_LIMIARES_PARA_UPGRADE[0], '_indice_limiar': 0, 'nivel_motor': 1, 'nivel_dano': 1, 'nivel_max_vida': 1, 'nivel_escudo': 0, 'nivel_aux': 0, 'aux_cooldowns': [0]*4, 'last_hit_angle': 0}
+        p_state = {'conn': conn, 'nome': name, 'is_bot': False, 'is_pvp': (mode=="PVP"), 'handshake_completo': True, 'x': sx, 'y': sy, 'angulo': 0, 'hp': float(s.VIDA_POR_NIVEL[1]), 'max_hp': float(s.VIDA_POR_NIVEL[1]), 'teclas': {'w':False, 'a':False, 's':False, 'd':False, 'space':False}, 'alvo_mouse': None, 'alvo_lock': None, 'ultimo_tiro_tempo': 0, 'cooldown_tiro': COOLDOWN_TIRO, 'pontos': 0, 'pontos_upgrade_disponiveis': (10 if mode == "PVP" else 0), 'total_upgrades_feitos': 0, '_pontos_acumulados_para_upgrade': 0, '_limiar_pontos_atual': PONTOS_LIMIARES_PARA_UPGRADE[0], '_indice_limiar': 0, 'nivel_motor': 1, 'nivel_dano': 1, 'nivel_max_vida': 1, 'nivel_escudo': 0, 'nivel_aux': 0, 'aux_cooldowns': [0]*4, 'last_hit_angle': 0, 'spawn_time': int(time.time()*1000)}
         with room.lock: room.players[conn] = p_state
         prefix = "BEMVINDO_PVP" if mode == "PVP" else "BEMVINDO"
         conn.sendall(f"{prefix}|{name}|{int(sx)}|{int(sy)}\n".encode('utf-8')); print(f"[JOIN] {name} -> {room.room_id}")
@@ -702,7 +749,7 @@ def handle_client(conn, addr):
                 me = room.players[conn]
                 if me['hp'] <= 0 and not me['is_pvp'] and "RESPAWN_ME" in lines:
                         refs = [(p['x'], p['y']) for p in room.players.values()]; rx, ry = server_calcular_posicao_spawn(refs, s.MAP_WIDTH, s.MAP_HEIGHT)
-                        me['x'] = rx; me['y'] = ry; me['nivel_max_vida'] = 1; me['max_hp'] = float(s.VIDA_POR_NIVEL[1]); me['hp'] = me['max_hp']; me['alvo_lock'] = None; me['pontos'] = 0; me['pontos_upgrade_disponiveis'] = 0; me['total_upgrades_feitos'] = 0; me['_pontos_acumulados_para_upgrade'] = 0; me['_limiar_pontos_atual'] = PONTOS_LIMIARES_PARA_UPGRADE[0]; me['_indice_limiar'] = 0; me['nivel_motor'] = 1; me['nivel_dano'] = 1; me['nivel_escudo'] = 0; me['nivel_aux'] = 0; me['aux_cooldowns'] = [0]*4; me['tempo_fim_lentidao'] = 0; me['tempo_fim_congelamento'] = 0; continue
+                        me['x'] = rx; me['y'] = ry; me['nivel_max_vida'] = 1; me['max_hp'] = float(s.VIDA_POR_NIVEL[1]); me['hp'] = me['max_hp']; me['alvo_lock'] = None; me['pontos'] = 0; me['pontos_upgrade_disponiveis'] = 0; me['total_upgrades_feitos'] = 0; me['_pontos_acumulados_para_upgrade'] = 0; me['_limiar_pontos_atual'] = PONTOS_LIMIARES_PARA_UPGRADE[0]; me['_indice_limiar'] = 0; me['nivel_motor'] = 1; me['nivel_dano'] = 1; me['nivel_escudo'] = 0; me['nivel_aux'] = 0; me['aux_cooldowns'] = [0]*4; me['tempo_fim_lentidao'] = 0; me['tempo_fim_congelamento'] = 0; me['spawn_time'] = int(time.time()*1000); continue
                 for l in lines:
                     if l == "W_DOWN": me['teclas']['w'] = True; me['alvo_mouse'] = None
                     elif l == "W_UP": me['teclas']['w'] = False

@@ -10,7 +10,8 @@ from settings import (AZUL_NAVE, PONTA_NAVE, VERDE_AUXILIAR, LARANJA_BOT,
                       RASTRO_MAX_PARTICULAS, RASTRO_DURACAO, RASTRO_TAMANHO_INICIAL, COR_RASTRO_MOTOR,
                       VERMELHO_VIDA_FUNDO, VERDE_VIDA, MAX_TOTAL_UPGRADES, MAX_DISTANCIA_SOM_AUDIVEL, PANNING_RANGE_SOM, VOLUME_BASE_TIRO_PLAYER,
                       PONTOS_LIMIARES_PARA_UPGRADE, PONTOS_SCORE_PARA_MUDAR_LIMIAR, CUSTOS_AUXILIARES, FONT_NOME_JOGADOR, BRANCO, VELOCIDADE_ROTACAO_NAVE,
-                      REGEN_POR_TICK, REGEN_TICK_RATE, ROXO_TIRO_LENTO, AZUL_CONGELANTE, DANO_POR_NIVEL, VIDA_POR_NIVEL) 
+                      REGEN_POR_TICK, REGEN_TICK_RATE, ROXO_TIRO_LENTO, AZUL_CONGELANTE, DANO_POR_NIVEL, VIDA_POR_NIVEL,
+                      COR_ESCUDO, COR_LENTIDAO, COR_CONGELAMENTO) 
 from projectiles import Projetil, ProjetilTeleguiadoJogador
 from effects import Explosao
 from entities import Obstaculo, NaveRegeneradora 
@@ -93,7 +94,12 @@ class Nave(pygame.sprite.Sprite):
         super().__init__()
         self.nome = nome; self.posicao = pygame.math.Vector2(x, y); self.largura_base = 30; self.altura = 30; self.cor = cor
         self.velocidade_rotacao = VELOCIDADE_ROTACAO_NAVE; self.angulo = 0.0; self.velocidade_movimento_base = 4
+        
         self.tempo_fim_congelamento = 0
+        self.tempo_fim_lentidao = 0
+        self.is_slowed = False
+        self.is_frozen = False
+        
         tamanho_surface = max(self.largura_base, self.altura) + 10; self.imagem_original = pygame.Surface((tamanho_surface, tamanho_surface), pygame.SRCALPHA)
         centro_x = tamanho_surface / 2; centro_y = tamanho_surface / 2; ponto_topo = (centro_x, centro_y - self.altura / 2); ponto_base_esq = (centro_x - self.largura_base / 2, centro_y + self.altura / 2); ponto_base_dir = (centro_x + self.largura_base / 2, centro_y + self.altura / 2)
         pygame.draw.polygon(self.imagem_original, self.cor, [ponto_topo, ponto_base_esq, ponto_base_dir])
@@ -106,7 +112,7 @@ class Nave(pygame.sprite.Sprite):
         self.quer_virar_esquerda = False; self.quer_virar_direita = False; self.quer_mover_frente = False; self.quer_mover_tras = False; self.quer_atirar = False
         self.alvo_selecionado = None; self.posicao_alvo_mouse = None; self.tempo_barra_visivel = 2000; self.ultimo_hit_tempo = 0; self.ultimo_atacante = None
         self.mostrar_escudo_fx = False; self.angulo_impacto_rad_pygame = 0; self.tempo_escudo_fx = 0; self.rastro_particulas = []
-        self.tempo_fim_lentidao = 0; self.lista_todas_auxiliares = []; self.grupo_auxiliares_ativos = pygame.sprite.Group()
+        self.lista_todas_auxiliares = []; self.grupo_auxiliares_ativos = pygame.sprite.Group()
         for pos in self.POSICOES_AUXILIARES: self.lista_todas_auxiliares.append(NaveAuxiliar(self, pos))
         self.tempo_spawn_protecao_input = 0; self.esta_regenerando = False; self.nave_regeneradora_sprite = pygame.sprite.GroupSingle(); self.ultimo_tick_regeneracao = 0
         
@@ -115,13 +121,18 @@ class Nave(pygame.sprite.Sprite):
         if self.esta_regenerando:
             self.esta_regenerando = False
             for sprite in self.nave_regeneradora_sprite: sprite.kill() 
+            
     def iniciar_regeneracao(self, grupo_efeitos_visuais):
         if self.vida_atual >= self.max_vida: return
         if self.esta_regenerando: return
         if self.quer_mover_frente or self.quer_mover_tras or self.posicao_alvo_mouse is not None: return
         print(f"[{self.nome}] Iniciando regeneração..."); self.esta_regenerando = True; self.ultimo_tick_regeneracao = pygame.time.get_ticks()
+        
+        # --- CORREÇÃO: REATIVADO SPRITE PARA LOCAL PLAYER ---
         nova_nave_regen = NaveRegeneradora(self); self.nave_regeneradora_sprite.add(nova_nave_regen)
         if grupo_efeitos_visuais is not None: grupo_efeitos_visuais.add(nova_nave_regen)
+        # ----------------------------------------------------
+
     def toggle_regeneracao(self, grupo_efeitos_visuais):
         if self.esta_regenerando: self.parar_regeneracao()
         else: self.iniciar_regeneracao(grupo_efeitos_visuais)
@@ -163,9 +174,15 @@ class Nave(pygame.sprite.Sprite):
 
     def mover(self):
         agora = pygame.time.get_ticks()
-        if agora < self.tempo_fim_congelamento: self.posicao_alvo_mouse = None; return
+        
+        self.is_frozen = agora < self.tempo_fim_congelamento
+        self.is_slowed = agora < self.tempo_fim_lentidao
+        
+        if self.is_frozen: self.posicao_alvo_mouse = None; return
+        
         velocidade_atual = self.velocidade_movimento_base
-        if agora < self.tempo_fim_lentidao: velocidade_atual *= 0.4
+        if self.is_slowed: velocidade_atual *= 0.4
+        
         nova_pos = pygame.math.Vector2(self.posicao.x, self.posicao.y); movendo_frente = False
         if self.quer_mover_frente or self.quer_mover_tras:
             radianos = math.radians(self.angulo)
@@ -278,6 +295,28 @@ class Nave(pygame.sprite.Sprite):
             else: print(f"[{self.nome}] Nível máximo de escudo atingido!")
         return comprou
     def coletar_vida(self, quantidade): return False
+    
+    def draw_shield(self, surface, camera):
+        if self.nivel_escudo <= 0: return
+        raio = 20 + self.nivel_escudo * 2
+        shield_surf = pygame.Surface((raio * 2, raio * 2), pygame.SRCALPHA)
+        pygame.draw.circle(shield_surf, COR_ESCUDO, (raio, raio), raio)
+        rect_mundo = pygame.Rect(0, 0, 0, 0)
+        rect_mundo.center = self.posicao
+        pos_tela = camera.apply(rect_mundo).center
+        surface.blit(shield_surf, (pos_tela[0] - raio, pos_tela[1] - raio))
+
+    def draw_effects(self, surface, camera):
+        if not self.is_slowed and not self.is_frozen: return
+        raio = 25
+        cor = COR_CONGELAMENTO if self.is_frozen else COR_LENTIDAO
+        effect_surf = pygame.Surface((raio * 2, raio * 2), pygame.SRCALPHA)
+        pygame.draw.circle(effect_surf, cor, (raio, raio), raio)
+        rect_mundo = pygame.Rect(0, 0, 0, 0)
+        rect_mundo.center = self.posicao
+        pos_tela = camera.apply(rect_mundo).center
+        surface.blit(effect_surf, (pos_tela[0] - raio, pos_tela[1] - raio))
+
     def desenhar(self, surface, camera, client_socket=None):
         agora = pygame.time.get_ticks(); particulas_vivas = []
         for particula in self.rastro_particulas:
@@ -289,6 +328,14 @@ class Nave(pygame.sprite.Sprite):
                 temp_surf = pygame.Surface((tamanho_atual, tamanho_atual), pygame.SRCALPHA); pygame.draw.circle(temp_surf, cor_atual, (raio_desenho, raio_desenho), raio_desenho)
                 surface.blit(temp_surf, (pos_tela_centro[0] - raio_desenho, pos_tela_centro[1] - raio_desenho))
         self.rastro_particulas = particulas_vivas
+        
+        self.draw_shield(surface, camera)
+        self.draw_effects(surface, camera)
+        
+        # --- REMOVIDO: CÓDIGO VISUAL MANUAL DE REGENERAÇÃO ---
+        # (Voltamos a usar o Sprite criado em iniciar_regeneracao)
+        # -----------------------------------------------------
+
         self.image = pygame.transform.rotate(self.imagem_original, self.angulo); rect_desenho = self.image.get_rect(center = self.posicao)
         if client_socket: 
             if agora < self.tempo_fim_congelamento: self.image.fill(AZUL_CONGELANTE, special_flags=pygame.BLEND_RGB_ADD)
@@ -297,8 +344,8 @@ class Nave(pygame.sprite.Sprite):
              if agora < self.tempo_fim_congelamento: self.image.fill(AZUL_CONGELANTE, special_flags=pygame.BLEND_RGB_ADD)
              elif agora < self.tempo_fim_lentidao: self.image.fill(ROXO_TIRO_LENTO, special_flags=pygame.BLEND_RGB_MULT)
         surface.blit(self.image, camera.apply(rect_desenho))
+        
         if self.mostrar_escudo_fx:
-            agora = pygame.time.get_ticks()
             if agora - self.tempo_escudo_fx < DURACAO_FX_ESCUDO:
                 raio_escudo = self.altura * 0.8 + 10; largura_arco_rad = math.radians(90); cor_fx_com_alpha = COR_ESCUDO_FX
                 angulo_central_invertido = -self.angulo_impacto_rad_pygame; angulo_inicio_pygame_rad = angulo_central_invertido - (largura_arco_rad / 2); angulo_fim_pygame_rad = angulo_central_invertido + (largura_arco_rad / 2)
@@ -307,6 +354,7 @@ class Nave(pygame.sprite.Sprite):
                 try: pygame.draw.arc(temp_surface, cor_fx_com_alpha, (0, 0, rect_escudo_tela.width, rect_escudo_tela.height), angulo_inicio_pygame_rad, angulo_fim_pygame_rad, width=3); surface.blit(temp_surface, rect_escudo_tela.topleft)
                 except ValueError: pass
             else: self.mostrar_escudo_fx = False
+            
     def desenhar_vida(self, surface, camera):
         agora = pygame.time.get_ticks()
         if agora - self.ultimo_hit_tempo < self.tempo_barra_visivel:
@@ -331,22 +379,12 @@ class Player(Nave):
             self.update_regeneracao(); self.rotacionar(); self.mover()
             if estado_jogo == "JOGANDO" or estado_jogo == "PVP_PLAYING": self.lidar_com_tiros(grupo_projeteis_jogador, pos_ouvinte if pos_ouvinte is not None else self.posicao)
         else:
-            # --- LÓGICA DE RASTRO DE MOTOR ONLINE (MOUSE + TECLADO) ---
             movendo = self.quer_mover_frente
-            
-            # Verifica movimento pelo mouse (se há destino e está longe o suficiente)
             if self.posicao_alvo_mouse:
                  if self.posicao.distance_to(self.posicao_alvo_mouse) > 5.0:
                      movendo = True
-                 else:
-                     # Opcional: Limpa se chegou muito perto (comportamento visual)
-                     # mas cuidado pois o servidor dita a posição real.
-                     # Vamos manter simples: se tem alvo longe, considera movendo.
-                     pass
-            
             if movendo and self.nivel_motor == MAX_NIVEL_MOTOR:
                  self._gerar_particulas_rastro()
-            # ----------------------------------------------------------
 
     def processar_input_humano(self, camera, estado_jogo="JOGANDO"):
         agora = pygame.time.get_ticks()
@@ -396,7 +434,6 @@ class NaveBot(Nave):
         if (esta_tentando_parar_para_regen or esta_parado_na_borda) and self.alvo_selecionado is None and not self.esta_regenerando:
             self.quer_mover_frente = False; self.posicao_alvo_mouse = None; self.iniciar_regeneracao(grupo_efeitos_visuais_ref)
         elif (not esta_tentando_parar_para_regen and not esta_parado_na_borda) or (self.alvo_selecionado is not None): self.parar_regeneracao()
-    # --- FIM DA ALTERAÇÃO ---
     def processar_upgrades_ia(self):
         if self.pontos_upgrade_disponiveis > 0 and self.total_upgrades_feitos < MAX_TOTAL_UPGRADES:
             if self.nivel_motor < MAX_NIVEL_MOTOR: self.comprar_upgrade("motor")

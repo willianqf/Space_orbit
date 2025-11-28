@@ -95,7 +95,7 @@ class Renderer:
             
             if nome in online_players_last_frame:
                 old_hp = online_players_last_frame[nome]['hp']
-                if state['hp'] < old_hp and state['nivel_escudo'] >= s.MAX_NIVEL_ESCUDO: self.shield_hit_times[nome] = {'time': pygame.time.get_ticks(), 'angle': state.get('last_hit_angle', 0)}
+                if state['hp'] < old_hp and state.get('nivel_escudo', 0) >= s.MAX_NIVEL_ESCUDO: self.shield_hit_times[nome] = {'time': pygame.time.get_ticks(), 'angle': state.get('last_hit_angle', 0)}
 
             imagem_base_outro = nave_player.imagem_original
             if "Bot_" in nome: 
@@ -109,47 +109,58 @@ class Renderer:
             elif state.get('is_lento', False): img_rotacionada.fill(s.ROXO_TIRO_LENTO, special_flags=pygame.BLEND_RGB_MULT)
             self.tela.blit(img_rotacionada, self.camera.apply(pos_rect))
             
-            # --- MODIFICAÇÃO: Desenha Arco do Escudo ---
+            # Efeitos de Escudo e Status
+            nivel_escudo = state.get('nivel_escudo', 0)
+            if nivel_escudo > 0:
+                raio_escudo = 20 + nivel_escudo * 2
+                surf_escudo = pygame.Surface((raio_escudo*2, raio_escudo*2), pygame.SRCALPHA)
+                cor_esc = s.COR_ESCUDO
+                pygame.draw.circle(surf_escudo, cor_esc, (raio_escudo, raio_escudo), raio_escudo)
+                pos_tela_centro = self.camera.apply(pos_rect).center
+                self.tela.blit(surf_escudo, (pos_tela_centro[0] - raio_escudo, pos_tela_centro[1] - raio_escudo))
+            
+            # Impacto no Escudo
             if nome in self.shield_hit_times:
                 hit_data = self.shield_hit_times[nome]
                 tempo_hit = hit_data['time']
                 angle_hit = hit_data['angle']
                 if pygame.time.get_ticks() - tempo_hit < s.DURACAO_FX_ESCUDO:
-                    raio_escudo = 30; largura_arco_rad = math.radians(90); cor_fx_com_alpha = s.COR_ESCUDO_FX
-                    # O ângulo que vem do servidor é o ângulo do vetor "Atacante -> Alvo".
-                    # O escudo deve aparecer na direção de onde veio o tiro (Atacante).
-                    # Portanto, usamos angle_hit + PI (180 graus) para inverter, ou direto?
-                    # Se o atacante está em (0,0) e eu em (10,0), angle é 0 (direita). Eu fui atingido pela esquerda.
-                    # O arco deve estar na esquerda. Esquerda é PI rad.
-                    # Entao o centro do arco é angle_hit + PI.
-                    angulo_central_invertido = - (angle_hit + math.pi) 
+                    raio_escudo_fx = 30; largura_arco_rad = math.radians(90); cor_fx_com_alpha = s.COR_ESCUDO_FX
+                    angulo_central = -angle_hit
+                    angulo_inicio = angulo_central - (largura_arco_rad / 2)
+                    angulo_fim = angulo_central + (largura_arco_rad / 2)
                     
-                    # Ajuste para coordenadas do Pygame (y invertido, e arco começa na direita)
-                    # Pygame draw.arc usa radianos, 0 é direita, sentido horário? Não, anti-horário.
-                    # Vamos usar a mesma logica do offline: -self.angulo_impacto_rad_pygame
-                    # No offline: angulo_impacto = atan2(dy, dx) do vetor PROJETIL -> PLAYER.
-                    # No online: angle_hit = atan2(dy, dx) do vetor ATACANTE -> PLAYER.
-                    # É o mesmo vetor. Então a lógica é a mesma.
-                    angulo_central_invertido = -angle_hit
-                    
-                    angulo_inicio_pygame_rad = angulo_central_invertido - (largura_arco_rad / 2)
-                    angulo_fim_pygame_rad = angulo_central_invertido + (largura_arco_rad / 2)
-                    
-                    pos_tela = self.camera.apply(pos_rect).center
-                    rect_escudo_tela = pygame.Rect(0, 0, raio_escudo*2, raio_escudo*2); rect_escudo_tela.center = pos_tela
-                    surf_escudo = pygame.Surface(rect_escudo_tela.size, pygame.SRCALPHA)
-                    
-                    # Pygame arc
-                    try: pygame.draw.arc(surf_escudo, cor_fx_com_alpha, (0,0,rect_escudo_tela.width, rect_escudo_tela.height), angulo_inicio_pygame_rad, angulo_fim_pygame_rad, width=3)
+                    pos_tela_centro = self.camera.apply(pos_rect).center
+                    rect_escudo_tela = pygame.Rect(0, 0, raio_escudo_fx*2, raio_escudo_fx*2); rect_escudo_tela.center = pos_tela_centro
+                    surf_escudo_fx = pygame.Surface(rect_escudo_tela.size, pygame.SRCALPHA)
+                    try: pygame.draw.arc(surf_escudo_fx, cor_fx_com_alpha, (0,0,rect_escudo_tela.width, rect_escudo_tela.height), angulo_inicio, angulo_fim, width=3)
                     except: pass
-                    self.tela.blit(surf_escudo, rect_escudo_tela.topleft)
+                    self.tela.blit(surf_escudo_fx, rect_escudo_tela.topleft)
                 else: del self.shield_hit_times[nome]
-            # -------------------------------------------
-            
+
+            # --- VISUAL DA NAVE DE REGENERAÇÃO (CORRIGIDO) ---
             if state.get('esta_regenerando', False):
-                angulo_orbita_simples = (pygame.time.get_ticks() / 10) % 360; rad = math.radians(angulo_orbita_simples); raio_orbita = 50
-                pos_regen_x = state['x'] + math.cos(rad) * raio_orbita; pos_regen_y = state['y'] + math.sin(rad) * raio_orbita
-                pos_tela_regen = self.camera.apply(pygame.Rect(pos_regen_x, pos_regen_y, 0, 0)).topleft; pygame.draw.circle(self.tela, s.LILAS_REGEN, pos_tela_regen, 9, 2)
+                raio_orbita = 50
+                tamanho_nave_regen = 18
+                velocidade_giro = 0.005
+                
+                angulo_orbita = (pygame.time.get_ticks() * velocidade_giro) % (2 * math.pi)
+                
+                pos_regen_x = state['x'] + math.cos(angulo_orbita) * raio_orbita
+                pos_regen_y = state['y'] + math.sin(angulo_orbita) * raio_orbita
+                
+                surf_regen = pygame.Surface((tamanho_nave_regen, tamanho_nave_regen), pygame.SRCALPHA)
+                c = tamanho_nave_regen / 2
+                pts = [(c, 0), (0, tamanho_nave_regen), (tamanho_nave_regen, tamanho_nave_regen)]
+                pygame.draw.polygon(surf_regen, s.LILAS_REGEN, pts)
+                
+                rot_angle = math.degrees(angulo_orbita)
+                surf_regen_rot = pygame.transform.rotate(surf_regen, -rot_angle)
+                
+                rect_regen = surf_regen_rot.get_rect(center=(pos_regen_x, pos_regen_y))
+                self.tela.blit(surf_regen_rot, self.camera.apply(rect_regen))
+            # -----------------------------------------------
+            
             num_aux_outro = state.get('nivel_aux', 0)
             if num_aux_outro > 0:
                 for i in range(num_aux_outro):
@@ -199,15 +210,12 @@ class Renderer:
                                grupo_projeteis_bots, grupo_projeteis_inimigos):
         for inimigo in grupo_inimigos: inimigo.desenhar_vida(self.tela, self.camera); self.tela.blit(inimigo.image, self.camera.apply(inimigo.rect))
         
-        # --- CORREÇÃO: Indentação do loop de auxiliares ---
         for bot in grupo_bots: 
             bot.desenhar(self.tela, self.camera)
             bot.desenhar_vida(self.tela, self.camera)
             bot.desenhar_nome(self.tela, self.camera)
-            # Agora o loop roda para CADA bot, não apenas para o último
             for aux in bot.grupo_auxiliares_ativos: 
                 aux.desenhar(self.tela, self.camera)
-        # --------------------------------------------------
 
         for proj in grupo_projeteis_player: self.tela.blit(proj.image, self.camera.apply(proj.rect))
         for proj in grupo_projeteis_bots: self.tela.blit(proj.image, self.camera.apply(proj.rect))

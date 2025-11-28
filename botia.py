@@ -1,12 +1,3 @@
-# botia.py
-# ============================================================================
-# INTELIGÊNCIA ARTIFICIAL DOS BOTS OFFLINE (VERSÃO FINAL - SOBREVIVÊNCIA)
-# ============================================================================
-# Ajustes:
-# - Bots agora podem INTERROMPER a regeneração para desviar de tiros
-# - Mantido Kiting agressivo e Strafe
-# - Mantida correção de naves auxiliares
-# ============================================================================
 
 import pygame
 import random
