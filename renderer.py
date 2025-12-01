@@ -7,16 +7,48 @@ import ui
 from camera import Camera
 from pause_menu import PauseMenu
 from Redes.network_client import NetworkClient
-from ships import Player, NaveBot, NaveAuxiliar, Nave, NaveRegeneradora, tocar_som_posicional
-from effects import Explosao
+from ships import Player, NaveBot, NaveAuxiliar, Nave, tocar_som_posicional
 from entities import Obstaculo
+from effects import Explosao
 
 class Renderer:
     def __init__(self, tela: pygame.Surface, camera: Camera, pause_manager: PauseMenu, 
                  network_client: NetworkClient, lista_estrelas: list):
-        self.tela = tela; self.camera = camera; self.pause_manager = pause_manager; self.network_client = network_client; self.lista_estrelas = lista_estrelas
+        self.tela = tela
+        self.camera = camera
+        self.pause_manager = pause_manager
+        self.network_client = network_client
+        self.lista_estrelas = lista_estrelas
         self.ui = ui 
         self.shield_hit_times = {}
+        
+        # Define a cor aqui para garantir que exista
+        self.COR_REGEN_LILAS = (180, 100, 255)
+
+    def _desenhar_efeito_regeneracao(self, pos_x, pos_y):
+        """Desenha manualmente a nave de regeneração (usado para jogadores online)."""
+        raio_orbita = 50
+        tamanho_nave_regen = 18
+        velocidade_giro = 0.005
+        
+        surf_regen = pygame.Surface((tamanho_nave_regen, tamanho_nave_regen), pygame.SRCALPHA)
+        c = tamanho_nave_regen / 2
+        pts = [(c, 0), (0, tamanho_nave_regen), (tamanho_nave_regen, tamanho_nave_regen)]
+        pygame.draw.polygon(surf_regen, self.COR_REGEN_LILAS, pts)
+        
+        angulo_orbita = (pygame.time.get_ticks() * velocidade_giro) % (2 * math.pi)
+        
+        # Posição final no mundo
+        pos_final_x = pos_x + math.cos(angulo_orbita) * raio_orbita
+        pos_final_y = pos_y + math.sin(angulo_orbita) * raio_orbita
+        
+        # Rotaciona (+90 para alinhar o triângulo)
+        rot_angle = math.degrees(angulo_orbita) + 90 
+        surf_regen_rot = pygame.transform.rotate(surf_regen, -rot_angle)
+        
+        # Desenha usando a câmera
+        rect_regen = surf_regen_rot.get_rect(center=(pos_final_x, pos_final_y))
+        self.tela.blit(surf_regen_rot, self.camera.apply(rect_regen))
 
     def draw(self, estado_jogo: str, game_globals: dict, game_groups: dict, online_data: dict, online_trackers: dict, alvo_camera_final: pygame.sprite.Sprite, pos_ouvinte: pygame.math.Vector2): 
         LARGURA_TELA = game_globals["LARGURA_TELA"]; ALTURA_TELA = game_globals["ALTURA_TELA"]; nave_player = game_globals["nave_player"]; is_online = self.network_client.is_connected()
@@ -40,16 +72,30 @@ class Renderer:
             for pos_base, raio, parallax_fator in self.lista_estrelas:
                 pos_tela_x = (pos_base.x - (pos_camera.x * parallax_fator)) % map_w; pos_tela_y = (pos_base.y - (pos_camera.y * parallax_fator)) % map_h
                 pygame.draw.circle(self.tela, s.CORES_ESTRELAS[raio - 1], (int(pos_tela_x), int(pos_tela_y)), raio)
+            
             for obst in grupo_obstaculos: self.tela.blit(obst.image, self.camera.apply(obst.rect))
+            
             if is_online: self._draw_online_entities(nave_player, online_players_copy, online_npcs_copy, online_projectiles_copy, online_players_last_frame, online_npcs_last_frame, online_projectile_ids_last_frame, grupo_explosoes, pos_ouvinte)
             else:
                 if not estado_jogo.startswith("PVP_"): self._draw_offline_entities(grupo_inimigos, grupo_bots, grupo_projeteis_player, grupo_projeteis_bots, grupo_projeteis_inimigos)
                 else: self._draw_offline_entities(pygame.sprite.Group(), grupo_bots, grupo_projeteis_player, grupo_projeteis_bots, pygame.sprite.Group())
+            
             if estado_jogo.startswith("PVP_"): self._draw_player(nave_player, "JOGANDO", is_online, False) 
             else: self._draw_player(nave_player, estado_jogo, is_online, game_globals["jogador_esta_vivo_espectador"])
+            
+            # --- CORREÇÃO: Loop robusto para desenhar efeitos e sprites ---
             for efeito in grupo_efeitos_visuais:
-                if isinstance(efeito, NaveRegeneradora): efeito.desenhar(self.tela, self.camera)
-                else: efeito.draw(self.tela, self.camera) 
+                # Verifica qual método de desenho o objeto possui
+                if hasattr(efeito, 'desenhar'):
+                    # Caso seja NaveRegeneradora (usa 'desenhar')
+                    efeito.desenhar(self.tela, self.camera)
+                elif hasattr(efeito, 'draw'):
+                    # Caso seja Explosao (usa 'draw')
+                    efeito.draw(self.tela, self.camera)
+                else:
+                    # Fallback padrão de sprite
+                    self.tela.blit(efeito.image, self.camera.apply(efeito.rect))
+            
             map_w_ui = pvp_s.MAP_WIDTH if estado_jogo.startswith("PVP_") else s.MAP_WIDTH; map_h_ui = pvp_s.MAP_HEIGHT if estado_jogo.startswith("PVP_") else s.MAP_HEIGHT
             self._draw_ui_elements(estado_jogo, nave_player, game_globals, online_players_copy, grupo_bots, alvo_camera_final, map_w_ui, map_h_ui)
             self._draw_overlays(estado_jogo, nave_player, game_globals, is_online, len(grupo_bots), LARGURA_TELA, ALTURA_TELA)
@@ -109,7 +155,7 @@ class Renderer:
             elif state.get('is_lento', False): img_rotacionada.fill(s.ROXO_TIRO_LENTO, special_flags=pygame.BLEND_RGB_MULT)
             self.tela.blit(img_rotacionada, self.camera.apply(pos_rect))
             
-            # Efeitos de Escudo e Status
+            # Efeitos de Escudo
             nivel_escudo = state.get('nivel_escudo', 0)
             if nivel_escudo > 0:
                 raio_escudo = 20 + nivel_escudo * 2
@@ -129,7 +175,6 @@ class Renderer:
                     angulo_central = -angle_hit
                     angulo_inicio = angulo_central - (largura_arco_rad / 2)
                     angulo_fim = angulo_central + (largura_arco_rad / 2)
-                    
                     pos_tela_centro = self.camera.apply(pos_rect).center
                     rect_escudo_tela = pygame.Rect(0, 0, raio_escudo_fx*2, raio_escudo_fx*2); rect_escudo_tela.center = pos_tela_centro
                     surf_escudo_fx = pygame.Surface(rect_escudo_tela.size, pygame.SRCALPHA)
@@ -138,28 +183,10 @@ class Renderer:
                     self.tela.blit(surf_escudo_fx, rect_escudo_tela.topleft)
                 else: del self.shield_hit_times[nome]
 
-            # --- VISUAL DA NAVE DE REGENERAÇÃO (CORRIGIDO) ---
+            # >>> Desenho Manual da Nave Regeneradora (Outros Jogadores) <<<
             if state.get('esta_regenerando', False):
-                raio_orbita = 50
-                tamanho_nave_regen = 18
-                velocidade_giro = 0.005
-                
-                angulo_orbita = (pygame.time.get_ticks() * velocidade_giro) % (2 * math.pi)
-                
-                pos_regen_x = state['x'] + math.cos(angulo_orbita) * raio_orbita
-                pos_regen_y = state['y'] + math.sin(angulo_orbita) * raio_orbita
-                
-                surf_regen = pygame.Surface((tamanho_nave_regen, tamanho_nave_regen), pygame.SRCALPHA)
-                c = tamanho_nave_regen / 2
-                pts = [(c, 0), (0, tamanho_nave_regen), (tamanho_nave_regen, tamanho_nave_regen)]
-                pygame.draw.polygon(surf_regen, s.LILAS_REGEN, pts)
-                
-                rot_angle = math.degrees(angulo_orbita)
-                surf_regen_rot = pygame.transform.rotate(surf_regen, -rot_angle)
-                
-                rect_regen = surf_regen_rot.get_rect(center=(pos_regen_x, pos_regen_y))
-                self.tela.blit(surf_regen_rot, self.camera.apply(rect_regen))
-            # -----------------------------------------------
+                self._desenhar_efeito_regeneracao(state['x'], state['y'])
+            # -------------------------------------------------------------
             
             num_aux_outro = state.get('nivel_aux', 0)
             if num_aux_outro > 0:

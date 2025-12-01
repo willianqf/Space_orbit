@@ -77,7 +77,7 @@ class ProjetilTeleguiadoJogador(Projetil):
         
         # 2. Adiciona tempo de vida
         self.tempo_criacao = pygame.time.get_ticks()
-        self.duracao_vida = 700 # Duração em ms
+        self.duracao_vida = 850 # Duração em ms
 
     def update(self, *args, **kwargs):
         # 1. Verifica o tempo de vida
@@ -86,12 +86,30 @@ class ProjetilTeleguiadoJogador(Projetil):
             self.kill()
             return
         
-        # 2. Lógica de "Homing" Suave
+        # 2. Lógica de "Homing" Suave com Correção de Erro
         if self.alvo_sprite and self.alvo_sprite.groups():
             try:
-                vetor_para_alvo = (self.alvo_sprite.posicao - self.posicao).normalize()
-                velocidade_ideal = vetor_para_alvo * self.velocidade_valor
-                self.velocidade_vetor = self.velocidade_vetor.lerp(velocidade_ideal, self.turn_speed)
+                # Vetor do tiro até o alvo
+                vetor_para_alvo = self.alvo_sprite.posicao - self.posicao
+                distancia = vetor_para_alvo.length()
+                
+                # Se estiver muito perto (< 40px), para de guiar para evitar "orbitar" (bug do mosquito)
+                if distancia < 40:
+                    self.alvo_sprite = None
+                
+                # Lógica principal: Verifica se já passou do alvo
+                elif self.velocidade_vetor.length() > 0:
+                    # Produto Escalar (Dot Product)
+                    # Se (velocidade . direção_alvo) for negativo, o tiro está se afastando do alvo
+                    dot_product = self.velocidade_vetor.normalize().dot(vetor_para_alvo.normalize())
+                    
+                    # -0.2 dá uma pequena tolerância para curvas fechadas, mas impede volta completa
+                    if dot_product < -0.2: 
+                        self.alvo_sprite = None # Perde o alvo e segue reto
+                    else:
+                        # Continua guiando
+                        velocidade_ideal = vetor_para_alvo.normalize() * self.velocidade_valor
+                        self.velocidade_vetor = self.velocidade_vetor.lerp(velocidade_ideal, self.turn_speed)
             except ValueError:
                 pass
         

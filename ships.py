@@ -122,16 +122,14 @@ class Nave(pygame.sprite.Sprite):
             self.esta_regenerando = False
             for sprite in self.nave_regeneradora_sprite: sprite.kill() 
             
-    def iniciar_regeneracao(self, grupo_efeitos_visuais):
-        if self.vida_atual >= self.max_vida: return
+    def iniciar_regeneracao(self, grupo_efeitos_visuais, forcar=False):
+        if not forcar:
+            if self.vida_atual >= self.max_vida: return
+            if self.quer_mover_frente or self.quer_mover_tras or self.posicao_alvo_mouse is not None: return
         if self.esta_regenerando: return
-        if self.quer_mover_frente or self.quer_mover_tras or self.posicao_alvo_mouse is not None: return
         print(f"[{self.nome}] Iniciando regeneração..."); self.esta_regenerando = True; self.ultimo_tick_regeneracao = pygame.time.get_ticks()
-        
-        # --- CORREÇÃO: REATIVADO SPRITE PARA LOCAL PLAYER ---
         nova_nave_regen = NaveRegeneradora(self); self.nave_regeneradora_sprite.add(nova_nave_regen)
         if grupo_efeitos_visuais is not None: grupo_efeitos_visuais.add(nova_nave_regen)
-        # ----------------------------------------------------
 
     def toggle_regeneracao(self, grupo_efeitos_visuais):
         if self.esta_regenerando: self.parar_regeneracao()
@@ -174,15 +172,11 @@ class Nave(pygame.sprite.Sprite):
 
     def mover(self):
         agora = pygame.time.get_ticks()
-        
         self.is_frozen = agora < self.tempo_fim_congelamento
         self.is_slowed = agora < self.tempo_fim_lentidao
-        
         if self.is_frozen: self.posicao_alvo_mouse = None; return
-        
         velocidade_atual = self.velocidade_movimento_base
         if self.is_slowed: velocidade_atual *= 0.4
-        
         nova_pos = pygame.math.Vector2(self.posicao.x, self.posicao.y); movendo_frente = False
         if self.quer_mover_frente or self.quer_mover_tras:
             radianos = math.radians(self.angulo)
@@ -199,9 +193,7 @@ class Nave(pygame.sprite.Sprite):
         meia_largura = self.largura_base / 2; meia_altura = self.altura / 2
         nova_pos.x = max(meia_largura, min(nova_pos.x, s.MAP_WIDTH - meia_largura)); nova_pos.y = max(meia_altura, min(nova_pos.y, s.MAP_HEIGHT - meia_altura));
         self.posicao = nova_pos; self.rect.center = self.posicao
-        
-        if self.nivel_motor == MAX_NIVEL_MOTOR and movendo_frente:
-            self._gerar_particulas_rastro()
+        if self.nivel_motor == MAX_NIVEL_MOTOR and movendo_frente: self._gerar_particulas_rastro()
 
     def criar_projetil(self):
         radianos = math.radians(self.angulo); offset_ponta = self.altura / 2 + 10
@@ -232,7 +224,9 @@ class Nave(pygame.sprite.Sprite):
                 self.mostrar_escudo_fx = True; self.tempo_escudo_fx = agora
                 if proj_pos:
                      vetor_para_origem = proj_pos - self.posicao
-                     if vetor_para_origem.length() > 0: self.angulo_impacto_rad_pygame = math.atan2(vetor_para_origem.y, vetor_para_origem.x)
+                     if vetor_para_origem.length() > 0: 
+                         # CORREÇÃO: Usar -atan2 para inverter o ângulo para coordenadas do Pygame
+                         self.angulo_impacto_rad_pygame = -math.atan2(vetor_para_origem.y, vetor_para_origem.x)
                      else: self.angulo_impacto_rad_pygame = math.radians(90 - self.angulo)
                 else: self.angulo_impacto_rad_pygame = math.radians(90 - self.angulo)
         if self.vida_atual <= 0 and vida_antes > 0:
@@ -296,15 +290,8 @@ class Nave(pygame.sprite.Sprite):
         return comprou
     def coletar_vida(self, quantidade): return False
     
-    def draw_shield(self, surface, camera):
-        if self.nivel_escudo <= 0: return
-        raio = 20 + self.nivel_escudo * 2
-        shield_surf = pygame.Surface((raio * 2, raio * 2), pygame.SRCALPHA)
-        pygame.draw.circle(shield_surf, COR_ESCUDO, (raio, raio), raio)
-        rect_mundo = pygame.Rect(0, 0, 0, 0)
-        rect_mundo.center = self.posicao
-        pos_tela = camera.apply(rect_mundo).center
-        surface.blit(shield_surf, (pos_tela[0] - raio, pos_tela[1] - raio))
+    # --- MODIFICAÇÃO: Removido draw_shield para eliminar a bolha azul permanente ---
+    # def draw_shield(self, surface, camera): ... (REMOVIDO)
 
     def draw_effects(self, surface, camera):
         if not self.is_slowed and not self.is_frozen: return
@@ -329,13 +316,9 @@ class Nave(pygame.sprite.Sprite):
                 surface.blit(temp_surf, (pos_tela_centro[0] - raio_desenho, pos_tela_centro[1] - raio_desenho))
         self.rastro_particulas = particulas_vivas
         
-        self.draw_shield(surface, camera)
+        # self.draw_shield(surface, camera) # <--- REMOVIDO A CHAMADA DA BOLHA AZUL
         self.draw_effects(surface, camera)
         
-        # --- REMOVIDO: CÓDIGO VISUAL MANUAL DE REGENERAÇÃO ---
-        # (Voltamos a usar o Sprite criado em iniciar_regeneracao)
-        # -----------------------------------------------------
-
         self.image = pygame.transform.rotate(self.imagem_original, self.angulo); rect_desenho = self.image.get_rect(center = self.posicao)
         if client_socket: 
             if agora < self.tempo_fim_congelamento: self.image.fill(AZUL_CONGELANTE, special_flags=pygame.BLEND_RGB_ADD)
@@ -345,13 +328,23 @@ class Nave(pygame.sprite.Sprite):
              elif agora < self.tempo_fim_lentidao: self.image.fill(ROXO_TIRO_LENTO, special_flags=pygame.BLEND_RGB_MULT)
         surface.blit(self.image, camera.apply(rect_desenho))
         
+        # --- LÓGICA DA BARRA DE ESCUDO VISUAL (IMPACTO) ---
         if self.mostrar_escudo_fx:
             if agora - self.tempo_escudo_fx < DURACAO_FX_ESCUDO:
                 raio_escudo = self.altura * 0.8 + 10; largura_arco_rad = math.radians(90); cor_fx_com_alpha = COR_ESCUDO_FX
-                angulo_central_invertido = -self.angulo_impacto_rad_pygame; angulo_inicio_pygame_rad = angulo_central_invertido - (largura_arco_rad / 2); angulo_fim_pygame_rad = angulo_central_invertido + (largura_arco_rad / 2)
+                
+                # Ângulo central onde ocorreu o impacto (calculado em foi_atingido)
+                angulo_central = self.angulo_impacto_rad_pygame 
+                angulo_inicio_pygame_rad = angulo_central - (largura_arco_rad / 2)
+                angulo_fim_pygame_rad = angulo_central + (largura_arco_rad / 2)
+                
                 rect_escudo_mundo = pygame.Rect(0, 0, raio_escudo * 2, raio_escudo * 2); rect_escudo_mundo.center = self.posicao; rect_escudo_tela = camera.apply(rect_escudo_mundo)
+                
                 temp_surface = pygame.Surface(rect_escudo_tela.size, pygame.SRCALPHA)
-                try: pygame.draw.arc(temp_surface, cor_fx_com_alpha, (0, 0, rect_escudo_tela.width, rect_escudo_tela.height), angulo_inicio_pygame_rad, angulo_fim_pygame_rad, width=3); surface.blit(temp_surface, rect_escudo_tela.topleft)
+                try: 
+                    # Desenha o arco (barra) com width maior para ser mais visível
+                    pygame.draw.arc(temp_surface, cor_fx_com_alpha, (0, 0, rect_escudo_tela.width, rect_escudo_tela.height), angulo_inicio_pygame_rad, angulo_fim_pygame_rad, width=6)
+                    surface.blit(temp_surface, rect_escudo_tela.topleft)
                 except ValueError: pass
             else: self.mostrar_escudo_fx = False
             
@@ -428,9 +421,13 @@ class NaveBot(Nave):
         self.cerebro.update_ai(player_ref, grupo_bots_ref, grupo_inimigos_ref, grupo_obstaculos_ref, grupo_efeitos_visuais_ref, map_width, map_height, lista_projeteis_hostis)
         self.update_regeneracao(); self.rotacionar(); self.mover()      
         self.lidar_com_tiros(grupo_projeteis_bots, pos_ouvinte if pos_ouvinte is not None else player_ref.posicao); self.processar_upgrades_ia()
-        estado_cerebro = self.cerebro.estado_ia
+        
+        # --- CORREÇÃO: Usar 'estado_atual' em vez de 'estado_ia' e 'PATRULHANDO' em vez de 'VAGANDO' ---
+        estado_cerebro = self.cerebro.estado_ia 
         esta_tentando_parar_para_regen = (estado_cerebro == "VAGANDO" and self.vida_atual < (self.max_vida * 0.8))
-        esta_parado_na_borda = (estado_cerebro == "REGENERANDO_NA_BORDA")
+        esta_parado_na_borda = False # O novo código de IA não usa este estado explicitamente desta forma
+        # -------------------------------------------------------------------------------------------------
+
         if (esta_tentando_parar_para_regen or esta_parado_na_borda) and self.alvo_selecionado is None and not self.esta_regenerando:
             self.quer_mover_frente = False; self.posicao_alvo_mouse = None; self.iniciar_regeneracao(grupo_efeitos_visuais_ref)
         elif (not esta_tentando_parar_para_regen and not esta_parado_na_borda) or (self.alvo_selecionado is not None): self.parar_regeneracao()

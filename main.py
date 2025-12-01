@@ -109,12 +109,22 @@ for _ in range(s.NUM_ESTRELAS):
 # --- Funções Auxiliares de Reinício ---
 
 def distribuir_atributos_bot(nave, pontos):
+    """Distribui pontos de upgrade aleatoriamente para o bot."""
     opcoes = ["motor", "dano", "max_health", "escudo"]
+    
+    # Garante que temos pontos suficientes para gastar
+    nave.pontos_upgrade_disponiveis = pontos
+    
     for _ in range(pontos):
         upgrade_escolhido = random.choice(opcoes)
+        # Tenta comprar o escolhido
         if not nave.comprar_upgrade(upgrade_escolhido):
+            # Se falhar (ex: nível máximo), tenta as outras opções em ordem
             for opt in opcoes:
-                if nave.comprar_upgrade(opt): break
+                if nave.comprar_upgrade(opt): 
+                    break
+    
+    # Garante que a vida encha se comprou Max HP
     nave.vida_atual = nave.max_vida
 
 def reiniciar_jogo_pvp(is_online=False, pos_spawn=None): 
@@ -172,10 +182,17 @@ def reiniciar_jogo_pvp(is_online=False, pos_spawn=None):
     if not is_online:
         for i in range(1, pvp_s.MAX_JOGADORES_PVP):
             pos_bot = pygame.math.Vector2(pos_spawn_vec.x + random.randint(-50, 50), pos_spawn_vec.y + random.randint(-50, 50))
-            bot = NaveBot(pos_bot.x, pos_bot.y, "Dificil") 
+            
+            # --- CORREÇÃO CRÍTICA: Dificuldade "Normal" ---
+            # Isso garante que o bot comece com stats base (Nv 1)
+            # Se for "Dificil", ele já nasce com upgrades aleatórios E ganha mais 10, ficando OP.
+            bot = NaveBot(pos_bot.x, pos_bot.y, "Normal") 
+            
             bot.nome = f"BotPVP_{i}"
-            bot.pontos_upgrade_disponiveis = pvp_s.PONTOS_ATRIBUTOS_INICIAIS
+            
+            # Distribui exatamente os 10 pontos do PVP
             distribuir_atributos_bot(bot, pvp_s.PONTOS_ATRIBUTOS_INICIAIS)
+            
             grupo_bots.add(bot)
     
     for _ in range(15):
@@ -633,8 +650,9 @@ while game_globals["rodando"]:
                          nave_player.angulo_impacto_rad_pygame = my_state.get('last_hit_angle', 0)
 
                 is_server_regenerando = my_state.get('esta_regenerando', False)
-                if is_server_regenerando and not nave_player.esta_regenerando: nave_player.iniciar_regeneracao(grupo_efeitos_visuais)
+                if is_server_regenerando and not nave_player.esta_regenerando: nave_player.iniciar_regeneracao(grupo_efeitos_visuais, forcar=True) 
                 elif not is_server_regenerando and nave_player.esta_regenerando: nave_player.parar_regeneracao()
+
                 nave_player.vida_atual = nova_vida; nave_player.max_vida = my_state.get('max_hp', nave_player.max_vida)
                 nave_player.pontos = my_state.get('pontos', nave_player.pontos)
                 nave_player.pontos_upgrade_disponiveis = my_state.get('pontos_upgrade_disponiveis', 0)
